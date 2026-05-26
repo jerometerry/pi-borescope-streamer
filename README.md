@@ -103,7 +103,7 @@ If you want to run BPF / linux perf on custom applications you are building, ens
 -  `-g`:  Embeds your source code maps into the build
 - `-fno-omit-frame-pointer`:  Instructs the compiler to keep the frame pointer register on the stack for every function call.
 
-```
+```bash
 # Store the PID of the process we want to profile
 SERVER_PID=$(pgrep -f ./build/server)
 
@@ -133,6 +133,7 @@ git clone https://github.com/brendangregg/FlameGraph.git
 
 ### Generate CPU FlameGraphs
 
+```bash
 SERVER_PID=$(pgrep -f ./build/server)
 
 echo "Generating CPU flame graph for PID $SERVER_PID. Put the server under load. Ctrl+C to output collected traces"
