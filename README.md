@@ -78,4 +78,4 @@ This project was heavily inspired by the reverse-engineering work of [hbens](htt
 
 ## 📄 License
 
-SPDX-License-Identifier: CC0-1.0
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
