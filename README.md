@@ -64,6 +64,16 @@ You can optionally specify a custom port (default is `8080`).
 
 ```
 
+## Docker Build
+
+I use `docker build` as a quick sanity check that this will compile on other machines. 
+
+The server won't start if there is no USB camera connected. I haven't investigated how to make that work in Docker.
+
+```
+docker build --build-arg CACHEBUST=$(date +%s) -t pi-borescope-test .
+```
+
 ## 📡 Usage
 
 Once the server is running and the camera is plugged in, you can access the streams locally or across your network:
