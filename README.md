@@ -111,7 +111,7 @@ SERVER_PID=$(pgrep -f ./build/server)
 sudo bpftrace -e 'uprobe:libc:malloc { @[ustack] = sum(arg0); }' -p $SERVER_PID > ~/raw_allocations.out
 ```
 
-### Generate FlameGraph
+### Generate Memory Allocation FlameGraph
 
 **Download Brendan Gregg's FlameGraph repo**
 
@@ -119,7 +119,7 @@ sudo bpftrace -e 'uprobe:libc:malloc { @[ustack] = sum(arg0); }' -p $SERVER_PID 
 git clone https://github.com/brendangregg/FlameGraph.git
 ```
 
-**Collapse BTF Trace output**
+**Collapse BPF Trace output**
 
 ```
 ~/FlameGraph/stackcollapse-bpftrace.pl ~/raw_allocations.out > ~/collapsed_allocations.txt
@@ -129,6 +129,21 @@ git clone https://github.com/brendangregg/FlameGraph.git
 
 ```
 ~/FlameGraph/flamegraph.pl --countname=bytes ~/collapsed_allocations.txt > ~/memory_profile.svg
+```
+
+### Generate CPU FlameGraphs
+
+SERVER_PID=$(pgrep -f ./build/server)
+
+echo "Generating CPU flame graph for PID $SERVER_PID. Put the server under load. Ctrl+C to output collected traces"
+
+rm ./profile/*.*
+
+sudo bpftrace -e 'profile:hz:99 { @[ustack] = count(); }' -p $SERVER_PID > ./profile/cpu_raw.out
+
+sudo ../FlameGraph/stackcollapse-bpftrace.pl ./profile/cpu_raw.out > ./profile/cpu_collapsed.txt
+
+sudo ../FlameGraph/flamegraph.pl ./profile/cpu_collapsed.txt > ./profile/cpu_flamegraph.svg
 ```
 
 ## 📡 Usage
