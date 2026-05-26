@@ -29,11 +29,17 @@ ifeq ($(UNAME_S),Darwin)
     CXXFLAGS += -I$(HOMEBREW_PREFIX)/include
     LDFLAGS += -L$(HOMEBREW_PREFIX)/lib
 else
-    # --- Linux / Raspberry Pi 5 Configuration ---
+    # --- Linux Configuration ---
     CXX := g++
     
-    # BCM2712 Cortex-A76 optimization
-    CXXFLAGS += -mcpu=cortex-a76 -mtune=cortex-a76 -flto=auto -g -fno-omit-frame-pointer
+    # Check if we are actually on an ARM64 architecture (like the Pi)
+    UNAME_M := $(shell uname -m)
+    ifeq ($(UNAME_M),aarch64)
+        # BCM2712 Cortex-A76 optimization for Pi 5
+        CXXFLAGS += -mcpu=cortex-a76 -mtune=cortex-a76
+    endif
+    
+    CXXFLAGS += -flto=auto -g -fno-omit-frame-pointer
 endif
 
 all: $(BIN)
