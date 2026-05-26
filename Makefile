@@ -16,7 +16,7 @@ DEPS := $(OBJS:.o=.d)
 UNAME_S := $(shell uname -s)
 
 # Base cross-platform flags (Include the build directory in search paths for resource generation)
-CXXFLAGS := -std=c++23 -Wall -Wextra -O3 -flto -I$(BUILD_DIR)
+CXXFLAGS := -std=c++23 -Wall -Wextra -O2 -flto -I$(BUILD_DIR)
 LDFLAGS := -lusb-1.0
 
 ifeq ($(UNAME_S),Darwin)
@@ -40,6 +40,7 @@ else
     endif
     
     CXXFLAGS += -flto=auto -g -fno-omit-frame-pointer
+    LDFLAGS += -flto=auto
 endif
 
 all: $(BIN)
