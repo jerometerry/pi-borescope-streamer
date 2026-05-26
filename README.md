@@ -74,7 +74,35 @@ The server won't start if there is no USB camera connected. I haven't investigat
 docker build --build-arg CACHEBUST=$(date +%s) -t pi-borescope-test .
 ```
 
-## BBF
+## Profiling using BBF and FlameGraphs
+
+Finding performance bottlenecks in C++ code is not as complicated as you might think, using modern tools such as BPF and FlameGraphs. The cost complicated part is configuring the Linux kernel to enable BTF Type Info and uprobes. This may involve recompiling the kernel - for example on a Raspberry PI with the default OS install.
+
+### Linux Kernel Configs
+
+If you want to use eBPF, for example to generate FlameGraphs, you'll need to enable BTF (BPF Type Format) Support. Here's the options that need to be configured in Raspberry Pi kernel configs when re-compiling, if you are using `make menuconfig` to generate the .config file. 
+
+- Enable "Kernel hacking -> Compile-time checks and compiler options -> Compile the Kernel with debug info"
+  - Select "Rely on the toolchain's implicit default DWARF version"
+- Enable "Kernel hacking -> Compile-time checks and compiler options -> Generate BTF typeinfo"
+- Enable "Kernel hacking -> Tracers -> Enable uprobes-based dynamic events"
+
+### Compiler Flags
+
+If you want to run BPF / linux perf on custom applications you are building, ensure to add the following compiler flags:
+-  `-g`:  Embeds your source code maps into the build
+- `-fno-omit-frame-pointer`:  Instructs the compiler to keep the frame pointer register on the stack for every function call.
+
+
+```
+CXXFLAGS := -std=c++23 -Wall -Wextra -O2 -I$(BUILD_DIR) -mcpu=cortex-a76 -mtune=cortex-a76 -flto=auto -g -fno-omit-frame-pointer
+```
+
+### Clone Brendan Gregg's FlameGraph Repo
+
+```
+git clone https://github.com/brendangregg/FlameGraph.git
+```
 
 ### Install bpftrace
 
@@ -83,52 +111,27 @@ sudo apt update
 sudo apt install bpftrace
 ```
 
-### Install optional tools
-
-For CPU profiling, linux perf is good enough, since CPU profiles don't generate the same volume of data as I/O or 
-memory allocation traces.
-
-I also recommend installing sysstat, since it's part of the set of tools documented in the Netflix Engineering blog post 
-[Linux Performance Analysis in 60,000 Milliseconds](https://netflixtechblog.com/linux-performance-analysis-in-60-000-milliseconds-accc10403c55).
-Additional metrics to help identify performance issues. 
+### Install linux-perf
 
 ```
 sudo apt update
-sudo apt install sysstat linux-perf
-```
-
-### Capture Memory Allocations
-
-If you want to run BPF / linux perf on custom applications you are building, ensure to add the following compiler flags:
--  `-g`:  Embeds your source code maps into the build
-- `-fno-omit-frame-pointer`:  Instructs the compiler to keep the frame pointer register on the stack for every function call.
-
-```bash
-# Store the PID of the process we want to profile
-SERVER_PID=$(pgrep -f ./build/server)
-
-# Attach bpftrace directly to the live process
-sudo bpftrace -e 'uprobe:libc:malloc { @[ustack] = sum(arg0); }' -p $SERVER_PID > ~/raw_allocations.out
+sudo apt install  linux-perf
 ```
 
 ### Generate Memory Allocation FlameGraph
 
-**Download Brendan Gregg's FlameGraph repo**
+```bash
+SERVER_PID=$(pgrep -f ./build/server)
 
-```
-git clone https://github.com/brendangregg/FlameGraph.git
-```
+echo "Generating memory allocation flame graph for PID $SERVER_PID. Put the server under load. Ctrl+C to output collected traces"
 
-**Collapse BPF Trace output**
+rm ./profile/*.*
 
-```
-~/FlameGraph/stackcollapse-bpftrace.pl ~/raw_allocations.out > ~/collapsed_allocations.txt
-```
+sudo bpftrace -e 'uprobe:libc:malloc { @[ustack] = sum(arg0); }' -p $SERVER_PID > ./profile/raw_allocations.out
 
-**Generate FlameGraph SVG**
+../FlameGraph/stackcollapse-bpftrace.pl ./profile/raw_allocations.out > ./profile/collapsed_allocations.txt
 
-```
-~/FlameGraph/flamegraph.pl --countname=bytes ~/collapsed_allocations.txt > ~/memory_profile.svg
+..//FlameGraph/flamegraph.pl --countname=bytes ./profile/collapsed_allocations.txt > ./profile/memory_profile.svg
 ```
 
 ### Generate CPU FlameGraphs
@@ -147,7 +150,7 @@ sudo ../FlameGraph/stackcollapse-bpftrace.pl ./profile/cpu_raw.out > ./profile/c
 sudo ../FlameGraph/flamegraph.pl ./profile/cpu_collapsed.txt > ./profile/cpu_flamegraph.svg
 ```
 
-## 📡 Usage
+## 📡 MJPEG Streaming Server Usage
 
 Once the server is running and the camera is plugged in, you can access the streams locally or across your network:
 
