@@ -1,28 +1,28 @@
+#include "usb_camera.hpp"
+#include "usb_camera_protocol.hpp"
+#include "web_server.hpp"
+
+#include <atomic>
+#include <chrono>
 #include <csignal>
 #include <iostream>
+#include <string>
 #include <mutex>
 #include <thread>
 #include <vector>
-#include <chrono>
-#include <atomic>
-#include <condition_variable>
-#include <string>
 
 #include <libusb-1.0/libusb.h>
 
-#include "borescope_device.hpp"
-#include "borescope_stream_decoder.hpp"
-#include "borescope_web_server.hpp"
+static constexpr int DEFAULT_PORT = 8080;
 
-static std::atomic<bool> globalRunning{true};
+static std::atomic<bool> running{true};
 
 static std::mutex frameMutex;
-static std::condition_variable frameConditionVariable;
-static byteVector latestJpeg;
+static ByteVector latestJpeg;
 static uint32_t latestFrameId = 0;
 
 static std::mutex snapshotMutex;
-static byteVector snapshotJpeg;
+static ByteVector snapshotJpeg;
 static std::atomic<bool> latchNextFrame{false};
 
 static std::mutex buttonMutex;
@@ -31,11 +31,10 @@ static auto buttonLastSeen = std::chrono::steady_clock::now();
 static bool buttonIsDepressed = false;
 
 static void signalHandler(int) {
-    globalRunning = false;
-    frameConditionVariable.notify_all();
+    running = false;
 }
 
-void processAndStoreFrame(const byteVector& frame) {
+void processAndStoreFrame(const ByteVector& frame) {
     std::lock_guard<std::mutex> lock(frameMutex);
     
     size_t startOfImageOffset = std::string::npos;
@@ -62,21 +61,20 @@ void processAndStoreFrame(const byteVector& frame) {
     }
 }
 
-void broadcastFrame(const byteVector& frame) {
+void broadcastFrame(const ByteVector& frame) {
     if (frame.empty()) {
         return;
     }
 
     processAndStoreFrame(frame);
-
-    frameConditionVariable.notify_all();
 }
 
 void hardwareButtonCallback() {
     auto currentTime = std::chrono::steady_clock::now();
     std::lock_guard<std::mutex> lock(buttonMutex);
 
-    if (!buttonIsDepressed || std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - buttonLastSeen).count() > 200) {
+    if (!buttonIsDepressed || 
+        std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - buttonLastSeen).count() > 200) {
         buttonPressStart = currentTime;
         buttonIsDepressed = true;
     }
@@ -105,38 +103,35 @@ void monitorButtonReleaseState() {
 
 void cameraCaptureLoop() {
     try {
-        BorescopeDevice hardwarePipe;
-        BorescopeStreamDecoder protocolParser(
-            [](const byteVector &frame) { broadcastFrame(frame); },
+        UsbCamera camera;
+        UsbCameraProtocol protocol(
+            [](const ByteVector &frame) { broadcastFrame(frame); },
             []() { hardwareButtonCallback(); }
         );
 
         std::cout << "[Hardware Engine] Pipeline operational.\n";
 
-        byteVector readBuffer;
+        ByteVector readBuffer;
         readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
 
-        while (globalRunning) {
-            int returnStatus = hardwarePipe.readFrame(readBuffer);
+        while (running) {
+            int returnStatus = camera.readFrame(readBuffer);
             if (returnStatus == 0) {
-                protocolParser.handleUseeplusFrame(readBuffer);
+                protocol.handleFrame(readBuffer);
             } else if (returnStatus == LIBUSB_ERROR_NO_DEVICE) {
                 std::cerr << "[Hardware Engine] Device disconnected.\n";
-                globalRunning = false;
-                frameConditionVariable.notify_all();
+                running = false;
             }
             monitorButtonReleaseState();
         }
     } catch (const std::exception &exception) {
         std::cerr << "[Hardware Engine Exception]: " << exception.what() << "\n";
-        globalRunning = false;
-        frameConditionVariable.notify_all();
+        running = false;
     }
 }
 
 int main(int argc, char* argv[]) {
-    constexpr int defaultPort = 8080;
-    int chosenPort = defaultPort;
+    int chosenPort = DEFAULT_PORT;
     bool isUsingDefaultPort = true;
 
     if (argc > 1) {
@@ -146,10 +141,10 @@ int main(int argc, char* argv[]) {
                 chosenPort = parsedPort;
                 isUsingDefaultPort = false;
             } else {
-                std::cerr << "[Warning] Invalid network port range specified (" << argv[1] << "). Falling back to default port " << defaultPort << ".\n";
+                std::cerr << "[Warning] Invalid network port range specified (" << argv[1] << "). Falling back to default port " << DEFAULT_PORT << ".\n";
             }
         } catch (const std::exception& exception) {
-            std::cerr << "[Warning] Malformed network port parameter specified (" << argv[1] << "). Falling back to default port " << defaultPort << ".\n";
+            std::cerr << "[Warning] Malformed network port parameter specified (" << argv[1] << "). Falling back to default port " << DEFAULT_PORT << ".\n";
         }
     }
 
@@ -160,9 +155,9 @@ int main(int argc, char* argv[]) {
     latestJpeg.reserve(ServerConstants::ONE_MEGABYTE);
     snapshotJpeg.reserve(ServerConstants::ONE_MEGABYTE);
 
-    BorescopeWebServer webServer(
+    WebServer server(
         chosenPort, 
-        globalRunning, 
+        running, 
         frameMutex, 
         latestJpeg, 
         latestFrameId, 
@@ -170,7 +165,7 @@ int main(int argc, char* argv[]) {
         snapshotJpeg
     );
 
-    if (!webServer.initialize()) {
+    if (!server.initialize()) {
         std::cerr << "Failed to initialize async web server.\n";
         return 1;
     }
@@ -192,7 +187,7 @@ int main(int argc, char* argv[]) {
 
     std::thread cameraThread(cameraCaptureLoop);
 
-    webServer.startEventLoop();
+    server.startEventLoop();
 
     if (cameraThread.joinable()) {
         cameraThread.join();

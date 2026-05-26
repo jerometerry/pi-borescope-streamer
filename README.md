@@ -25,7 +25,7 @@ Most hobbyist MJPEG servers suffer from "buffer churn"—constantly resizing `st
 ## 📦 Prerequisites
 
 * **Hardware:** Raspberry Pi (Optimized for Pi 5, but runs on Pi 4/3)
-* **Camera:** USB Borescope/Endoscope (Tested with Useeplus Hardware Rev 1.00 - VID: `0x2ce3`, `0x0329`)
+* **UsbCamera:** USB Borescope/Endoscope (Tested with Useeplus Hardware Rev 1.00 - VID: `0x2ce3`, `0x0329`)
 * **OS:** Raspberry Pi OS (Debian Bookworm or newer)
 * **Dependencies:** * `libusb-1.0-0-dev`
   * C++20 compliant compiler (`gcc` 10+)

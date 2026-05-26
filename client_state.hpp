@@ -2,8 +2,6 @@
 
 #include "server_constants.hpp"
 #include <array>
-#include <cstdint>
-#include <cstddef>
 
 struct ClientState {
     static constexpr size_t READ_BUFFER_SIZE = ServerConstants::FOUR_KILOBYTES;

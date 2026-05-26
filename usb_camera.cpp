@@ -1,14 +1,14 @@
-#include "borescope_device.hpp"
 #include "server_constants.hpp"
-#include <libusb-1.0/libusb.h>
+#include "usb_camera.hpp"
 #include <stdexcept>
+#include <libusb-1.0/libusb.h>
 
-BorescopeDevice::BorescopeDevice() : context(nullptr), deviceHandle(nullptr) {
+UsbCamera::UsbCamera() : context(nullptr), deviceHandle(nullptr) {
     if (libusb_init(&context) < 0) {
         throw std::runtime_error("libusb_init failed");
     }
 
-    deviceHandle = openDevice(context, std::span(VENDOR_PRODUCT_ID_LIST));
+    deviceHandle = open(context);
     if (!deviceHandle) {
         throw std::runtime_error("Borescope hardware device not found on USB bus");
     }
@@ -24,14 +24,14 @@ BorescopeDevice::BorescopeDevice() : context(nullptr), deviceHandle(nullptr) {
 
     libusb_clear_halt(deviceHandle, ENDPOINT_1);
 
-    byteVector initializationToken = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
-    usbWrite(ENDPOINT_2, initializationToken);
+    ByteVector initializationToken = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
+    write(ENDPOINT_2, initializationToken);
     
-    byteVector startStreamToken = {0xBB, 0xAA, 5, 0, 0};
-    usbWrite(ENDPOINT_1, startStreamToken);
+    ByteVector startStreamToken = {0xBB, 0xAA, 5, 0, 0};
+    write(ENDPOINT_1, startStreamToken);
 }
 
-BorescopeDevice::~BorescopeDevice() {
+UsbCamera::~UsbCamera() {
     if (deviceHandle) {
         libusb_close(deviceHandle);
     }
@@ -40,70 +40,72 @@ BorescopeDevice::~BorescopeDevice() {
     }
 }
 
-int BorescopeDevice::usbRead(unsigned char endpoint, byteVector &buffer, size_t maxSize) {
-    int transferredBytes = 0;
+int UsbCamera::read(unsigned char endpoint, ByteVector &buffer, size_t maxSize) {
+    int numBytes = 0;
     buffer.resize(maxSize);
 
-    int returnStatus = libusb_bulk_transfer(
+    int error = libusb_bulk_transfer(
         deviceHandle, 
         LIBUSB_ENDPOINT_IN | endpoint, 
         buffer.data(), 
         buffer.size(), 
-        &transferredBytes, 
+        &numBytes, 
         USB_TIMEOUT
     );
-    if (returnStatus != 0) {
+
+    if (error != 0) {
         buffer.resize(0);
-        return returnStatus;
+        return error;
     }
 
-    buffer.resize(transferredBytes);
+    buffer.resize(numBytes);
     return 0;
 }
 
-int BorescopeDevice::usbWrite(unsigned char endpoint, byteVector buffer) {
-    int transferredBytes = 0;
+int UsbCamera::write(unsigned char endpoint, ByteVector buffer) {
+    int numBytes = 0;
     return libusb_bulk_transfer(
         deviceHandle, 
         LIBUSB_ENDPOINT_OUT | endpoint, 
         buffer.data(), 
         buffer.size(), 
-        &transferredBytes, 
+        &numBytes, 
         USB_TIMEOUT
     );
 }
 
-libusb_device_handle* BorescopeDevice::openDevice(libusb_context *usbContext, std::span<const vid_pid_t> vendorProductList) {
-    struct libusb_device **deviceList;
-    struct libusb_device_handle *discoveredHandle = nullptr;
+libusb_device_handle* UsbCamera::open(libusb_context *context) {
+    struct libusb_device **devices;
+    struct libusb_device_handle *handle = nullptr;
 
-    if (libusb_get_device_list(usbContext, &deviceList) < 0) {
+    if (libusb_get_device_list(context, &devices) < 0) {
         return nullptr;
     }
 
     size_t index = 0;
     struct libusb_device *device;
-    while ((device = deviceList[index++]) != nullptr) {
+
+    while ((device = devices[index++]) != nullptr) {
         struct libusb_device_descriptor descriptor;
         if (libusb_get_device_descriptor(device, &descriptor) < 0) {
             continue;
         }
         
-        for (const auto &vendorProduct : vendorProductList) {
+        for (const auto &vendorProduct : std::span(VENDOR_PRODUCT_ID_LIST)) {
             if (descriptor.idVendor == vendorProduct.first && descriptor.idProduct == vendorProduct.second) {
-                libusb_open(device, &discoveredHandle);
+                libusb_open(device, &handle);
                 break;
             }
         }
-        if (discoveredHandle) {
+        if (handle) {
             break;
         }
     }
 
-    libusb_free_device_list(deviceList, 1);
-    return discoveredHandle;
+    libusb_free_device_list(devices, 1);
+    return handle;
 }
 
-int BorescopeDevice::readFrame(byteVector &readBuffer) {
-    return usbRead(ENDPOINT_1, readBuffer, ServerConstants::ONE_KILOBYTE);
+int UsbCamera::readFrame(ByteVector &frameBuffer) {
+    return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
 }

@@ -12,19 +12,19 @@
 #include <vector>
 #include <cstdint>
 
-class BorescopeWebServer {
+class WebServer {
 public:
-    explicit BorescopeWebServer(int serverPort,
+    explicit WebServer(int serverPort,
                                 const std::atomic<bool>& runningFlag,
                                 std::mutex& videoMutex,
-                                const byteVector& videoBuffer,
+                                const ByteVector& videoBuffer,
                                 const uint32_t& videoFrameId,
                                 std::mutex& snapMutex,
-                                const byteVector& snapBuffer);
-    ~BorescopeWebServer();
+                                const ByteVector& snapBuffer);
+    ~WebServer();
 
-    BorescopeWebServer(const BorescopeWebServer&) = delete;
-    BorescopeWebServer& operator=(const BorescopeWebServer&) = delete;
+    WebServer(const WebServer&) = delete;
+    WebServer& operator=(const WebServer&) = delete;
 
     bool initialize();
     void startEventLoop();
@@ -79,10 +79,10 @@ private:
 
     const std::atomic<bool>& globalRunning;
     std::mutex& frameMutex;
-    const byteVector& latestJpeg;
+    const ByteVector& latestJpeg;
     const uint32_t& latestFrameId;
     std::mutex& snapshotMutex;
-    const byteVector& snapshotJpeg;
+    const ByteVector& snapshotJpeg;
 
     std::unique_ptr<std::array<ClientState, MAX_CLIENTS>> clients_;
 };

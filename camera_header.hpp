@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <vector>
 
 struct [[gnu::packed]] CameraHeader {
     uint8_t frameId;

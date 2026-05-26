@@ -1,23 +1,25 @@
-#include "borescope_web_server.hpp"
 #include "embedded_html.hpp"
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <fcntl.h>
-#include <unistd.h>
+#include "web_server.hpp"
+
+#include <algorithm>
+#include <charconv>
+#include <csignal>
 #include <cstring>
 #include <iostream>
 #include <format>
-#include <algorithm>
-#include <csignal>
-#include <charconv>
 
-BorescopeWebServer::BorescopeWebServer(int serverPort,
-                                       const std::atomic<bool>& runningFlag,
-                                       std::mutex& videoMutex,
-                                       const byteVector& videoBuffer,
-                                       const uint32_t& videoFrameId,
-                                       std::mutex& snapMutex,
-                                       const byteVector& snapBuffer)
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+WebServer::WebServer(int serverPort,
+                     const std::atomic<bool>& runningFlag,
+                     std::mutex& videoMutex,
+                     const ByteVector& videoBuffer,
+                     const uint32_t& videoFrameId,
+                     std::mutex& snapMutex,
+                     const ByteVector& snapBuffer)
     : port_(serverPort),
       globalRunning(runningFlag),
       frameMutex(videoMutex),
@@ -27,7 +29,7 @@ BorescopeWebServer::BorescopeWebServer(int serverPort,
       snapshotJpeg(snapBuffer),
       clients_(std::make_unique<std::array<ClientState, MAX_CLIENTS>>()) {}
 
-BorescopeWebServer::~BorescopeWebServer() {
+WebServer::~WebServer() {
     running_ = false;
     if (event_loop_thread_.joinable()) {
         event_loop_thread_.join();
@@ -37,7 +39,7 @@ BorescopeWebServer::~BorescopeWebServer() {
     }
 }
 
-bool BorescopeWebServer::setNonBlocking(int fd) {
+bool WebServer::setNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) { 
         return false; 
@@ -45,7 +47,7 @@ bool BorescopeWebServer::setNonBlocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
 }
 
-bool BorescopeWebServer::initialize() {
+bool WebServer::initialize() {
     // IGNORING SIGPIPE: Prevents macOS from instantly killing the application 
     // when attempting to send data to a client that disconnected abruptly.
     signal(SIGPIPE, SIG_IGN);
@@ -82,13 +84,13 @@ bool BorescopeWebServer::initialize() {
     return true;
 }
 
-void BorescopeWebServer::startEventLoop() {
+void WebServer::startEventLoop() {
     running_ = true;
     poll_fds_.reserve(INITIAL_POLL_CAPACITY);
-    event_loop_thread_ = std::thread(&BorescopeWebServer::eventLoop, this);
+    event_loop_thread_ = std::thread(&WebServer::eventLoop, this);
 }
 
-void BorescopeWebServer::eventLoop() {
+void WebServer::eventLoop() {
     while (running_ && globalRunning) {
         broadcastLatestFrame();
 
@@ -143,7 +145,7 @@ void BorescopeWebServer::eventLoop() {
     }
 }
 
-void BorescopeWebServer::handleAccept() {
+void WebServer::handleAccept() {
     while (true) {
         sockaddr_in client_addr{};
         socklen_t client_len = sizeof(client_addr);
@@ -175,7 +177,7 @@ void BorescopeWebServer::handleAccept() {
     }
 }
 
-void BorescopeWebServer::handleRead(int client_fd) {
+void WebServer::handleRead(int client_fd) {
     auto it = std::find_if(clients_->begin(), clients_->end(), [client_fd](const ClientState& c) {
         return c.is_active && c.fd == client_fd;
     });
@@ -217,7 +219,7 @@ void BorescopeWebServer::handleRead(int client_fd) {
 }
 
 
-void BorescopeWebServer::processClientRequest(ClientState& client) {
+void WebServer::processClientRequest(ClientState& client) {
     std::string_view request_view(client.read_buffer.data(), client.read_buffer_len);
 
     if (request_view.find(ROUTE_WEB) != std::string_view::npos) {
@@ -278,7 +280,7 @@ void BorescopeWebServer::processClientRequest(ClientState& client) {
     }
 }
 
-void BorescopeWebServer::broadcastLatestFrame() {
+void WebServer::broadcastLatestFrame() {
     std::lock_guard<std::mutex> lock(clients_mutex_);
     uint32_t localLatestFrameId = latestFrameId;
     
@@ -331,7 +333,7 @@ void BorescopeWebServer::broadcastLatestFrame() {
     }
 }
 
-void BorescopeWebServer::queueData(ClientState& client, const uint8_t* data, size_t size) {
+void WebServer::queueData(ClientState& client, const uint8_t* data, size_t size) {
     if (!client.is_active) {
         return; 
     }
@@ -374,7 +376,7 @@ void BorescopeWebServer::queueData(ClientState& client, const uint8_t* data, siz
     }
 }
 
-void BorescopeWebServer::handleWrite(int client_fd) {
+void WebServer::handleWrite(int client_fd) {
     std::lock_guard<std::mutex> lock(clients_mutex_);
     
     auto it = std::find_if(clients_->begin(), clients_->end(), [client_fd](const ClientState& c) {
@@ -415,7 +417,7 @@ void BorescopeWebServer::handleWrite(int client_fd) {
     }
 }
 
-void BorescopeWebServer::closeConnection(int client_fd) {
+void WebServer::closeConnection(int client_fd) {
     auto it = std::find_if(clients_->begin(), clients_->end(), [client_fd](const ClientState& c) {
         return c.is_active && c.fd == client_fd;
     });

@@ -1,8 +1,6 @@
 #pragma once
 
-#include <cstdint>
-#include <string_view>
-#include "typedefs.hpp"
+#include <cstddef>
 
 namespace ServerConstants {
     inline constexpr size_t ONE_KILOBYTE = 1024;
