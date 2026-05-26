@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Borescope Desk</title>
+</head>
+<body style='background:#111; text-align:center; margin-top:40px; color:#fff; font-family:sans-serif;'>
+    <h2>Borescope Dashboard</h2>
+    <div style='margin: 20px auto; max-width: 950px; display: flex; justify-content: space-around;'>
+        <div>
+            <h3>Live Stream</h3>
+            <img id='live-stream' src='/' onclick='resyncLiveStream()' onerror='reconnectStream()' alt='Live Borescope Feed' style='width:440px; border:4px solid #333; background:#000;' />
+        </div>
+        <div>
+            <h3>Hardware Snap</h3>
+            <img src='/snapshot' id='snap_view' style='width:440px; border:4px solid #4caf50; background:#000;' 
+                 onerror="this.style.display='none'; document.getElementById('snap_msg').style.display='block';" 
+                 onload="this.style.display='inline-block'; document.getElementById('snap_msg').style.display='none';" />
+            <div id='snap_msg' style='width:440px; height:240px; border:2px dashed #444; line-height:240px; color:#777;'>
+                Click camera button quickly to latch frame.
+            </div>
+            <p>
+                <button onclick="refreshSnapshot();" style='padding:8px 16px; background:#4caf50; color:white; border:none; cursor:pointer;'>
+                    Update Canvas
+                </button>
+            </p>
+        </div>
+    </div>
+    <script>
+        // 1. Unified Reconnection Logic
+        function resyncLiveStream() {
+            const liveStream = document.getElementById('live-stream');
+            if (liveStream) {
+                // Appending a timestamp forces the browser to discard the old 
+                // broken MJPEG socket and open a fresh one.
+                liveStream.src = '/?cb=' + Date.now();
+            }
+        }
+
+        // 2. Browser Visibility Resilience
+        function handleResume() {
+            if (document.visibilityState === "visible") {
+                resyncLiveStream();
+            }
+        }
+        document.addEventListener("visibilitychange", handleResume);
+        window.addEventListener("focus", handleResume);
+
+        // 3. Automated Error Recovery
+        function reconnectStream() {
+            console.log("Stream error detected. Retrying in 2 seconds...");
+            setTimeout(resyncLiveStream, 2000);
+        }
+
+        // 4. Snapshot Health-Check (Optional: use fetch here for better error control)
+        async function refreshSnapshot() {
+            const snap = document.getElementById('snap_view');
+            try {
+                // We use fetch here so we can catch 404s/503s cleanly
+                const response = await fetch('/snapshot?t=' + Date.now());
+                if (response.ok) {
+                    snap.src = response.url;
+                }
+            } catch (err) {
+                console.warn("Snapshot service currently unavailable.");
+            }
+        }
+
+        // Start everything
+        setInterval(refreshSnapshot, 5000);
+        resyncLiveStream(); // Start the MJPEG stream once on load
+    </script>
+</body>
+</html>
