@@ -93,6 +93,7 @@ If you want to run BPF / linux perf on custom applications you are building, ens
 -  `-g`:  Embeds your source code maps into the build
 - `-fno-omit-frame-pointer`:  Instructs the compiler to keep the frame pointer register on the stack for every function call.
 
+Here's an example of `CXXFLAGS` from a Makefile with these compiler options specified
 
 ```
 CXXFLAGS := -std=c++23 -Wall -Wextra -O2 -I$(BUILD_DIR) -mcpu=cortex-a76 -mtune=cortex-a76 -flto=auto -g -fno-omit-frame-pointer
@@ -115,7 +116,7 @@ sudo apt install bpftrace
 
 ```
 sudo apt update
-sudo apt install  linux-perf
+sudo apt install linux-perf
 ```
 
 ### Generate Memory Allocation FlameGraph
@@ -131,7 +132,7 @@ sudo bpftrace -e 'uprobe:libc:malloc { @[ustack] = sum(arg0); }' -p $SERVER_PID 
 
 ../FlameGraph/stackcollapse-bpftrace.pl ./profile/raw_allocations.out > ./profile/collapsed_allocations.txt
 
-..//FlameGraph/flamegraph.pl --countname=bytes ./profile/collapsed_allocations.txt > ./profile/memory_profile.svg
+../FlameGraph/flamegraph.pl --countname=bytes ./profile/collapsed_allocations.txt > ./profile/memory_profile.svg
 ```
 
 ### Generate CPU FlameGraphs
