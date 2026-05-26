@@ -3,6 +3,7 @@
 #include "client_state.hpp"
 #include "server_constants.hpp"
 #include "typedefs.hpp"
+#include "camera_header.hpp"
 #include <poll.h>
 #include <atomic>
 #include <thread>

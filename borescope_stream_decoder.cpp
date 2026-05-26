@@ -1,5 +1,7 @@
 #include "borescope_stream_decoder.hpp"
 #include "server_constants.hpp"
+#include "usb_frame.hpp"
+#include "camera_header.hpp"
 #include <bit>
 
 static_assert(std::endian::native == std::endian::little);
@@ -15,12 +17,12 @@ void BorescopeStreamDecoder::emitFrame() {
 }
 
 void BorescopeStreamDecoder::handleUseeplusFrame(const byteVector &data) {
-    size_t usbHeaderLength = sizeof(upp_usb_frame_t);
+    size_t usbHeaderLength = sizeof(UsbFrame);
     if (data.size() < usbHeaderLength) {
         return;
     }
 
-    const upp_usb_frame_t *usbFrame = reinterpret_cast<const upp_usb_frame_t *>(data.data());
+    const UsbFrame *usbFrame = reinterpret_cast<const UsbFrame *>(data.data());
     if (usbFrame->magic != UPP_USB_MAGIC) {
         return;
     }
@@ -31,12 +33,12 @@ void BorescopeStreamDecoder::handleUseeplusFrame(const byteVector &data) {
         return;
     }
 
-    size_t cameraHeaderLength = sizeof(upp_cam_frame_t);
+    size_t cameraHeaderLength = sizeof(CameraHeader);
     if (data.size() - usbHeaderLength < cameraHeaderLength) {
         return;
     }
     
-    const upp_cam_frame_t *parsedCameraHeader = reinterpret_cast<const upp_cam_frame_t *>(data.data() + usbHeaderLength);
+    const CameraHeader *parsedCameraHeader = reinterpret_cast<const CameraHeader *>(data.data() + usbHeaderLength);
 
     if (!cameraBuffer.empty() && cameraHeader.frameId != parsedCameraHeader->frameId) {
         emitFrame();
