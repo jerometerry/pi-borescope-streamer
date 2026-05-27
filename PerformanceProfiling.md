@@ -2,6 +2,8 @@
 
 Finding performance bottlenecks in C++ code is not as complicated as you might think, using modern tools such as BPF and FlameGraphs. The most complicated part is configuring the Linux kernel to enable BTF Type Info and uprobes. This may involve recompiling the kernel - for example on a Raspberry PI with the default OS install.
 
+Here's a quick primer on [recompiling the Raspberry Pi Kernel](RecompileKernel.md) to add the needed options for BPF.
+
 ## Linux Kernel Configs
 
 If you want to use eBPF, for example to generate FlameGraphs, you'll need to enable BTF (BPF Type Format) Support. Here's the options that need to be configured in Raspberry Pi kernel configs when re-compiling, if you are using `make menuconfig` to generate the .config file. 
