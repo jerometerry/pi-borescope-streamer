@@ -20,22 +20,22 @@ WebServer::WebServer(int serverPort,
                      const uint32_t& videoFrameId,
                      std::mutex& snapMutex,
                      const ByteVector& snapBuffer)
-    : port_(serverPort),
+    : port(serverPort),
       globalRunning(runningFlag),
       frameMutex(videoMutex),
       latestJpeg(videoBuffer),
       latestFrameId(videoFrameId),
       snapshotMutex(snapMutex),
       snapshotJpeg(snapBuffer),
-      clients_(std::make_unique<std::array<ClientState, MAX_CLIENTS>>()) {}
+      clients(std::make_unique<std::array<ClientState, MAX_CLIENTS>>()) {}
 
 WebServer::~WebServer() {
-    running_ = false;
-    if (event_loop_thread_.joinable()) {
-        event_loop_thread_.join();
+    running = false;
+    if (eventLoopThread.joinable()) {
+        eventLoopThread.join();
     }
-    if (listen_fd_ != -1) {
-        close(listen_fd_);
+    if (listenFileDescriptor != -1) {
+        close(listenFileDescriptor);
     }
 }
 
@@ -52,31 +52,31 @@ bool WebServer::initialize() {
     // when attempting to send data to a client that disconnected abruptly.
     signal(SIGPIPE, SIG_IGN);
 
-    listen_fd_ = socket(AF_INET, SOCK_STREAM, 0);
-    if (listen_fd_ == -1) {
+    listenFileDescriptor = socket(AF_INET, SOCK_STREAM, 0);
+    if (listenFileDescriptor == -1) {
         std::cerr << ERR_SOCKET;
         return false;
     }
 
     int opt = 1;
-    setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    setsockopt(listenFileDescriptor, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(port_);
+    address.sin_port = htons(port);
 
-    if (bind(listen_fd_, (struct sockaddr*)&address, sizeof(address)) < 0) {
-        std::cerr << std::format(ERR_BIND, port_);
+    if (bind(listenFileDescriptor, (struct sockaddr*)&address, sizeof(address)) < 0) {
+        std::cerr << std::format(ERR_BIND, port);
         return false;
     }
 
-    if (listen(listen_fd_, 10) < 0) {
+    if (listen(listenFileDescriptor, 10) < 0) {
         std::cerr << ERR_LISTEN;
         return false;
     }
 
-    if (!setNonBlocking(listen_fd_)) {
+    if (!setNonBlocking(listenFileDescriptor)) {
         std::cerr << ERR_NONBLOCK;
         return false;
     }
@@ -85,34 +85,34 @@ bool WebServer::initialize() {
 }
 
 void WebServer::startEventLoop() {
-    running_ = true;
-    poll_fds_.reserve(INITIAL_POLL_CAPACITY);
-    event_loop_thread_ = std::thread(&WebServer::eventLoop, this);
+    running = true;
+    pollFileDescriptors.reserve(INITIAL_POLL_CAPACITY);
+    eventLoopThread = std::thread(&WebServer::eventLoop, this);
 }
 
 void WebServer::eventLoop() {
-    while (running_ && globalRunning) {
+    while (running && globalRunning) {
         broadcastLatestFrame();
 
         {
-            std::lock_guard<std::mutex> lock(clients_mutex_);
+            std::lock_guard<std::mutex> lock(clientsMutex);
 
-            poll_fds_.clear();
-            poll_fds_.push_back({listen_fd_, POLLIN, 0});
+            pollFileDescriptors.clear();
+            pollFileDescriptors.push_back({listenFileDescriptor, POLLIN, 0});
             
-            for (const auto& client : *clients_) {
-                if (!client.is_active) {
+            for (const auto& client : *clients) {
+                if (!client.isActive) {
                     continue;
                 }
                 short events = POLLIN;
-                if (client.outbox_len > 0) {
+                if (client.outboxLen > 0) {
                     events |= POLLOUT;
                 }
-                poll_fds_.push_back({client.fd, events, 0});
+                pollFileDescriptors.push_back({client.fileDescriptor, events, 0});
             }
         }
 
-        int ret = poll(poll_fds_.data(), poll_fds_.size(), 10);
+        int ret = poll(pollFileDescriptors.data(), pollFileDescriptors.size(), 10);
         if (ret == -1) {
             if (errno == EINTR) { 
                 continue; 
@@ -120,12 +120,12 @@ void WebServer::eventLoop() {
             break;
         }
 
-        for (const auto& pfd : poll_fds_) {
+        for (const auto& pfd : pollFileDescriptors) {
             if (pfd.revents == 0) { 
                 continue; 
             }
 
-            if (pfd.fd == listen_fd_) {
+            if (pfd.fd == listenFileDescriptor) {
                 if (pfd.revents & POLLIN) { 
                     handleAccept(); 
                 }
@@ -148,71 +148,71 @@ void WebServer::eventLoop() {
 void WebServer::handleAccept() {
     while (true) {
         sockaddr_in client_addr{};
-        socklen_t client_len = sizeof(client_addr);
-        int client_fd = accept(listen_fd_, (struct sockaddr*)&client_addr, &client_len);
+        socklen_t clientLen = sizeof(client_addr);
+        int fileDescriptor = accept(listenFileDescriptor, (struct sockaddr*)&client_addr, &clientLen);
         
-        if (client_fd == -1) {
+        if (fileDescriptor == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) { 
                 break; 
             }
             break;
         }
 
-        if (!setNonBlocking(client_fd)) {
-            close(client_fd);
+        if (!setNonBlocking(fileDescriptor)) {
+            close(fileDescriptor);
             continue;
         }
 
-        std::lock_guard<std::mutex> lock(clients_mutex_);
+        std::lock_guard<std::mutex> lock(clientsMutex);
 
-        auto it = std::find_if(clients_->begin(), clients_->end(), [](const ClientState& c) {
-            return !c.is_active;
+        auto it = std::find_if(clients->begin(), clients->end(), [](const ClientState& c) {
+            return !c.isActive;
         });
 
-        if (it != clients_->end()) {
-            it->reset(client_fd);
+        if (it != clients->end()) {
+            it->reset(fileDescriptor);
         } else {
-            close(client_fd);
+            close(fileDescriptor);
         }
     }
 }
 
-void WebServer::handleRead(int client_fd) {
-    auto it = std::find_if(clients_->begin(), clients_->end(), [client_fd](const ClientState& c) {
-        return c.is_active && c.fd == client_fd;
+void WebServer::handleRead(int fileDescriptor) {
+    auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
+        return c.isActive && c.fileDescriptor == fileDescriptor;
     });
 
-    if (it == clients_->end()) { 
+    if (it == clients->end()) { 
         return; 
     }
 
     auto& client = *it;
     
     while (true) {
-        size_t available_space = client.read_buffer.size() - client.read_buffer_len;
-        if (available_space == 0) {
-            closeConnection(client_fd);
+        size_t availableSpace = client.readBuffer.size() - client.readBufferLen;
+        if (availableSpace == 0) {
+            closeConnection(fileDescriptor);
             return;
         }
 
-        ssize_t bytes_read = recv(client_fd, client.read_buffer.data() + client.read_buffer_len, available_space, 0);
+        ssize_t bytesRead = recv(fileDescriptor, client.readBuffer.data() + client.readBufferLen, availableSpace, 0);
 
-        if (bytes_read > 0) {
-            client.read_buffer_len += bytes_read;
-            std::string_view stream_view(client.read_buffer.data(), client.read_buffer_len);
+        if (bytesRead > 0) {
+            client.readBufferLen += bytesRead;
+            std::string_view incoming(client.readBuffer.data(), client.readBufferLen);
 
-            if (stream_view.find(HEADER_DELIMITER) != std::string_view::npos) {
-                processClientRequest(client); // Ensure processClientRequest matches this string_view pattern
+            if (incoming.find(HEADER_DELIMITER) != std::string_view::npos) {
+                processClientRequest(client);
                 break;
             }
-        } else if (bytes_read == -1) {
+        } else if (bytesRead == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) { 
                 break; 
             }
-            closeConnection(client_fd);
+            closeConnection(fileDescriptor);
             return;
         } else {
-            closeConnection(client_fd);
+            closeConnection(fileDescriptor);
             return;
         }
     }
@@ -220,23 +220,23 @@ void WebServer::handleRead(int client_fd) {
 
 
 void WebServer::processClientRequest(ClientState& client) {
-    std::string_view request_view(client.read_buffer.data(), client.read_buffer_len);
+    std::string_view request(client.readBuffer.data(), client.readBufferLen);
 
-    if (request_view.find(ROUTE_WEB) != std::string_view::npos) {
-        client.close_after_write = true;
+    if (request.find(ROUTE_WEB) != std::string_view::npos) {
+        client.closeAfterWrite = true;
 
         auto [it, size] = std::format_to_n(
-            header_stack_buf_, 
+            headerStackBuf, 
             STACK_BUF_SIZE, 
             HTTP_OK_HTML_FMT, 
             htmlPageContent.size()
         );
 
-        queueData(client, reinterpret_cast<const uint8_t*>(header_stack_buf_), size);
+        queueData(client, reinterpret_cast<const uint8_t*>(headerStackBuf), size);
         queueData(client, reinterpret_cast<const uint8_t*>(htmlPageContent.data()), htmlPageContent.size());
     } 
-    else if (request_view.find(ROUTE_SNAPSHOT) != std::string_view::npos) {
-        client.close_after_write = true;
+    else if (request.find(ROUTE_SNAPSHOT) != std::string_view::npos) {
+        client.closeAfterWrite = true;
         {
             std::lock_guard<std::mutex> snapshotLock(snapshotMutex);
 
@@ -247,50 +247,50 @@ void WebServer::processClientRequest(ClientState& client) {
                 );
             } else {
                 auto [it, size] = std::format_to_n(
-                    header_stack_buf_, 
+                    headerStackBuf, 
                     STACK_BUF_SIZE,
                     HTTP_OK_JPEG_FMT, 
                     snapshotJpeg.size()
                 );
 
-                queueData(client, reinterpret_cast<const uint8_t*>(header_stack_buf_), size);
+                queueData(client, reinterpret_cast<const uint8_t*>(headerStackBuf), size);
                 queueData(client, snapshotJpeg.data(), snapshotJpeg.size());
             }
         }
     } 
-    else if (request_view.find(ROUTE_FAVICON) != std::string_view::npos) {
-        client.close_after_write = true;
+    else if (request.find(ROUTE_FAVICON) != std::string_view::npos) {
+        client.closeAfterWrite = true;
         queueData(client, reinterpret_cast<const uint8_t*>(FAVICON_NOT_FOUND.data()), FAVICON_NOT_FOUND.size());
     } 
-    else if (request_view.find("GET / HTTP") != std::string_view::npos || 
-             request_view.find("GET /?") != std::string_view::npos) {
-        client.is_streaming = true;
-        client.sent_frame_id = 0;
+    else if (request.find("GET / HTTP") != std::string_view::npos || 
+             request.find("GET /?") != std::string_view::npos) {
+        client.isStreaming = true;
+        client.sentFrameId = 0;
         queueData(client, reinterpret_cast<const uint8_t*>(HTTP_OK_MJPEG.data()), HTTP_OK_MJPEG.size());
     }
     else {
-        client.close_after_write = true;
+        client.closeAfterWrite = true;
         queueData(client, reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size());
     }
     
-    client.read_buffer_len = 0;
+    client.readBufferLen = 0;
 
-    if (client.close_after_write && client.outbox.empty()) {
-        closeConnection(client.fd);
+    if (client.closeAfterWrite && client.outbox.empty()) {
+        closeConnection(client.fileDescriptor);
     }
 }
 
 void WebServer::broadcastLatestFrame() {
-    std::lock_guard<std::mutex> lock(clients_mutex_);
+    std::lock_guard<std::mutex> lock(clientsMutex);
     uint32_t localLatestFrameId = latestFrameId;
     
-    for (auto& client : *clients_) {
-        if (!client.is_active) {
+    for (auto& client : *clients) {
+        if (!client.isActive) {
             continue; 
         }
 
-        if (client.is_streaming && client.sent_frame_id != localLatestFrameId) {
-            if (client.outbox_len > ServerConstants::TWO_MEGABYTES) { 
+        if (client.isStreaming && client.sentFrameId != localLatestFrameId) {
+            if (client.outboxLen > ServerConstants::TWO_MEGABYTES) { 
                 continue; 
             }
 
@@ -328,104 +328,103 @@ void WebServer::broadcastLatestFrame() {
                 );
             }
 
-            client.sent_frame_id = localLatestFrameId;
+            client.sentFrameId = localLatestFrameId;
         }
     }
 }
 
 void WebServer::queueData(ClientState& client, const uint8_t* data, size_t size) {
-    if (!client.is_active) {
+    if (!client.isActive) {
         return; 
     }
 
-    if (client.outbox_len == 0) {
-        ssize_t sent = send(client.fd, data, size, MSG_NOSIGNAL);
+    if (client.outboxLen == 0) {
+        ssize_t sent = send(client.fileDescriptor, data, size, MSG_NOSIGNAL);
         if (sent >= 0) {
             if (static_cast<size_t>(sent) == size) { 
                 return;
             }
             size_t remaining = size - sent;
             if (remaining > client.outbox.size()) {
-                closeConnection(client.fd);
+                closeConnection(client.fileDescriptor);
                 return;
             }
             std::memcpy(client.outbox.data(), data + sent, remaining);
-            client.outbox_len = remaining;
-            client.outbox_offset = 0;
+            client.outboxLen = remaining;
+            client.outboxOffset = 0;
         } else {
             if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                closeConnection(client.fd);
+                closeConnection(client.fileDescriptor);
                 return;
             }
             if (size > client.outbox.size()) {
-                closeConnection(client.fd);
+                closeConnection(client.fileDescriptor);
                 return;
             }
             std::memcpy(client.outbox.data(), data, size);
-            client.outbox_len = size;
-            client.outbox_offset = 0;
+            client.outboxLen = size;
+            client.outboxOffset = 0;
         }
     } else {
-        if (client.outbox_len + size > client.outbox.size()) {
-            // Buffer overflow safety guard
-            closeConnection(client.fd);
+        if (client.outboxLen + size > client.outbox.size()) {
+            closeConnection(client.fileDescriptor);
             return;
         }
-        std::memcpy(client.outbox.data() + client.outbox_len, data, size);
-        client.outbox_len += size;
+        std::memcpy(client.outbox.data() + client.outboxLen, data, size);
+        client.outboxLen += size;
     }
 }
 
-void WebServer::handleWrite(int client_fd) {
-    std::lock_guard<std::mutex> lock(clients_mutex_);
+void WebServer::handleWrite(int fileDescriptor) {
+    std::lock_guard<std::mutex> lock(clientsMutex);
     
-    auto it = std::find_if(clients_->begin(), clients_->end(), [client_fd](const ClientState& c) {
-        return c.is_active && c.fd == client_fd;
+    auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
+        return c.isActive && c.fileDescriptor == fileDescriptor;
     });
 
-    if (it == clients_->end()) { 
+    if (it == clients->end()) { 
         return; 
     }
 
     auto& client = *it;
-    if (client.outbox_len == 0) { 
+    if (client.outboxLen == 0) { 
         return; 
     }
 
-    while (client.outbox_offset < client.outbox_len) {
-        size_t remaining = client.outbox_len - client.outbox_offset;
-        ssize_t sent = send(client_fd, client.outbox.data() + client.outbox_offset, remaining, MSG_NOSIGNAL);
+    while (client.outboxOffset < client.outboxLen) {
+        size_t remaining = client.outboxLen - client.outboxOffset;
+        ssize_t sent = send(fileDescriptor, client.outbox.data() + client.outboxOffset, remaining, MSG_NOSIGNAL);
 
         if (sent > 0) {
-            client.outbox_offset += sent;
+            client.outboxOffset += sent;
         } else if (sent == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) { 
                 return; 
             }
-            closeConnection(client_fd);
+            closeConnection(fileDescriptor);
             return;
         }
     }
 
-    if (client.outbox_offset >= client.outbox_len) {
-        client.outbox_len = 0;
-        client.outbox_offset = 0;
+    if (client.outboxOffset >= client.outboxLen) {
+        client.outboxLen = 0;
+        client.outboxOffset = 0;
     }
 
-    if (client.close_after_write) {
-        closeConnection(client_fd);
+    if (client.closeAfterWrite) {
+        closeConnection(fileDescriptor);
     }
 }
 
-void WebServer::closeConnection(int client_fd) {
-    auto it = std::find_if(clients_->begin(), clients_->end(), [client_fd](const ClientState& c) {
-        return c.is_active && c.fd == client_fd;
+void WebServer::closeConnection(int fileDescriptor) {
+    auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
+        return c.isActive && c.fileDescriptor == fileDescriptor;
     });
 
-    if (it != clients_->end()) {
-        it->is_active = false;
+    if (it != clients->end()) {
+        it->isActive = false;
     }
 
-    shutdown(client_fd, SHUT_WR);
-    close(client_fd);
+    shutdown(fileDescriptor, SHUT_WR);
+    close(fileDescriptor);
 }

@@ -58,24 +58,24 @@ private:
 
     void eventLoop();
     void handleAccept();
-    void handleRead(int client_fd);
-    void handleWrite(int client_fd);
+    void handleRead(int fileDescriptor);
+    void handleWrite(int fileDescriptor);
     void broadcastLatestFrame();
-    void closeConnection(int client_fd);
+    void closeConnection(int fileDescriptor);
     
     bool setNonBlocking(int fd);
     void processClientRequest(ClientState& client);
     void queueData(ClientState& client, const uint8_t* data, size_t size);
 
-    int listen_fd_ = -1;
-    int port_ = -1;
+    int listenFileDescriptor = -1;
+    int port = -1;
 
-    std::vector<struct pollfd> poll_fds_;
-    char header_stack_buf_[STACK_BUF_SIZE];
+    std::vector<struct pollfd> pollFileDescriptors;
+    char headerStackBuf[STACK_BUF_SIZE];
 
-    std::atomic<bool> running_{false};
-    std::thread event_loop_thread_;
-    std::mutex clients_mutex_;
+    std::atomic<bool> running{false};
+    std::thread eventLoopThread;
+    std::mutex clientsMutex;
 
     const std::atomic<bool>& globalRunning;
     std::mutex& frameMutex;
@@ -84,5 +84,5 @@ private:
     std::mutex& snapshotMutex;
     const ByteVector& snapshotJpeg;
 
-    std::unique_ptr<std::array<ClientState, MAX_CLIENTS>> clients_;
+    std::unique_ptr<std::array<ClientState, MAX_CLIENTS>> clients;
 };
