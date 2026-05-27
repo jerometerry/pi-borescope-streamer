@@ -73,11 +73,14 @@ Once the server is running and the camera is plugged in, you can access the stre
 
 I use `docker build` as a quick sanity check that this will compile on other machines. 
 
-The server won't start if there is no USB camera connected. I haven't investigated how to make that work in Docker.
-
 ```
 docker build --build-arg CACHEBUST=$(date +%s) -t pi-borescope-test .
 ```
+
+To run the MJPEG Streaming Server in a docker container
+- Plug the camera into a USB port on the Docker host server (e.g. Raspberry Pi)
+- Include the USB bus in the `--device` argument. For example:
+  - `docker run --device=/dev/bus/usb -p 8080:8080 pi-borescope-test`
 
 ## 🔬 Advanced Documentation
 
