@@ -14,7 +14,9 @@ static_assert(std::endian::native == std::endian::little);
 
 UsbCameraProtocol::UsbCameraProtocol(
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler, std::function<void()> buttonHandler) 
-    : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {}
+    : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {
+        frameBuffer.reserve(ServerConstants::ONE_MEGABYTE);
+    }
 
 void UsbCameraProtocol::emitFrame() {
     if (broadcastHandler) {
