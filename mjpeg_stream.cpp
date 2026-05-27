@@ -131,12 +131,11 @@ void MjpegStream::checkForButtonQuickPress() {
 }
 
 void MjpegStream::startVideoFeed() {
-    MjpegStream* self = this;
-    auto broadcastHandler = [self](const std::vector<uint8_t>& frame) { 
-        self->broadcastFrame(frame);
+    auto broadcastHandler = [this](const std::vector<uint8_t>& frame) { 
+        broadcastFrame(frame);
     };
-    auto buttonHandler = [self]() { 
-        self->hardwareButtonCallback(); 
+    auto buttonHandler = [this]() { 
+        hardwareButtonCallback(); 
     };
 
     try {

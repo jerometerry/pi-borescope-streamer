@@ -1,18 +1,7 @@
 #include "mjpeg_stream.hpp"
-#include "usb_camera.hpp"
-#include "usb_camera_protocol.hpp"
-#include "web_server.hpp"
-
-#include <atomic>
-#include <chrono>
 #include <csignal>
 #include <iostream>
 #include <string>
-#include <mutex>
-#include <thread>
-#include <vector>
-
-#include <libusb-1.0/libusb.h>
 
 static constexpr int DEFAULT_PORT = 8080;
 static MjpegStream stream;

@@ -1,9 +1,5 @@
 #pragma once
 
-#include "usb_camera.hpp"
-#include "usb_camera_protocol.hpp"
-#include "web_server.hpp"
-
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -13,23 +9,21 @@
 #include <thread>
 #include <vector>
 
-#include <libusb-1.0/libusb.h>
-
 class MjpegStream {
 
 public:
     MjpegStream();
     ~MjpegStream();
 
+    int run(int port);
+    void stop();
+
+private:
     void broadcastFrame(const std::vector<uint8_t>& frame);
     void hardwareButtonCallback();
     void checkForButtonQuickPress();
     void startVideoFeed();
 
-    int run(int port);
-    void stop();
-
-private:
     static constexpr uint8_t JPEG_SOI_MARKERS[] = { 0xFF, 0xD8 };
 
     static constexpr int BUTTON_DEBOUNCE_TIME_MS = 200;
