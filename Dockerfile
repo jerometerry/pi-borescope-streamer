@@ -8,8 +8,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
     build-essential \
     make \
-    iwyu \
-    bear \ 
     libusb-1.0-0-dev \
     git \
     ca-certificates \
@@ -25,11 +23,7 @@ ARG CACHEBUST=1
 RUN git clone https://github.com/jerometerry/pi-borescope-streamer.git 
 
 WORKDIR /app/pi-borescope-streamer
-
-RUN bear -- make clean all && iwyu_tool.py -p .
-
 RUN make
-
 # 5. Expose the default network port
 EXPOSE 8080
 
