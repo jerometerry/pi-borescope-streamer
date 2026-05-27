@@ -5,12 +5,19 @@
 #include <utility>
 #include <span>
 
-#include "typedefs.hpp"
-
 struct libusb_context;
 struct libusb_device_handle;
 
 class UsbCamera {
+public:
+    UsbCamera();
+    ~UsbCamera();
+
+    UsbCamera(const UsbCamera&) = delete;
+    UsbCamera& operator=(const UsbCamera&) = delete;
+
+    int readFrame(std::vector<uint8_t> &frameBuffer);
+
 private:
     static constexpr std::pair<uint16_t, uint16_t> VENDOR_PRODUCT_ID_LIST[] = {{0x2ce3, 0x3828}, {0x0329, 0x2022}};
     static constexpr int INTERFACE_A_NUMBER = 0;
@@ -25,15 +32,6 @@ private:
 
     libusb_device_handle *open(libusb_context *context);
 
-    int read(unsigned char endpoint, ByteVector &buffer, size_t max_size);
-    int write(unsigned char endpoint, ByteVector buffer);
-
-public:
-    UsbCamera();
-    ~UsbCamera();
-
-    UsbCamera(const UsbCamera&) = delete;
-    UsbCamera& operator=(const UsbCamera&) = delete;
-
-    int readFrame(ByteVector &frameBuffer);
+    int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t max_size);
+    int write(unsigned char endpoint, uint8_t* buffer, size_t length);
 };

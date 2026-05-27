@@ -9,4 +9,11 @@ struct [[gnu::packed]] CameraHeader {
     unsigned char buttonPress:1;
     unsigned char otherFlags:6;
     uint32_t gravitySensor;
+
+    bool isSameCamera(CameraHeader header) {
+        return frameId == header.frameId && 
+               cameraNumber == header.cameraNumber && 
+               hasGravitySensor == header.hasGravitySensor && 
+               otherFlags == header.otherFlags;
+    }
 };

@@ -13,38 +13,29 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-WebServer::WebServer(int serverPort,
-                     const std::atomic<bool>& runningFlag,
-                     std::mutex& videoMutex,
-                     const ByteVector& videoBuffer,
-                     const uint32_t& videoFrameId,
-                     std::mutex& snapMutex,
-                     const ByteVector& snapBuffer)
-    : port(serverPort),
-      globalRunning(runningFlag),
-      frameMutex(videoMutex),
-      latestJpeg(videoBuffer),
-      latestFrameId(videoFrameId),
-      snapshotMutex(snapMutex),
-      snapshotJpeg(snapBuffer),
-      clients(std::make_unique<std::array<ClientState, MAX_CLIENTS>>()) {}
+WebServer::WebServer(const int port,
+                     const std::atomic<bool>& running,                 
+                     const uint32_t& latestFrameId,
+                     const std::vector<uint8_t>& frameBuffer,
+                     std::mutex& frameMutex,
+                     const std::vector<uint8_t>& snapshotBuffer,
+                     std::mutex& snapshotMutex)
+    : clients(std::make_unique<std::array<ClientState, MAX_CLIENTS>>()),
+      port(port),
+      running(running),
+      latestFrameId(latestFrameId),
+      frameBuffer(frameBuffer),
+      frameMutex(frameMutex),
+      snapshotBuffer(snapshotBuffer),
+      snapshotMutex(snapshotMutex) {}
 
 WebServer::~WebServer() {
-    running = false;
-    if (eventLoopThread.joinable()) {
-        eventLoopThread.join();
+    if (workerThread.joinable()) {
+        workerThread.join();
     }
     if (listenFileDescriptor != -1) {
         close(listenFileDescriptor);
     }
-}
-
-bool WebServer::setNonBlocking(int fd) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) { 
-        return false; 
-    }
-    return fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0;
 }
 
 bool WebServer::initialize() {
@@ -84,14 +75,13 @@ bool WebServer::initialize() {
     return true;
 }
 
-void WebServer::startEventLoop() {
-    running = true;
+void WebServer::start() {
     pollFileDescriptors.reserve(INITIAL_POLL_CAPACITY);
-    eventLoopThread = std::thread(&WebServer::eventLoop, this);
+    workerThread = std::thread(&WebServer::eventLoop, this);
 }
 
 void WebServer::eventLoop() {
-    while (running && globalRunning) {
+    while (running) {
         broadcastLatestFrame();
 
         {
@@ -143,6 +133,14 @@ void WebServer::eventLoop() {
             }
         }
     }
+}
+
+bool WebServer::setNonBlocking(int fileDescriptor) {
+    int flags = fcntl(fileDescriptor, F_GETFL, 0);
+    if (flags == -1) { 
+        return false; 
+    }
+    return fcntl(fileDescriptor, F_SETFL, flags | O_NONBLOCK) == 0;
 }
 
 void WebServer::handleAccept() {
@@ -240,7 +238,7 @@ void WebServer::processClientRequest(ClientState& client) {
         {
             std::lock_guard<std::mutex> snapshotLock(snapshotMutex);
 
-            if (snapshotJpeg.empty()) {
+            if (snapshotBuffer.empty()) {
                 queueData(
                     client, 
                     reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size()
@@ -250,11 +248,11 @@ void WebServer::processClientRequest(ClientState& client) {
                     headerStackBuf, 
                     STACK_BUF_SIZE,
                     HTTP_OK_JPEG_FMT, 
-                    snapshotJpeg.size()
+                    snapshotBuffer.size()
                 );
 
                 queueData(client, reinterpret_cast<const uint8_t*>(headerStackBuf), size);
-                queueData(client, snapshotJpeg.data(), snapshotJpeg.size());
+                queueData(client, snapshotBuffer.data(), snapshotBuffer.size());
             }
         }
     } 
@@ -296,7 +294,7 @@ void WebServer::broadcastLatestFrame() {
 
             {
                 std::lock_guard<std::mutex> frameLock(frameMutex);
-                if (latestJpeg.empty()) { 
+                if (frameBuffer.empty()) { 
                     continue; 
                 }
 
@@ -307,7 +305,7 @@ void WebServer::broadcastLatestFrame() {
                 );
                 
                 char num_buf[16];
-                auto [ptr, ec] = std::to_chars(num_buf, num_buf + sizeof(num_buf), latestJpeg.size());
+                auto [ptr, ec] = std::to_chars(num_buf, num_buf + sizeof(num_buf), frameBuffer.size());
                 if (ec == std::errc()) {
                     size_t num_len = ptr - num_buf;
                     queueData(client, reinterpret_cast<const uint8_t*>(num_buf), num_len);
@@ -319,7 +317,7 @@ void WebServer::broadcastLatestFrame() {
                     MJPEG_CHUNK_SUFFIX.size()
                 );
 
-                queueData(client, latestJpeg.data(), latestJpeg.size());
+                queueData(client, frameBuffer.data(), frameBuffer.size());
 
                 queueData(
                     client, 

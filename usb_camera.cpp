@@ -3,6 +3,9 @@
 #include <stdexcept>
 #include <libusb-1.0/libusb.h>
 
+static uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
+static uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
+
 UsbCamera::UsbCamera() : context(nullptr), deviceHandle(nullptr) {
     if (libusb_init(&context) < 0) {
         throw std::runtime_error("libusb_init failed");
@@ -24,11 +27,8 @@ UsbCamera::UsbCamera() : context(nullptr), deviceHandle(nullptr) {
 
     libusb_clear_halt(deviceHandle, ENDPOINT_1);
 
-    ByteVector initializationToken = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
-    write(ENDPOINT_2, initializationToken);
-    
-    ByteVector startStreamToken = {0xBB, 0xAA, 5, 0, 0};
-    write(ENDPOINT_1, startStreamToken);
+    write(ENDPOINT_2, INITIALIZATION_TOKENS, sizeof(INITIALIZATION_TOKENS));
+    write(ENDPOINT_1, START_STREAM_TOKENS, sizeof(START_STREAM_TOKENS));
 }
 
 UsbCamera::~UsbCamera() {
@@ -40,38 +40,8 @@ UsbCamera::~UsbCamera() {
     }
 }
 
-int UsbCamera::read(unsigned char endpoint, ByteVector &buffer, size_t maxSize) {
-    int numBytes = 0;
-    buffer.resize(maxSize);
-
-    int error = libusb_bulk_transfer(
-        deviceHandle, 
-        LIBUSB_ENDPOINT_IN | endpoint, 
-        buffer.data(), 
-        buffer.size(), 
-        &numBytes, 
-        USB_TIMEOUT
-    );
-
-    if (error != 0) {
-        buffer.resize(0);
-        return error;
-    }
-
-    buffer.resize(numBytes);
-    return 0;
-}
-
-int UsbCamera::write(unsigned char endpoint, ByteVector buffer) {
-    int numBytes = 0;
-    return libusb_bulk_transfer(
-        deviceHandle, 
-        LIBUSB_ENDPOINT_OUT | endpoint, 
-        buffer.data(), 
-        buffer.size(), 
-        &numBytes, 
-        USB_TIMEOUT
-    );
+int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
+    return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
 }
 
 libusb_device_handle* UsbCamera::open(libusb_context *context) {
@@ -106,6 +76,40 @@ libusb_device_handle* UsbCamera::open(libusb_context *context) {
     return handle;
 }
 
-int UsbCamera::readFrame(ByteVector &frameBuffer) {
-    return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
+int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize) {
+    int numBytes = 0;
+
+    // Ensure we don't overflow the pre-allocated capacity
+    size_t readSize = std::min(maxSize, buffer.capacity());
+
+    buffer.resize(readSize);
+
+    int error = libusb_bulk_transfer(
+        deviceHandle, 
+        LIBUSB_ENDPOINT_IN | endpoint, 
+        buffer.data(), 
+        readSize, 
+        &numBytes, 
+        USB_TIMEOUT
+    );
+
+    if (error != 0) {
+        buffer.resize(0);
+        return error;
+    }
+
+    buffer.resize(numBytes);
+    return 0;
+}
+
+int UsbCamera::write(unsigned char endpoint, uint8_t* buffer, size_t length) {
+    int numBytes = 0;
+    return libusb_bulk_transfer(
+        deviceHandle, 
+        LIBUSB_ENDPOINT_OUT | endpoint, 
+        buffer, 
+        length, 
+        &numBytes, 
+        USB_TIMEOUT
+    );
 }

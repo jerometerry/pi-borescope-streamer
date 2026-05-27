@@ -2,7 +2,6 @@
 
 #include "client_state.hpp"
 #include "server_constants.hpp"
-#include "typedefs.hpp"
 #include "camera_header.hpp"
 #include <poll.h>
 #include <atomic>
@@ -14,22 +13,32 @@
 
 class WebServer {
 public:
-    explicit WebServer(int serverPort,
-                                const std::atomic<bool>& runningFlag,
-                                std::mutex& videoMutex,
-                                const ByteVector& videoBuffer,
-                                const uint32_t& videoFrameId,
-                                std::mutex& snapMutex,
-                                const ByteVector& snapBuffer);
+    explicit WebServer(const int port,
+                       const std::atomic<bool>& running,               
+                       const uint32_t& latestFrameId,                
+                       const std::vector<uint8_t>& frameBuffer,
+                       std::mutex& frameMutex,
+                       const std::vector<uint8_t>& snapshotBuffer,
+                       std::mutex& snapshotMutex);
     ~WebServer();
 
     WebServer(const WebServer&) = delete;
     WebServer& operator=(const WebServer&) = delete;
 
     bool initialize();
-    void startEventLoop();
+    void start();
 
 private:
+    void eventLoop();
+    void handleAccept();
+    void handleRead(int fileDescriptor);
+    void handleWrite(int fileDescriptor);
+    void broadcastLatestFrame();
+    void closeConnection(int fileDescriptor);
+    bool setNonBlocking(int fileDescriptor);
+    void processClientRequest(ClientState& client);
+    void queueData(ClientState& client, const uint8_t* data, size_t size);
+
     static constexpr size_t MAX_CLIENTS = 8;
     static constexpr size_t INITIAL_POLL_CAPACITY = 16;
     static constexpr size_t STACK_BUF_SIZE = 128;
@@ -56,33 +65,20 @@ private:
     static constexpr std::string_view ERR_LISTEN         = "[Web Server Error] Backlog listener setup failed.\n";
     static constexpr std::string_view ERR_NONBLOCK       = "[Web Server Error] Failed to set non-blocking on listener.\n";
 
-    void eventLoop();
-    void handleAccept();
-    void handleRead(int fileDescriptor);
-    void handleWrite(int fileDescriptor);
-    void broadcastLatestFrame();
-    void closeConnection(int fileDescriptor);
-    
-    bool setNonBlocking(int fd);
-    void processClientRequest(ClientState& client);
-    void queueData(ClientState& client, const uint8_t* data, size_t size);
-
     int listenFileDescriptor = -1;
-    int port = -1;
 
-    std::vector<struct pollfd> pollFileDescriptors;
     char headerStackBuf[STACK_BUF_SIZE];
 
-    std::atomic<bool> running{false};
-    std::thread eventLoopThread;
-    std::mutex clientsMutex;
-
-    const std::atomic<bool>& globalRunning;
-    std::mutex& frameMutex;
-    const ByteVector& latestJpeg;
-    const uint32_t& latestFrameId;
-    std::mutex& snapshotMutex;
-    const ByteVector& snapshotJpeg;
-
     std::unique_ptr<std::array<ClientState, MAX_CLIENTS>> clients;
+    std::mutex clientsMutex;
+    std::vector<struct pollfd> pollFileDescriptors;
+    std::thread workerThread;
+
+    const int port;
+    const std::atomic<bool>& running;
+    const uint32_t& latestFrameId;
+    const std::vector<uint8_t>& frameBuffer;
+    std::mutex& frameMutex;
+    const std::vector<uint8_t>& snapshotBuffer;
+    std::mutex& snapshotMutex;
 };
