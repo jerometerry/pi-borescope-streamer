@@ -1,6 +1,6 @@
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
-#include "usb_client.hpp"
+#include "usb_context.hpp"
 #include <stdexcept>
 #include <span>
 #include <libusb.h>
@@ -15,42 +15,40 @@ UsbCamera::~UsbCamera() {
     close();
 }
 
-bool UsbCamera::open() {
-    if (deviceHandle) {
-        return true;
-    }
-
-    if (!context && UsbClient::initContext(&context, nullptr, 0) < 0) {
-        throw std::runtime_error("UsbClient::init_context failed");
-    }
+bool UsbCamera::open(UsbContext* context) {
+    this->context = context;
     
     libusb_device** devices = nullptr;
-    ssize_t count = UsbClient::getDeviceList(context, &devices);
+    ssize_t count = libusb_get_device_list(context->get(), &devices);
     if (count < 0) {
         return false; 
     }
 
     for (ssize_t i = 0; i < count; ++i) {
         libusb_device* device = devices[i];
-        if (UsbClient::getBusNumber(device) == target.bus && 
-            UsbClient::getDeviceAddress(device) == target.address) {
+        if (libusb_get_bus_number(device) == target.bus && 
+            libusb_get_device_address(device) == target.address) {
             
-            if (UsbClient::open(device, &deviceHandle) == 0) {
+            if (libusb_open(device, &deviceHandle) == 0) {
                 break;
             }
         }
     }
 
-    UsbClient::freeDeviceList(devices, 1);
+    libusb_free_device_list(devices, 1);
+
+    if (!deviceHandle) {
+        return false;
+    }
 
     for (int iface : {INTERFACE_A_NUMBER, INTERFACE_B_NUMBER}) {
-        if (UsbClient::kernelDriverActive(deviceHandle, iface) == 1) {
-            UsbClient::detachKernelDriver(deviceHandle, iface);
+        if (libusb_kernel_driver_active(deviceHandle, iface) == 1) {
+            libusb_detach_kernel_driver(deviceHandle, iface);
         }
     }
 
-    if (UsbClient::claimInterface(deviceHandle, INTERFACE_A_NUMBER) < 0 ||
-        UsbClient::claimInterface(deviceHandle, INTERFACE_B_NUMBER) < 0) {
+    if (libusb_claim_interface(deviceHandle, INTERFACE_A_NUMBER) < 0 ||
+        libusb_claim_interface(deviceHandle, INTERFACE_B_NUMBER) < 0) {
         throw std::runtime_error("Failed to claim USB hardware interfaces");
     }
 
@@ -60,15 +58,25 @@ bool UsbCamera::open() {
     int drainBytes = 0;
     unsigned char drainBuf[512];
     for (int i = 0; i < 30; ++i) {
-        // 0x02 is the iAP IN endpoint (UsbClient::ENDPOINT_IN adds the 0x80 bit to make it 0x82)
-        UsbClient::bulkTransfer(deviceHandle, LIBUSB_ENDPOINT_IN | 0x02, drainBuf, sizeof(drainBuf), &drainBytes, 100);
+        int err = libusb_bulk_transfer(
+            deviceHandle, 
+            LIBUSB_ENDPOINT_IN | 0x02, 
+            drainBuf, 
+            sizeof(drainBuf), 
+            &drainBytes, 
+            100
+        );
+
+        if (err == LIBUSB_ERROR_TIMEOUT) {
+            break;
+        }
     }
 
-    if (UsbClient::setInterfaceAltSetting(deviceHandle, INTERFACE_B_NUMBER, INTERFACE_B_ALTERNATE_SETTING) < 0) {
-        throw std::runtime_error("UsbClient::set_interface_alt_setting failed");
+    if (libusb_set_interface_alt_setting(deviceHandle, INTERFACE_B_NUMBER, INTERFACE_B_ALTERNATE_SETTING) < 0) {
+        throw std::runtime_error("libusb_set_interface_alt_setting failed");
     }
 
-    UsbClient::clearHalt(deviceHandle, ENDPOINT_1);
+    libusb_clear_halt(deviceHandle, ENDPOINT_1);
 
     write(ENDPOINT_2, INITIALIZATION_TOKENS, sizeof(INITIALIZATION_TOKENS));
     write(ENDPOINT_1, START_STREAM_TOKENS, sizeof(START_STREAM_TOKENS));
@@ -78,13 +86,10 @@ bool UsbCamera::open() {
 
 bool UsbCamera::close() {
     if (deviceHandle) {
-        UsbClient::close(deviceHandle);
+        libusb_close(deviceHandle);
         deviceHandle = nullptr;
     }
-    if (context) {
-        UsbClient::exit(context);
-        context = nullptr;
-    }
+    context = nullptr;
     return true;
 }
 
@@ -97,7 +102,7 @@ int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t
     size_t readSize = std::min(maxSize, buffer.capacity());
     buffer.resize(readSize);
 
-    int error = UsbClient::bulkTransfer(
+    int error = libusb_bulk_transfer(
         deviceHandle, 
         LIBUSB_ENDPOINT_IN | endpoint, 
         buffer.data(), 
@@ -117,7 +122,7 @@ int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t
 
 int UsbCamera::write(unsigned char endpoint, const uint8_t* buffer, size_t length) {
     int numBytes = 0;
-    return UsbClient::bulkTransfer(
+    return libusb_bulk_transfer(
         deviceHandle, 
         LIBUSB_ENDPOINT_OUT | endpoint, 
         const_cast<unsigned char*>(buffer), 

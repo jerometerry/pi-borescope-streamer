@@ -63,17 +63,19 @@ if(NOT APPLE)
 endif()
 
 add_library(useeplus_protocol STATIC 
-    src/usb_client.cpp
+    src/usb_context.cpp
     src/device_finder.cpp
     src/usb_camera.cpp 
     src/usb_camera_protocol.cpp
+    src/usb_context.cpp
 )
 target_link_libraries(useeplus_protocol PUBLIC PkgConfig::LIBUSB)
 target_link_libraries(useeplus_protocol PRIVATE project_warnings)
 
 add_library(mjpeg_streamer STATIC 
-    src/mjpeg_stream.cpp 
-    src/web_server.cpp 
+    src/mjpeg_stream.cpp
+    src/web_server.cpp
+    src/server_time.cpp
     ${GENERATED_HPP}
 )
 target_include_directories(mjpeg_streamer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")

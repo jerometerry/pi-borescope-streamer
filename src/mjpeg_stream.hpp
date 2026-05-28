@@ -1,6 +1,7 @@
 #pragma once
 
 #include "device_info.hpp"
+#include "server_time.hpp"
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -8,9 +9,8 @@
 #include <vector>
 
 class MjpegStream {
-
 public:
-    MjpegStream();
+    explicit MjpegStream(const ServerTime& serverTime);
     ~MjpegStream();
 
     MjpegStream(const MjpegStream&) = delete;
@@ -46,4 +46,6 @@ private:
     std::chrono::steady_clock::time_point buttonPressStart = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point buttonLastSeen = std::chrono::steady_clock::now();
     bool buttonIsDepressed = false;
+
+    const ServerTime serverTime;
 };

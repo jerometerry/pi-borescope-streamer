@@ -12,4 +12,8 @@ struct DeviceInfo {
     std::string product;
     std::string serialNumber;
     bool isSuperCamera;
+
+    bool isSameDevice(const DeviceInfo& device) const {
+        return vendorId == device.vendorId && productId == device.productId;
+    }
 };

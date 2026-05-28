@@ -1,11 +1,14 @@
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"
+#include "usb_context.hpp"
 #include "usb_camera_protocol.hpp"
 #include "web_server.hpp"
+#include "device_finder.hpp"
 
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <format>
 #include <iostream>
 #include <string>
 #include <mutex>
@@ -13,7 +16,7 @@
 #include <vector>
 #include <libusb.h>
 
-MjpegStream::MjpegStream() {}
+MjpegStream::MjpegStream(const ServerTime& serverTime) : serverTime(serverTime) {}
 
 MjpegStream::~MjpegStream() {}
 
@@ -137,29 +140,54 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
         hardwareButtonCallback(); 
     };
 
-    try {
-        UsbCamera camera(target);
-        camera.open();
+    UsbCameraProtocol protocol(broadcastHandler, buttonHandler);
 
-        UsbCameraProtocol protocol(broadcastHandler, buttonHandler);
-        std::cout << "[Hardware Engine] Pipeline operational.\n";
+    DeviceInfo currentTarget = target;
 
-        // Main capture loop: continuously read frames from the camera and pass them to the protocol handler for processing. If the camera is disconnected, libusb will return an error code which we check for to break the loop and initiate shutdown. We also call the button release state monitor on each iteration to check for any button release events that may have occurred since the last frame read.
-        std::vector<uint8_t> readBuffer;
-        readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
+    while (running) {
+        try {
+            UsbContext context;
+            UsbCamera camera(currentTarget);
 
-        while (running) {
-            int error = camera.readFrame(readBuffer);
-            if (error == 0) {
-                protocol.handleFrame(readBuffer);
-            } else if (error == LIBUSB_ERROR_NO_DEVICE) {
-                std::cerr << "[Hardware Engine] Device disconnected.\n";
-                running = false;
+            if (!camera.open(&context)) {
+                // Camera not found. Sleep for 1 second and check the bus again.
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+
+                // Linux changes the USB address on replug. We must scan the bus 
+                // and update our target with the new OS-assigned address.
+                auto activeDevices = DeviceFinder::listDevices(true);
+                for (const auto& dev : activeDevices) {
+                    if (dev.isSameDevice(target)) {
+                        currentTarget = dev; 
+                        break;
+                    }
+                }
+
+                continue;
             }
-            checkForButtonQuickPress();
+
+            std::cout << std::format("{} [Hardware Engine] Pipeline operational...\n", serverTime.get());
+            
+            std::vector<uint8_t> readBuffer;
+            readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
+
+            while (running) {
+                int error = camera.readFrame(readBuffer);
+                
+                if (error == 0) {
+                    protocol.handleFrame(readBuffer);
+                } else if (error == LIBUSB_ERROR_NO_DEVICE) {
+                    std::cerr << "[Hardware Engine] Device unplugged. Waiting for reconnection...\n";
+                    break;
+                }
+                
+                checkForButtonQuickPress();
+            }
+            
+        } catch (const std::exception &exception) {
+            std::cerr << "[Hardware Engine Exception]: " << exception.what() << "\n";
+            std::cerr << "Retrying in 2 seconds...\n";
+            std::this_thread::sleep_for(std::chrono::seconds(2));
         }
-    } catch (const std::exception &exception) {
-        std::cerr << "[Hardware Engine Exception]: " << exception.what() << "\n";
-        running = false;
     }
 }
