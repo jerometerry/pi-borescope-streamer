@@ -83,7 +83,7 @@ Once the server is running and the camera is plugged in, you can access the stre
 
 * **Interactive Web Dashboard:** `http://<raspberry-pi-ip>:8080/web`
 * **Raw VLC MJPEG Stream:** `http://<raspberry-pi-ip>:8080/`
-* **Latest Snapshot (Triggered by Hardware Button):** `http://<raspberry-pi-ip>:9000/snapshot`
+* **Latest Snapshot (Triggered by Hardware Button):** `http://<raspberry-pi-ip>:8080/snapshot`
 
 ## 🐳 Docker Build
 
