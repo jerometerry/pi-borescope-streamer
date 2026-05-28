@@ -12,6 +12,11 @@ public:
     MjpegStream();
     ~MjpegStream();
 
+    MjpegStream(const MjpegStream&) = delete;
+    MjpegStream& operator=(const MjpegStream&) = delete;
+    MjpegStream(MjpegStream&&) = delete;
+    MjpegStream& operator=(MjpegStream&&) = delete;
+
     int run(int port);
     void stop();
 

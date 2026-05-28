@@ -64,7 +64,7 @@ private:
     static constexpr std::string_view ERR_NONBLOCK       = "[Web Server Error] Failed to set non-blocking on listener.\n";
 
     int listenFileDescriptor = -1;
-    char headerStackBuf[STACK_BUF_SIZE];
+    char headerStackBuf[STACK_BUF_SIZE]{};
 
     std::unique_ptr<std::array<ClientState, MAX_CLIENTS>> clients;
     std::mutex clientsMutex;

@@ -12,10 +12,10 @@ struct ClientState {
     int fileDescriptor = -1;
     bool isActive = false;
 
-    std::array<char, READ_BUFFER_SIZE> readBuffer;
+    std::array<char, READ_BUFFER_SIZE> readBuffer{};
     size_t readBufferLen = 0;
     
-    std::array<uint8_t, OUTBOX_BUFFER_SIZE> outbox;
+    std::array<uint8_t, OUTBOX_BUFFER_SIZE> outbox{};
     size_t outboxLen = 0;
     size_t outboxOffset = 0;
     

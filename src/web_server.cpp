@@ -85,7 +85,7 @@ void WebServer::eventLoop() {
         broadcastLatestFrame();
 
         {
-            std::lock_guard<std::mutex> lock(clientsMutex);
+            std::scoped_lock<std::mutex> lock(clientsMutex);
 
             pollFileDescriptors.clear();
             pollFileDescriptors.push_back({listenFileDescriptor, POLLIN, 0});
@@ -161,7 +161,7 @@ void WebServer::handleAccept() {
             continue;
         }
 
-        std::lock_guard<std::mutex> lock(clientsMutex);
+        std::scoped_lock<std::mutex> lock(clientsMutex);
 
         auto it = std::find_if(clients->begin(), clients->end(), [](const ClientState& c) {
             return !c.isActive;
@@ -238,7 +238,7 @@ void WebServer::processClientRequest(ClientState& client) {
     else if (request.find(ROUTE_SNAPSHOT) != std::string_view::npos) {
         client.closeAfterWrite = true;
         {
-            std::lock_guard<std::mutex> snapshotLock(snapshotMutex);
+            std::scoped_lock<std::mutex> snapshotLock(snapshotMutex);
 
             if (snapshotBuffer.empty()) {
                 queueData(
@@ -281,7 +281,7 @@ void WebServer::processClientRequest(ClientState& client) {
 }
 
 void WebServer::broadcastLatestFrame() {
-    std::lock_guard<std::mutex> lock(clientsMutex);
+    std::scoped_lock<std::mutex> lock(clientsMutex);
     uint32_t localLatestFrameId = latestFrameId;
     
     for (auto& client : *clients) {
@@ -295,7 +295,7 @@ void WebServer::broadcastLatestFrame() {
             }
 
             {
-                std::lock_guard<std::mutex> frameLock(frameMutex);
+                std::scoped_lock<std::mutex> frameLock(frameMutex);
                 if (frameBuffer.empty()) { 
                     continue; 
                 }
@@ -376,7 +376,7 @@ void WebServer::queueData(ClientState& client, const uint8_t* data, size_t size)
 }
 
 void WebServer::handleWrite(int fileDescriptor) {
-    std::lock_guard<std::mutex> lock(clientsMutex);
+    std::scoped_lock<std::mutex> lock(clientsMutex);
     
     auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
         return c.isActive && c.fileDescriptor == fileDescriptor;

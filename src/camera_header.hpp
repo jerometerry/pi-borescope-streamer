@@ -10,7 +10,7 @@ struct [[gnu::packed]] CameraHeader {
     unsigned char otherFlags:6;
     uint32_t gravitySensor;
 
-    bool isSameCamera(CameraHeader header) {
+    bool isSameCamera(CameraHeader header) const {
         return frameId == header.frameId && 
                cameraNumber == header.cameraNumber && 
                hasGravitySensor == header.hasGravitySensor && 

@@ -59,7 +59,7 @@ void MjpegStream::broadcastFrame(const std::vector<uint8_t>& frame) {
     }
 
     {
-        std::lock_guard<std::mutex> lock(frameMutex);
+        std::scoped_lock<std::mutex> lock(frameMutex);
 
         // Attempt to find the JPEG SOI markers within the first 32 bytes of the frame data.
         size_t offset = std::string::npos;
@@ -82,7 +82,7 @@ void MjpegStream::broadcastFrame(const std::vector<uint8_t>& frame) {
 
         // If a snapshot capture was requested by the hardware button, copy the latest frame to the snapshot buffer for serving to snapshot clients. This happens after the main frame buffer and ID are updated to ensure the snapshot captures the most recent frame.
         if (snapshotNextFrame) {
-            std::lock_guard<std::mutex> snapshotLock(snapshotMutex);
+            std::scoped_lock<std::mutex> snapshotLock(snapshotMutex);
             snapshotBuffer = frameBuffer;
             snapshotNextFrame = false;
             std::cout << "[Server Core] Button Still-Frame Captured (" << snapshotBuffer.size() << " bytes)\n";
@@ -92,7 +92,7 @@ void MjpegStream::broadcastFrame(const std::vector<uint8_t>& frame) {
 
 void MjpegStream::hardwareButtonCallback() {
     auto currentTime = std::chrono::steady_clock::now();
-    std::lock_guard<std::mutex> lock(buttonMutex);
+    std::scoped_lock<std::mutex> lock(buttonMutex);
 
     auto elapsed = currentTime - buttonLastSeen;
     auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
@@ -107,7 +107,7 @@ void MjpegStream::hardwareButtonCallback() {
 
 void MjpegStream::checkForButtonQuickPress() {
     auto currentTime = std::chrono::steady_clock::now();
-    std::lock_guard<std::mutex> lock(buttonMutex);
+    std::scoped_lock<std::mutex> lock(buttonMutex);
 
     if (buttonIsDepressed) {
         auto elapsed = currentTime - buttonLastSeen;

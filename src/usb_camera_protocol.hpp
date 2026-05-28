@@ -28,5 +28,5 @@ private:
 
     void emitFrame();
 
-    bool isCameraSupported();
+    bool isCameraSupported() const;
 };

@@ -4,10 +4,10 @@
 #include <span>
 #include <libusb.h>
 
-static uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
-static uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
+static constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
+static constexpr uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
 
-UsbCamera::UsbCamera() : context(nullptr), deviceHandle(nullptr) {
+UsbCamera::UsbCamera() {
     if (libusb_init(&context) < 0) {
         throw std::runtime_error("libusb_init failed");
     }
@@ -46,7 +46,7 @@ int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
 }
 
 libusb_device_handle* UsbCamera::open(libusb_context *context) {
-    struct libusb_device **devices;
+    struct libusb_device **devices = nullptr;
     struct libusb_device_handle *handle = nullptr;
 
     if (libusb_get_device_list(context, &devices) < 0) {
@@ -54,10 +54,10 @@ libusb_device_handle* UsbCamera::open(libusb_context *context) {
     }
 
     size_t index = 0;
-    struct libusb_device *device;
+    struct libusb_device *device = nullptr;
 
     while ((device = devices[index++]) != nullptr) {
-        struct libusb_device_descriptor descriptor;
+        struct libusb_device_descriptor descriptor{};
         if (libusb_get_device_descriptor(device, &descriptor) < 0) {
             continue;
         }
@@ -103,12 +103,12 @@ int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t
     return 0;
 }
 
-int UsbCamera::write(unsigned char endpoint, uint8_t* buffer, size_t length) {
+int UsbCamera::write(unsigned char endpoint, const uint8_t* buffer, size_t length) {
     int numBytes = 0;
     return libusb_bulk_transfer(
         deviceHandle, 
         LIBUSB_ENDPOINT_OUT | endpoint, 
-        buffer, 
+        const_cast<unsigned char*>(buffer), 
         length, 
         &numBytes, 
         USB_TIMEOUT
