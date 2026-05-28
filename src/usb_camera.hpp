@@ -1,6 +1,6 @@
 #pragma once
 
-#include "camera_info.hpp"
+#include "device_info.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <vector>
@@ -11,7 +11,7 @@ struct libusb_device_handle;
 
 class UsbCamera {
 public:
-    explicit UsbCamera(const CameraInfo& target);
+    explicit UsbCamera(const DeviceInfo& target);
     ~UsbCamera();
 
     UsbCamera(const UsbCamera&) = delete;
@@ -19,7 +19,7 @@ public:
     UsbCamera(UsbCamera&&) = delete;
     UsbCamera& operator=(UsbCamera&&) = delete;
 
-    static std::vector<CameraInfo> listCameras();
+    static std::vector<DeviceInfo> listCameras();
 
     int readFrame(std::vector<uint8_t> &frameBuffer);
 
@@ -35,7 +35,7 @@ private:
     libusb_context *context{nullptr};
     libusb_device_handle *deviceHandle{nullptr};
 
-    static libusb_device_handle *open(libusb_context *context, const CameraInfo& target);
+    static libusb_device_handle *open(libusb_context *context, const DeviceInfo& target);
 
     int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize);
     int write(unsigned char endpoint, const uint8_t* buffer, size_t length);

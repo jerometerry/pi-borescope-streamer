@@ -17,7 +17,7 @@ MjpegStream::MjpegStream() {}
 
 MjpegStream::~MjpegStream() {}
 
-int MjpegStream::run(int port, const CameraInfo& target) {
+int MjpegStream::run(int port, const DeviceInfo& target) {
     frameBuffer.reserve(ServerConstants::ONE_MEGABYTE);
     snapshotBuffer.reserve(ServerConstants::ONE_MEGABYTE);
 
@@ -129,7 +129,7 @@ void MjpegStream::checkForButtonQuickPress() {
     }
 }
 
-void MjpegStream::startVideoFeed(const CameraInfo& target) {
+void MjpegStream::startVideoFeed(const DeviceInfo& target) {
     auto broadcastHandler = [this](const std::vector<uint8_t>& frame) { 
         broadcastFrame(frame);
     };

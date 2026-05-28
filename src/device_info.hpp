@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <string>
 
-struct CameraInfo {
+struct DeviceInfo {
     uint8_t bus;
     uint8_t address;
     uint16_t vendorId;
@@ -11,4 +11,5 @@ struct CameraInfo {
     std::string manufacturer;
     std::string product;
     std::string serialNumber;
+    bool isSuperCamera;
 };

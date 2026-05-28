@@ -50,13 +50,13 @@ int main(int argc, const char* argv[]) {
     std::signal(SIGPIPE, SIG_IGN);
 
     try {
-        std::vector<CameraInfo> cameras = UsbCamera::listCameras();
+        std::vector<DeviceInfo> cameras = UsbCamera::listCameras();
         if (cameras.empty()) {
             std::cerr << "[Fatal] No Useeplus supercamera devices found on the USB bus.\n";
             return EXIT_FAILURE;
         }
 
-        CameraInfo camera = cameras.front();
+        DeviceInfo camera = cameras.front();
 
         if (cameras.size() > 1) {
             std::cout << "\nMultiple cameras detected:\n";

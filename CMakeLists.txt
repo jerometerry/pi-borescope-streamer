@@ -63,6 +63,7 @@ if(NOT APPLE)
 endif()
 
 add_library(useeplus_protocol STATIC 
+    src/device_finder.cpp 
     src/usb_camera.cpp 
     src/usb_camera_protocol.cpp
 )
@@ -79,7 +80,11 @@ target_link_libraries(mjpeg_streamer PUBLIC useeplus_protocol)
 target_link_libraries(mjpeg_streamer PRIVATE project_warnings)
 
 add_executable(pi-borescope-streamer 
-    src/main.cpp 
+    src/server.cpp
 )
-
 target_link_libraries(pi-borescope-streamer PRIVATE mjpeg_streamer project_warnings)
+
+add_executable(supercamera
+    src/supercamera.cpp 
+)
+target_link_libraries(supercamera PRIVATE mjpeg_streamer project_warnings)

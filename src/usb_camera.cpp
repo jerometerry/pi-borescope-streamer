@@ -7,7 +7,7 @@
 static constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
 static constexpr uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
 
-UsbCamera::UsbCamera(const CameraInfo& target) {
+UsbCamera::UsbCamera(const DeviceInfo& target) {
     if (libusb_init(&context) < 0) {
         throw std::runtime_error("libusb_init failed");
     }
@@ -57,8 +57,8 @@ UsbCamera::~UsbCamera() {
     }
 }
 
-std::vector<CameraInfo> UsbCamera::listCameras() {
-    std::vector<CameraInfo> cameras;
+std::vector<DeviceInfo> UsbCamera::listCameras() {
+    std::vector<DeviceInfo> cameras;
     libusb_context* ctx = nullptr;
     
     if (libusb_init(&ctx) < 0) {
@@ -85,7 +85,7 @@ std::vector<CameraInfo> UsbCamera::listCameras() {
             });
 
         if (isSupported) {
-            CameraInfo info{
+            DeviceInfo info{
                 .bus = libusb_get_bus_number(device),
                 .address = libusb_get_device_address(device),
                 .vendorId = desc.idVendor,
@@ -121,7 +121,7 @@ int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
     return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
 }
 
-libusb_device_handle* UsbCamera::open(libusb_context *context, const CameraInfo& target) {
+libusb_device_handle* UsbCamera::open(libusb_context *context, const DeviceInfo& target) {
     libusb_device** devices = nullptr;
     ssize_t count = libusb_get_device_list(context, &devices);
     if (count < 0) return nullptr;
