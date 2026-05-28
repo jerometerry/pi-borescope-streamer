@@ -63,7 +63,8 @@ if(NOT APPLE)
 endif()
 
 add_library(useeplus_protocol STATIC 
-    src/device_finder.cpp 
+    src/usb_client.cpp
+    src/device_finder.cpp
     src/usb_camera.cpp 
     src/usb_camera_protocol.cpp
 )

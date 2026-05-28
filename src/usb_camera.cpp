@@ -19,8 +19,8 @@ bool UsbCamera::open() {
         return true;
     }
 
-    if (!context && libusb_init(&context) < 0) {
-        throw std::runtime_error("libusb_init failed");
+    if (!context && libusb_init_context(&context, nullptr, 0) < 0) {
+        throw std::runtime_error("libusb_init_context failed");
     }
     
     libusb_device** devices = nullptr;

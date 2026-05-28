@@ -11,7 +11,7 @@ std::vector<DeviceInfo> DeviceFinder::listDevices(bool onlySuperCameras) {
     std::vector<DeviceInfo> usbDevices;
     libusb_context* ctx = nullptr;
     
-    if (libusb_init(&ctx) < 0) {
+    if (libusb_init_context(&ctx, nullptr, 0) < 0) {
         return usbDevices;
     }
 
