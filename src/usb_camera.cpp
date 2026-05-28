@@ -1,6 +1,5 @@
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
-#include "usb_context.hpp"
 #include <stdexcept>
 #include <span>
 #include <libusb.h>
@@ -15,28 +14,9 @@ UsbCamera::~UsbCamera() {
     close();
 }
 
-bool UsbCamera::open(UsbContext* context) {
-    this->context = context;
+bool UsbCamera::open(libusb_device_handle* handle) {
+    deviceHandle = handle;
     
-    libusb_device** devices = nullptr;
-    ssize_t count = libusb_get_device_list(context->get(), &devices);
-    if (count < 0) {
-        return false; 
-    }
-
-    for (ssize_t i = 0; i < count; ++i) {
-        libusb_device* device = devices[i];
-        if (libusb_get_bus_number(device) == target.bus && 
-            libusb_get_device_address(device) == target.address) {
-            
-            if (libusb_open(device, &deviceHandle) == 0) {
-                break;
-            }
-        }
-    }
-
-    libusb_free_device_list(devices, 1);
-
     if (!deviceHandle) {
         return false;
     }
@@ -89,7 +69,6 @@ bool UsbCamera::close() {
         libusb_close(deviceHandle);
         deviceHandle = nullptr;
     }
-    context = nullptr;
     return true;
 }
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "device_info.hpp"
-#include "usb_context.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <memory>
@@ -21,7 +20,7 @@ public:
     UsbCamera(UsbCamera&&) = delete;
     UsbCamera& operator=(UsbCamera&&) = delete;
 
-    bool open(UsbContext* context);
+    bool open(libusb_device_handle* handle);
     bool close();
     int readFrame(std::vector<uint8_t> &frameBuffer);
 
@@ -37,7 +36,6 @@ private:
 
     const DeviceInfo& target;
 
-    UsbContext* context{nullptr};
     libusb_device_handle *deviceHandle{nullptr};
 
     int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize);

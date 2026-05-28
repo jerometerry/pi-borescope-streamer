@@ -1,19 +1,14 @@
 #include "device_finder.hpp"
 #include "usb_context.hpp"
+#include "usb_device_list.hpp"
 #include <libusb.h>
 
-std::vector<DeviceInfo> DeviceFinder::listDevices(bool onlySuperCameras) {
+std::vector<DeviceInfo> DeviceFinder::list(bool onlySuperCameras) {
     std::vector<DeviceInfo> usbDevices;
     UsbContext context;
+    UsbDeviceList list(context);
 
-    libusb_device** devices = nullptr;
-    ssize_t count = libusb_get_device_list(context.get(), &devices);
-    if (count < 0) {
-        return usbDevices;
-    }
-
-    for (ssize_t i = 0; i < count; ++i) {
-        libusb_device* device = devices[i];
+    for (libusb_device* device : list.get()) {
         struct libusb_device_descriptor desc{};
         
         if (libusb_get_device_descriptor(device, &desc) < 0) { 
@@ -60,6 +55,21 @@ std::vector<DeviceInfo> DeviceFinder::listDevices(bool onlySuperCameras) {
        
     }
 
-    libusb_free_device_list(devices, 1);
     return usbDevices;
+}
+
+libusb_device_handle* DeviceFinder::open(UsbContext& context, const DeviceInfo& target) {
+    UsbDeviceList list(context);
+    
+    for (libusb_device* device : list.get()) {
+        if (libusb_get_bus_number(device) == target.bus && 
+            libusb_get_device_address(device) == target.address) {
+            
+            libusb_device_handle* handle = nullptr;
+            if (libusb_open(device, &handle) == 0) {
+                return handle;
+            }
+        }
+    }
+    return nullptr;
 }

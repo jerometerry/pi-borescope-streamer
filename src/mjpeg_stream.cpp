@@ -125,13 +125,15 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
             UsbContext context;
             UsbCamera camera(currentTarget);
 
-            if (!camera.open(&context)) {
+            libusb_device_handle* handle = DeviceFinder::open(context, currentTarget);
+
+            if (!camera.open(handle)) {
                 // Camera not found. Sleep for 1 second and check the bus again.
                 std::this_thread::sleep_for(std::chrono::seconds(1));
 
                 // Linux changes the USB address on replug. We must scan the bus 
                 // and update our target with the new OS-assigned address.
-                auto activeDevices = DeviceFinder::listDevices(true);
+                auto activeDevices = DeviceFinder::list(true);
                 for (const auto& dev : activeDevices) {
                     if (dev.isSameDevice(target)) {
                         currentTarget = dev; 
