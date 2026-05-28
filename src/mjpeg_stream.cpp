@@ -100,36 +100,12 @@ void MjpegStream::hardwareButtonCallback() {
     auto elapsed = currentTime - buttonLastSeen;
     auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
-    // If the button is currently not detected as pressed, or it has been detected as pressed but we haven't seen it still pressed for at least the debounce time, we can treat this as a new button press event. We then update the button press start time and set the depressed state to true. If the button is already depressed and we've seen it still pressed within the debounce time, we just update the last seen time to keep tracking how long it's been held down. This allows us to filter out noise and chatter from the button and only respond to legitimate presses.
-    if (!buttonIsDepressed || elapsedMs > BUTTON_DEBOUNCE_TIME_MS) {
-        buttonPressStart = currentTime;
-        buttonIsDepressed = true;
+    if (elapsedMs > BUTTON_DEBOUNCE_TIME_MS) {
+        std::cout << "[Hardware Engine] Button pulse received. Capturing snapshot...\n";
+        snapshotNextFrame = true;
     }
+
     buttonLastSeen = currentTime;
-}
-
-void MjpegStream::checkForButtonQuickPress() {
-    auto currentTime = std::chrono::steady_clock::now();
-    std::scoped_lock<std::mutex> lock(buttonMutex);
-
-    if (buttonIsDepressed) {
-        auto elapsed = currentTime - buttonLastSeen;
-        auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-
-        // If the button was previously detected as pressed but hasn't been seen as still pressed for a certain amount of time, we can infer that it was released. We then check how long the button was held down to determine if it qualifies as a "quick press" for snapshot capture or a long press for lens toggle (which we ignore, since a long press is a hardware event that toggles the lens).
-        if (elapsedMs > QUICK_PRESS_MIN_MS) {
-            auto duration = buttonLastSeen - buttonPressStart;
-            auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-            buttonIsDepressed = false;
-
-            if (durationMs < QUICK_PRESS_MAX_MS) {
-                std::cout << "[Button Filter] Quick press matching window (" << durationMs << "ms). Capturing...\n";
-                snapshotNextFrame = true;
-            } else {
-                std::cout << "[Button Filter] Long press lens toggle bypass (" << durationMs << "ms).\n";
-            }
-        }
-    }
 }
 
 void MjpegStream::startVideoFeed(const DeviceInfo& target) {
@@ -180,8 +156,6 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
                     std::cerr << "[Hardware Engine] Device unplugged. Waiting for reconnection...\n";
                     break;
                 }
-                
-                checkForButtonQuickPress();
             }
             
         } catch (const std::exception &exception) {
