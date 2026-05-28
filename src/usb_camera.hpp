@@ -19,8 +19,6 @@ public:
     UsbCamera(UsbCamera&&) = delete;
     UsbCamera& operator=(UsbCamera&&) = delete;
 
-    static std::vector<DeviceInfo> listCameras();
-
     int readFrame(std::vector<uint8_t> &frameBuffer);
 
 private:
