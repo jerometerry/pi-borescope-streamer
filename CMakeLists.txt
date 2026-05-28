@@ -5,7 +5,6 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# --- Asset Generation Layout ---
 set(HTML_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/index.html")
 set(GENERATED_HPP "${CMAKE_CURRENT_BINARY_DIR}/generated/index_html.hpp")
 
@@ -19,7 +18,6 @@ add_custom_command(
     COMMENT "Converting ${HTML_FILE} to C++ header format"
 )
 
-# --- Package Dependency Management ---
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
 
@@ -51,7 +49,6 @@ if(IWYU_EXE)
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXE}")
 endif()
 
-# --- Main Executable Definition ---
 add_executable(pi-borescope-streamer 
     src/main.cpp 
     src/mjpeg_stream.cpp 
@@ -63,15 +60,8 @@ add_executable(pi-borescope-streamer
 
 target_include_directories(pi-borescope-streamer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(pi-borescope-streamer PRIVATE PkgConfig::LIBUSB)
-
-# ==============================================================================
-# Ported Flags from Makefile
-# ==============================================================================
-
-# Global flags for all platforms
 target_compile_options(pi-borescope-streamer PRIVATE -Wall -Wextra)
 
-# Check for platform types natively via CMake variables
 if(APPLE)
     # macOS Specifics (Homebrew is handled automatically via PkgConfig searching)
     # No extra flags needed here as Clang handles optimizations smoothly
