@@ -7,19 +7,35 @@
 static constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
 static constexpr uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
 
-UsbCamera::UsbCamera() {
+UsbCamera::UsbCamera(const CameraInfo& target) {
     if (libusb_init(&context) < 0) {
         throw std::runtime_error("libusb_init failed");
     }
 
-    deviceHandle = open(context);
+    deviceHandle = open(context, target);
     if (!deviceHandle) {
-        throw std::runtime_error("Borescope hardware device not found on USB bus");
+        throw std::runtime_error("Specified Borescope hardware device not found on USB bus");
+    }
+
+    for (int iface : {INTERFACE_A_NUMBER, INTERFACE_B_NUMBER}) {
+        if (libusb_kernel_driver_active(deviceHandle, iface) == 1) {
+            libusb_detach_kernel_driver(deviceHandle, iface);
+        }
     }
 
     if (libusb_claim_interface(deviceHandle, INTERFACE_A_NUMBER) < 0 ||
         libusb_claim_interface(deviceHandle, INTERFACE_B_NUMBER) < 0) {
         throw std::runtime_error("Failed to claim USB hardware interfaces");
+    }
+
+    // --- Heartbeat Draining (Interface 0) ---
+    // Loop 30 times with a rapid 100ms timeout to clear out pending heartbeat data 
+    // from the iAP interface before we attempt to stream.
+    int drainBytes = 0;
+    unsigned char drainBuf[512];
+    for (int i = 0; i < 30; ++i) {
+        // 0x02 is the iAP IN endpoint (LIBUSB_ENDPOINT_IN adds the 0x80 bit to make it 0x82)
+        libusb_bulk_transfer(deviceHandle, LIBUSB_ENDPOINT_IN | 0x02, drainBuf, sizeof(drainBuf), &drainBytes, 100);
     }
 
     if (libusb_set_interface_alt_setting(deviceHandle, INTERFACE_B_NUMBER, INTERFACE_B_ALTERNATE_SETTING) < 0) {
@@ -41,35 +57,85 @@ UsbCamera::~UsbCamera() {
     }
 }
 
+std::vector<CameraInfo> UsbCamera::listCameras() {
+    std::vector<CameraInfo> cameras;
+    libusb_context* ctx = nullptr;
+    
+    if (libusb_init(&ctx) < 0) {
+        return cameras; // Return empty on failure
+    }
+
+    libusb_device** devices = nullptr;
+    ssize_t count = libusb_get_device_list(ctx, &devices);
+    if (count < 0) {
+        libusb_exit(ctx);
+        return cameras;
+    }
+
+    for (ssize_t i = 0; i < count; ++i) {
+        libusb_device* device = devices[i];
+        struct libusb_device_descriptor desc{};
+        
+        if (libusb_get_device_descriptor(device, &desc) < 0) continue;
+
+        // Check against our constexpr VIP/PID array
+        bool isSupported = std::ranges::any_of(VENDOR_PRODUCT_ID_LIST,
+            [&desc](const auto& vp) {
+                return desc.idVendor == vp.first && desc.idProduct == vp.second;
+            });
+
+        if (isSupported) {
+            CameraInfo info{
+                .bus = libusb_get_bus_number(device),
+                .address = libusb_get_device_address(device),
+                .vendorId = desc.idVendor,
+                .productId = desc.idProduct
+            };
+
+            // Temporarily open to extract human-readable strings
+            libusb_device_handle* handle = nullptr;
+            if (libusb_open(device, &handle) == 0) {
+                unsigned char strBuf[256];
+                
+                if (desc.iManufacturer && libusb_get_string_descriptor_ascii(handle, desc.iManufacturer, strBuf, sizeof(strBuf)) > 0)
+                    info.manufacturer = reinterpret_cast<char*>(strBuf);
+                    
+                if (desc.iProduct && libusb_get_string_descriptor_ascii(handle, desc.iProduct, strBuf, sizeof(strBuf)) > 0)
+                    info.product = reinterpret_cast<char*>(strBuf);
+                    
+                if (desc.iSerialNumber && libusb_get_string_descriptor_ascii(handle, desc.iSerialNumber, strBuf, sizeof(strBuf)) > 0)
+                    info.serialNumber = reinterpret_cast<char*>(strBuf);
+                    
+                libusb_close(handle);
+            }
+            cameras.push_back(info);
+        }
+    }
+
+    libusb_free_device_list(devices, 1);
+    libusb_exit(ctx);
+    return cameras;
+}
+
 int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
     return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
 }
 
-libusb_device_handle* UsbCamera::open(libusb_context *context) {
-    struct libusb_device **devices = nullptr;
-    struct libusb_device_handle *handle = nullptr;
+libusb_device_handle* UsbCamera::open(libusb_context *context, const CameraInfo& target) {
+    libusb_device** devices = nullptr;
+    ssize_t count = libusb_get_device_list(context, &devices);
+    if (count < 0) return nullptr;
 
-    if (libusb_get_device_list(context, &devices) < 0) {
-        return nullptr;
-    }
+    libusb_device_handle* handle = nullptr;
 
-    size_t index = 0;
-    struct libusb_device *device = nullptr;
-
-    while ((device = devices[index++]) != nullptr) {
-        struct libusb_device_descriptor descriptor{};
-        if (libusb_get_device_descriptor(device, &descriptor) < 0) {
-            continue;
-        }
-        
-        for (const auto &vendorProduct : std::span(VENDOR_PRODUCT_ID_LIST)) {
-            if (descriptor.idVendor == vendorProduct.first && descriptor.idProduct == vendorProduct.second) {
-                libusb_open(device, &handle);
-                break;
+    for (ssize_t i = 0; i < count; ++i) {
+        libusb_device* device = devices[i];
+        if (libusb_get_bus_number(device) == target.bus && 
+            libusb_get_device_address(device) == target.address) {
+            
+            if (libusb_open(device, &handle) == 0) {
+                break; // Found and opened successfully
             }
-        }
-        if (handle) {
-            break;
         }
     }
 

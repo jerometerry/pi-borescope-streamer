@@ -17,7 +17,7 @@ MjpegStream::MjpegStream() {}
 
 MjpegStream::~MjpegStream() {}
 
-int MjpegStream::run(int port) {
+int MjpegStream::run(int port, const CameraInfo& target) {
     frameBuffer.reserve(ServerConstants::ONE_MEGABYTE);
     snapshotBuffer.reserve(ServerConstants::ONE_MEGABYTE);
 
@@ -36,7 +36,7 @@ int MjpegStream::run(int port) {
         return 1;
     }
 
-    std::thread streamThread(&MjpegStream::startVideoFeed, this);
+    std::thread streamThread(&MjpegStream::startVideoFeed, this, target);
 
     server.start();
 
@@ -129,7 +129,7 @@ void MjpegStream::checkForButtonQuickPress() {
     }
 }
 
-void MjpegStream::startVideoFeed() {
+void MjpegStream::startVideoFeed(const CameraInfo& target) {
     auto broadcastHandler = [this](const std::vector<uint8_t>& frame) { 
         broadcastFrame(frame);
     };
@@ -138,7 +138,7 @@ void MjpegStream::startVideoFeed() {
     };
 
     try {
-        UsbCamera camera;
+        UsbCamera camera(target);
         UsbCameraProtocol protocol(broadcastHandler, buttonHandler);
         std::cout << "[Hardware Engine] Pipeline operational.\n";
 

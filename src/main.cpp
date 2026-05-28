@@ -1,4 +1,5 @@
 #include "mjpeg_stream.hpp"
+#include "usb_camera.hpp"
 #include <csignal>
 #include <iostream>
 #include <string>
@@ -48,5 +49,46 @@ int main(int argc, const char* argv[]) {
     std::signal(SIGTERM, signalHandler);
     std::signal(SIGPIPE, SIG_IGN);
 
-    return stream.run(port);
+    try {
+        std::vector<CameraInfo> cameras = UsbCamera::listCameras();
+        if (cameras.empty()) {
+            std::cerr << "[Fatal] No Useeplus supercamera devices found on the USB bus.\n";
+            return EXIT_FAILURE;
+        }
+
+        CameraInfo camera = cameras.front();
+
+        if (cameras.size() > 1) {
+            std::cout << "\nMultiple cameras detected:\n";
+            for (size_t i = 0; i < cameras.size(); ++i) {
+                std::cout << "  [" << i << "] Bus " << static_cast<int>(cameras[i].bus)
+                          << " Address " << static_cast<int>(cameras[i].address)
+                          << " - " << cameras[i].manufacturer << " " << cameras[i].product
+                          << " (Serial: " << (cameras[i].serialNumber.empty() ? "N/A" : cameras[i].serialNumber) << ")\n";
+            }
+            
+            size_t choice = 0;
+            while (true) {
+                std::cout << "\nSelect camera to stream [0-" << (cameras.size() - 1) << "]: ";
+                if (std::cin >> choice && choice < cameras.size()) {
+                    camera = cameras[choice];
+                    break;
+                }
+                std::cout << "Invalid selection. Please try again.\n";
+                std::cin.clear();
+                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            }
+        }
+
+        std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
+                  << " Address " << static_cast<int>(camera.address) << "...\n";
+
+        stream.run(port, camera);
+        
+    } catch (const std::exception& e) {
+        std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }

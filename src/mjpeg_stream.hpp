@@ -1,5 +1,6 @@
 #pragma once
 
+#include "camera_info.hpp"
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -17,14 +18,14 @@ public:
     MjpegStream(MjpegStream&&) = delete;
     MjpegStream& operator=(MjpegStream&&) = delete;
 
-    int run(int port);
+    int run(int port, const CameraInfo& target);
     void stop();
 
 private:
     void broadcastFrame(const std::vector<uint8_t>& frame);
     void hardwareButtonCallback();
     void checkForButtonQuickPress();
-    void startVideoFeed();
+    void startVideoFeed(const CameraInfo& target);
 
     static constexpr uint8_t JPEG_SOI_MARKERS[] = { 0xFF, 0xD8 };
 
