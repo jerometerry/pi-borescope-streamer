@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y \
     cmake \
     ninja-build \
     pkg-config \
+    clang-tidy \
+    cppcheck \
+    iwyu \
     libusb-1.0-0-dev \
     && rm -rf /var/lib/apt/lists/*
 

@@ -33,7 +33,7 @@ private:
     void handleWrite(int fileDescriptor);
     void broadcastLatestFrame();
     void closeConnection(int fileDescriptor);
-    bool setNonBlocking(int fileDescriptor);
+    static bool setNonBlocking(int fileDescriptor);
     void processClientRequest(ClientState& client);
     void queueData(ClientState& client, const uint8_t* data, size_t size);
 
