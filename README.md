@@ -27,39 +27,55 @@ Most hobbyist MJPEG servers suffer from "buffer churn"—constantly resizing `st
 * **Hardware:** Raspberry Pi (Optimized for Pi 5, but runs on Pi 4/3)
 * **Camera:** USB Borescope/Endoscope (Tested with Useeplus Hardware Rev 1.00 - VID: `0x2ce3`, `0x0329`)
 * **OS:** Raspberry Pi OS (Debian Bookworm or newer)
-* **Dependencies:** * `libusb-1.0-0-dev`
-  * C++20 compliant compiler (`gcc` 10+)
+* **Dependencies:**
+  * `libusb-1.0-0-dev`
+  * `cmake` (Version 3.10.0 or newer)
+  * `ninja-build` (Highly recommended generator backend)
+  * `pkg-config`
+  * C++23 compliant compiler (`gcc` 13+ or `clang` 17+)
 
 ```bash
 sudo apt update
-sudo apt install libusb-1.0-0-dev build-essential
-
+sudo apt install libusb-1.0-0-dev cmake ninja-build pkg-config build-essential
 ```
 
 ## ⚙️ Build and Run
 
-1. **Clone the repository:**
-
+### 1. Clone the repository
 ```bash
 git clone https://github.com/jerometerry/pi-borescope-streamer.git
 cd pi-borescope-streamer
-
 ```
 
-2. **Compile the server:**
-*(Assuming you are using a standard Make/CMake setup, otherwise insert your build command here)*
+### 2. Compile via CMake Presets (Recommended)
+The project includes predefined CMake presets to quickly switch profiles.
 
+**For local development (Fast compiling with debug symbols):**
 ```bash
-make
+cmake . --preset debug
+cmake --build --preset debug
 ```
 
-3. **Launch the server:**
-You can optionally specify a custom port (default is `8080`).
-
+**For production deployment (Optimized with -O2, LTO, and Pi 5 Cortex-A76 core tuning):**
 ```bash
-./build/server 9000
-
+cmake . --preset release
+cmake --build --preset release
 ```
+
+### 3. Alternative: Manual Compile via CMake CLI
+If you want to configure build directories manually without using presets:
+```bash
+cmake -B out/build/default -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build out/build/default
+```
+
+### 4. Launch the server
+Run the binary out of its target profile directory. You can optionally specify a custom port (default is `8080`).
+```bash
+./out/build/release/pi-borescope-streamer 9000
+```
+
+*Note: For a clean rebuild, run `cmake --build --preset clean-debug` or `cmake --build --preset clean-release` to clear old artifacts.*
 
 ## 📡 MJPEG Streaming Server Usage
 
@@ -69,18 +85,23 @@ Once the server is running and the camera is plugged in, you can access the stre
 * **Raw VLC MJPEG Stream:** `http://<raspberry-pi-ip>:9000/`
 * **Latest Snapshot (Triggered by Hardware Button):** `http://<raspberry-pi-ip>:9000/snapshot`
 
-## Docker Build
+## 🐳 Docker Build
 
-I use `docker build` as a quick sanity check that this will compile on other machines. 
+A Docker multi-stage environment is available to run and test the build process in an isolated Linux container using local source assets.
 
+### Build the Image
+To build the image natively using the optimized production profile preset:
+```bash
+docker build -t pi-borescope-test .
 ```
-docker build --build-arg CACHEBUST=$(date +%s) -t pi-borescope-test .
-```
 
-To run the MJPEG Streaming Server in a docker container
-- Plug the camera into a USB port on the Docker host server (e.g. Raspberry Pi)
-- Include the USB bus in the `--device` argument. For example:
-  - `docker run --device=/dev/bus/usb -p 8080:8080 pi-borescope-test`
+### Run the Container
+1. Plug the camera into a USB port on your Docker host hardware (e.g., Raspberry Pi).
+2. Mount the USB bus path using the `--device` runtime argument:
+
+```bash
+docker run --device=/dev/bus/usb -p 8080:8080 pi-borescope-test
+```
 
 ## 🔬 Advanced Documentation
 

@@ -15,32 +15,45 @@ If you want to use eBPF, for example to generate FlameGraphs, you'll need to ena
 
 ## Compiler Flags
 
-If you want to run BPF / linux perf on custom applications you are building, ensure to add the following compiler flags:
--  `-g`:  Embeds your source code maps into the build
-- `-fno-omit-frame-pointer`:  Instructs the compiler to keep the frame pointer register on the stack for every function call.
+If you want to run BPF / linux perf on custom applications you are building, ensure your CMake target configurations inject the following flags:
+- `-g`: Embeds your source code maps into the build.
+- `-fno-omit-frame-pointer`: Instructs the compiler to keep the frame pointer register on the stack for every function call.
 
-Here's an example of `CXXFLAGS` from a Makefile with these compiler options specified
+In our unified `CMakeLists.txt`, these options are mapped to targets built on Linux architectures:
 
+```cmake
+if(NOT APPLE)
+    target_compile_options(pi-borescope-streamer PRIVATE 
+        -g                        # Generate debug symbols
+        -fno-omit-frame-pointer   # Keep frame pointers for deep stack walks
+    )
+endif()
 ```
-CXXFLAGS := -std=c++23 -Wall -Wextra -O2 -I$(BUILD_DIR) -mcpu=cortex-a76 -mtune=cortex-a76 -flto=auto -g -fno-omit-frame-pointer
+
+To run a production-ready profile with these optimizations enabled, always build the project using the optimized release preset:
+
+```bash
+cmake . --preset release
+cmake --build --preset release
 ```
 
 ## Clone Brendan Gregg's FlameGraph Repo
 
-```
+```bash
 git clone https://github.com/brendangregg/FlameGraph.git
+
 ```
 
 ## Install bpftrace
 
-```
+```bash
 sudo apt update
 sudo apt install bpftrace
 ```
 
 ## Install linux-perf
 
-```
+```bash
 sudo apt update
 sudo apt install linux-perf
 ```
@@ -48,7 +61,8 @@ sudo apt install linux-perf
 ## Generate Memory Allocation FlameGraph
 
 ```bash
-SERVER_PID=$(pgrep -f ./build/server)
+# Locate the running instance of the new CMake-built server executable
+SERVER_PID=$(pgrep -f ./out/build/release/pi-borescope-streamer)
 
 echo "Generating memory allocation flame graph for PID $SERVER_PID. Put the server under load. Ctrl+C to output collected traces"
 
@@ -64,7 +78,8 @@ sudo bpftrace -e 'uprobe:libc:malloc { @[ustack] = sum(arg0); }' -p $SERVER_PID 
 ## Generate CPU FlameGraphs
 
 ```bash
-SERVER_PID=$(pgrep -f ./build/server)
+# Locate the running instance of the new CMake-built server executable
+SERVER_PID=$(pgrep -f ./out/build/release/pi-borescope-streamer)
 
 echo "Generating CPU flame graph for PID $SERVER_PID. Put the server under load. Ctrl+C to output collected traces"
 
