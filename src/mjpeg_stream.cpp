@@ -139,6 +139,8 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
 
     try {
         UsbCamera camera(target);
+        camera.open();
+
         UsbCameraProtocol protocol(broadcastHandler, buttonHandler);
         std::cout << "[Hardware Engine] Pipeline operational.\n";
 

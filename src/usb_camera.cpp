@@ -7,15 +7,49 @@
 static constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
 static constexpr uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
 
-UsbCamera::UsbCamera(const DeviceInfo& target) {
-    if (libusb_init(&context) < 0) {
-        throw std::runtime_error("libusb_init failed");
+UsbCamera::UsbCamera(const DeviceInfo& target) : target(target) {
+}
+
+UsbCamera::~UsbCamera() {
+    if (deviceHandle) {
+        libusb_close(deviceHandle);
+    }
+    if (context) {
+        libusb_exit(context);
+    }
+}
+
+int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
+    return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
+}
+
+bool UsbCamera::open() {
+    if (deviceHandle) {
+        return true;
     }
 
-    deviceHandle = open(context, target);
-    if (!deviceHandle) {
-        throw std::runtime_error("Specified Borescope hardware device not found on USB bus");
+    if (!context && libusb_init(&context) < 0) {
+        throw std::runtime_error("libusb_init failed");
     }
+    
+    libusb_device** devices = nullptr;
+    ssize_t count = libusb_get_device_list(context, &devices);
+    if (count < 0) {
+        return false; 
+    }
+
+    for (ssize_t i = 0; i < count; ++i) {
+        libusb_device* device = devices[i];
+        if (libusb_get_bus_number(device) == target.bus && 
+            libusb_get_device_address(device) == target.address) {
+            
+            if (libusb_open(device, &deviceHandle) == 0) {
+                break;
+            }
+        }
+    }
+
+    libusb_free_device_list(devices, 1);
 
     for (int iface : {INTERFACE_A_NUMBER, INTERFACE_B_NUMBER}) {
         if (libusb_kernel_driver_active(deviceHandle, iface) == 1) {
@@ -46,41 +80,8 @@ UsbCamera::UsbCamera(const DeviceInfo& target) {
 
     write(ENDPOINT_2, INITIALIZATION_TOKENS, sizeof(INITIALIZATION_TOKENS));
     write(ENDPOINT_1, START_STREAM_TOKENS, sizeof(START_STREAM_TOKENS));
-}
 
-UsbCamera::~UsbCamera() {
-    if (deviceHandle) {
-        libusb_close(deviceHandle);
-    }
-    if (context) {
-        libusb_exit(context);
-    }
-}
-
-int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
-    return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
-}
-
-libusb_device_handle* UsbCamera::open(libusb_context *context, const DeviceInfo& target) {
-    libusb_device** devices = nullptr;
-    ssize_t count = libusb_get_device_list(context, &devices);
-    if (count < 0) return nullptr;
-
-    libusb_device_handle* handle = nullptr;
-
-    for (ssize_t i = 0; i < count; ++i) {
-        libusb_device* device = devices[i];
-        if (libusb_get_bus_number(device) == target.bus && 
-            libusb_get_device_address(device) == target.address) {
-            
-            if (libusb_open(device, &handle) == 0) {
-                break; // Found and opened successfully
-            }
-        }
-    }
-
-    libusb_free_device_list(devices, 1);
-    return handle;
+    return true;
 }
 
 int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize) {
