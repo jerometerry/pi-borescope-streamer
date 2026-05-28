@@ -47,6 +47,3 @@ private:
     std::chrono::steady_clock::time_point buttonLastSeen = std::chrono::steady_clock::now();
     bool buttonIsDepressed = false;
 };
-
-
-
