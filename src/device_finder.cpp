@@ -1,14 +1,26 @@
 #include "device_finder.hpp"
 #include "usb_context.hpp"
 #include "usb_device_list.hpp"
+#include <algorithm>
+#include <span>
+#include <string>
+
 #include <libusb.h>
 
-std::vector<DeviceInfo> DeviceFinder::list(bool onlySuperCameras) {
-    std::vector<DeviceInfo> usbDevices;
-    UsbContext context;
-    UsbDeviceList list(context);
+std::vector<DeviceInfo> DeviceFinder::all() {
+    return find(false);
+}
 
-    for (libusb_device* device : list.get()) {
+std::vector<DeviceInfo> DeviceFinder::superCameras() {
+    return find(true);
+}
+
+std::vector<DeviceInfo> DeviceFinder::find(bool onlySuperCameras) {
+    std::vector<DeviceInfo> foundDevices;
+    UsbContext context;
+    UsbDeviceList attachedDevices(context);
+
+    for (libusb_device* device : attachedDevices.get()) {
         struct libusb_device_descriptor desc{};
         
         if (libusb_get_device_descriptor(device, &desc) < 0) { 
@@ -29,6 +41,9 @@ std::vector<DeviceInfo> DeviceFinder::list(bool onlySuperCameras) {
             .address = libusb_get_device_address(device),
             .vendorId = desc.idVendor,
             .productId = desc.idProduct,
+            .manufacturer = "Unknown",
+            .product = "Unknown",
+            .serialNumber = "Unknown",
             .isSuperCamera = isSuperCamera
         };
 
@@ -51,17 +66,16 @@ std::vector<DeviceInfo> DeviceFinder::list(bool onlySuperCameras) {
                 
             libusb_close(handle);
         }
-        usbDevices.push_back(info);
-       
+        foundDevices.push_back(info);  
     }
 
-    return usbDevices;
+    return foundDevices;
 }
 
 libusb_device_handle* DeviceFinder::open(UsbContext& context, const DeviceInfo& target) {
-    UsbDeviceList list(context);
+    UsbDeviceList attachedDevices(context);
     
-    for (libusb_device* device : list.get()) {
+    for (libusb_device* device : attachedDevices.get()) {
         if (libusb_get_bus_number(device) == target.bus && 
             libusb_get_device_address(device) == target.address) {
             

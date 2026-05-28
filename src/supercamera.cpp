@@ -13,7 +13,7 @@ int main() {
     std::signal(SIGPIPE, SIG_IGN);
 
     try {
-        std::vector<DeviceInfo> devices = DeviceFinder::list(false);
+        std::vector<DeviceInfo> devices = DeviceFinder::all();
         if (devices.empty()) {
             std::cerr << "No Useeplus supercamera devices found on the USB bus.\n";
         } else {

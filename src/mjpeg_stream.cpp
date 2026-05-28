@@ -133,7 +133,7 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
 
                 // Linux changes the USB address on replug. We must scan the bus 
                 // and update our target with the new OS-assigned address.
-                auto activeDevices = DeviceFinder::list(true);
+                auto activeDevices = DeviceFinder::superCameras();
                 for (const auto& dev : activeDevices) {
                     if (dev.isSameDevice(target)) {
                         currentTarget = dev; 

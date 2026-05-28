@@ -1,17 +1,17 @@
 #pragma once
 
 #include "device_info.hpp"
-#include "usb_context.hpp"
-#include <algorithm>
 #include <cstdint>
-#include <vector>
 #include <utility>
+#include <vector>
 
-struct libusb_context;
+class UsbContext;
 struct libusb_device_handle;
 
 namespace DeviceFinder {
-    std::vector<DeviceInfo> list(bool onlySuperCameras = true);
+    std::vector<DeviceInfo> all();
+    std::vector<DeviceInfo> superCameras();
+    std::vector<DeviceInfo> find(bool onlySuperCameras);
 
     libusb_device_handle* open(UsbContext& context, const DeviceInfo& target);
 
