@@ -20,6 +20,7 @@ public:
     UsbCamera& operator=(UsbCamera&&) = delete;
 
     bool open();
+    bool close();
     int readFrame(std::vector<uint8_t> &frameBuffer);
 
 private:

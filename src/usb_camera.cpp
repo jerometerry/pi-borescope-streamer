@@ -11,16 +11,7 @@ UsbCamera::UsbCamera(const DeviceInfo& target) : target(target) {
 }
 
 UsbCamera::~UsbCamera() {
-    if (deviceHandle) {
-        libusb_close(deviceHandle);
-    }
-    if (context) {
-        libusb_exit(context);
-    }
-}
-
-int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
-    return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
+    close();
 }
 
 bool UsbCamera::open() {
@@ -84,12 +75,25 @@ bool UsbCamera::open() {
     return true;
 }
 
+bool UsbCamera::close() {
+    if (deviceHandle) {
+        libusb_close(deviceHandle);
+        deviceHandle = nullptr;
+    }
+    if (context) {
+        libusb_exit(context);
+        context = nullptr;
+    }
+    return true;
+}
+
+int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
+    return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
+}
+
 int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize) {
     int numBytes = 0;
-
-    // Ensure we don't overflow the pre-allocated capacity
     size_t readSize = std::min(maxSize, buffer.capacity());
-
     buffer.resize(readSize);
 
     int error = libusb_bulk_transfer(
