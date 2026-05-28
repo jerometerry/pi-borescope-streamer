@@ -14,9 +14,9 @@ WORKDIR /app
 
 COPY . .
 
-RUN cmake . --preset default \
-    && cmake --build --preset default
+RUN cmake . --preset debug \
+    && cmake --build --preset debug
 
 EXPOSE 8080
 
-CMD ["./out/build/default/pi-borescope-streamer", "8080"]
+CMD ["./out/build/debug/pi-borescope-streamer", "8080"]
