@@ -32,7 +32,6 @@ private:
     static constexpr int INTERFACE_B_ALTERNATE_SETTING = 1;
     static constexpr unsigned char ENDPOINT_1 = 1;
     static constexpr unsigned char ENDPOINT_2 = 2;
-    static constexpr unsigned int USB_TIMEOUT = 1000;
 
     const DeviceInfo& target;
 

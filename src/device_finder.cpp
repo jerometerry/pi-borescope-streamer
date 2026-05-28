@@ -1,4 +1,5 @@
 #include "device_finder.hpp"
+#include "usb_client.hpp"
 #include <libusb.h>
 
 DeviceFinder::DeviceFinder() {
@@ -11,14 +12,14 @@ std::vector<DeviceInfo> DeviceFinder::listDevices(bool onlySuperCameras) {
     std::vector<DeviceInfo> usbDevices;
     libusb_context* ctx = nullptr;
     
-    if (libusb_init_context(&ctx, nullptr, 0) < 0) {
+    if (UsbClient::initContext(&ctx, nullptr, 0) < 0) {
         return usbDevices;
     }
 
     libusb_device** devices = nullptr;
-    ssize_t count = libusb_get_device_list(ctx, &devices);
+    ssize_t count = UsbClient::getDeviceList(ctx, &devices);
     if (count < 0) {
-        libusb_exit(ctx);
+        UsbClient::exit(ctx);
         return usbDevices;
     }
 
@@ -26,7 +27,7 @@ std::vector<DeviceInfo> DeviceFinder::listDevices(bool onlySuperCameras) {
         libusb_device* device = devices[i];
         struct libusb_device_descriptor desc{};
         
-        if (libusb_get_device_descriptor(device, &desc) < 0) { 
+        if (UsbClient::getDeviceDescriptor(device, &desc) < 0) { 
             continue; 
         }
 
@@ -40,37 +41,37 @@ std::vector<DeviceInfo> DeviceFinder::listDevices(bool onlySuperCameras) {
         }
 
         DeviceInfo info{
-            .bus = libusb_get_bus_number(device),
-            .address = libusb_get_device_address(device),
+            .bus = UsbClient::getBusNumber(device),
+            .address = UsbClient::getDeviceAddress(device),
             .vendorId = desc.idVendor,
             .productId = desc.idProduct,
             .isSuperCamera = isSuperCamera
         };
 
         libusb_device_handle* handle = nullptr;
-        if (libusb_open(device, &handle) == 0) {
+        if (UsbClient::open(device, &handle) == 0) {
             unsigned char strBuf[256];
             
             if (desc.iManufacturer && 
-                libusb_get_string_descriptor_ascii(handle, desc.iManufacturer, strBuf, sizeof(strBuf)) > 0) {
+                UsbClient::getStringDescriptorAscii(handle, desc.iManufacturer, strBuf, sizeof(strBuf)) > 0) {
                 info.manufacturer = reinterpret_cast<char*>(strBuf);
             }
             if (desc.iProduct && 
-                libusb_get_string_descriptor_ascii(handle, desc.iProduct, strBuf, sizeof(strBuf)) > 0) {
+                UsbClient::getStringDescriptorAscii(handle, desc.iProduct, strBuf, sizeof(strBuf)) > 0) {
                 info.product = reinterpret_cast<char*>(strBuf);
             }
             if (desc.iSerialNumber && 
-                libusb_get_string_descriptor_ascii(handle, desc.iSerialNumber, strBuf, sizeof(strBuf)) > 0) {
+                UsbClient::getStringDescriptorAscii(handle, desc.iSerialNumber, strBuf, sizeof(strBuf)) > 0) {
                 info.serialNumber = reinterpret_cast<char*>(strBuf);
             }
                 
-            libusb_close(handle);
+            UsbClient::close(handle);
         }
         usbDevices.push_back(info);
        
     }
 
-    libusb_free_device_list(devices, 1);
-    libusb_exit(ctx);
+    UsbClient::freeDeviceList(devices, 1);
+    UsbClient::exit(ctx);
     return usbDevices;
 }

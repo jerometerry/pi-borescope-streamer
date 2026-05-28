@@ -7,4 +7,5 @@ namespace ServerConstants {
     inline constexpr size_t FOUR_KILOBYTES = 4 * ONE_KILOBYTE;
     inline constexpr size_t ONE_MEGABYTE   = ONE_KILOBYTE * ONE_KILOBYTE;
     inline constexpr size_t TWO_MEGABYTES  = 2 * ONE_MEGABYTE;
+    inline constexpr unsigned int USB_TIMEOUT = 1000;
 }
