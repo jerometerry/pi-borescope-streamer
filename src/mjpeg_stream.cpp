@@ -11,8 +11,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-
-#include <libusb-1.0/libusb.h>
+#include <libusb.h>
 
 MjpegStream::MjpegStream() {}
 

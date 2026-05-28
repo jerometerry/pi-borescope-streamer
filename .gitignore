@@ -1,5 +1,5 @@
-# Created by https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,python,c++
-# Edit at https://www.toptal.com/developers/gitignore?templates=macos,visualstudiocode,python,c++
+# Created by https://www.toptal.com/developers/gitignore/api/c++,macos,python,visualstudiocode,cmake
+# Edit at https://www.toptal.com/developers/gitignore?templates=c++,macos,python,visualstudiocode,cmake
 
 ### C++ ###
 # Prerequisites
@@ -34,6 +34,25 @@
 *.exe
 *.out
 *.app
+
+### CMake ###
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+Testing
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+### CMake Patch ###
+CMakeUserPresets.json
+
+# External projects
+*-prefix/
 
 ### macOS ###
 # General
@@ -258,4 +277,4 @@ pyrightconfig.json
 .history
 .ionide
 
-# End of https://www.toptal.com/developers/gitignore/api/macos,visualstudiocode,python,c++
+# End of https://www.toptal.com/developers/gitignore/api/c++,macos,python,visualstudiocode,cmake

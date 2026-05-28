@@ -1,0 +1,46 @@
+{
+	"version": 8,
+	"configurePresets": [
+		{
+			"name": "debug",
+			"displayName": "Debug Profile",
+			"description": "Local development configuration",
+			"binaryDir": "${sourceDir}/out/build/${presetName}",
+			"generator": "Ninja",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Debug"
+			}
+		},
+		{
+			"name": "release",
+			"displayName": "Release Profile",
+			"description": "Optimized production configuration with LTO",
+			"binaryDir": "${sourceDir}/out/build/${presetName}",
+			"generator": "Ninja",
+			"cacheVariables": {
+				"CMAKE_BUILD_TYPE": "Release",
+				"CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON"
+			}
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "debug",
+			"configurePreset": "debug"
+		},
+		{
+			"name": "release",
+			"configurePreset": "release"
+		},
+		{
+			"name": "clean-debug",
+			"configurePreset": "debug",
+			"targets": ["clean"]
+		},
+		{
+			"name": "clean-release",
+			"configurePreset": "release",
+			"targets": ["clean"]
+		}
+	]
+}

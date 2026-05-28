@@ -1,12 +1,12 @@
-#include "embedded_html.hpp"
+#include "index_html.hpp"
 #include "web_server.hpp"
 
 #include <algorithm>
 #include <charconv>
 #include <csignal>
 #include <cstring>
-#include <iostream>
 #include <format>
+#include <iostream>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -58,7 +58,7 @@ bool WebServer::initialize() {
     address.sin_port = htons(port);
 
     if (bind(listenFileDescriptor, (struct sockaddr*)&address, sizeof(address)) < 0) {
-        std::cerr << std::format(ERR_BIND, port);
+        std::cerr << "Error binding to port: " << port << '\n';
         return false;
     }
 
@@ -222,6 +222,8 @@ void WebServer::processClientRequest(ClientState& client) {
 
     if (request.find(ROUTE_WEB) != std::string_view::npos) {
         client.closeAfterWrite = true;
+
+        auto htmlPageContent = Resources::index_html;
 
         auto [it, size] = std::format_to_n(
             headerStackBuf, 

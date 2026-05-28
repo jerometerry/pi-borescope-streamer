@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <vector>
 #include <utility>
-#include <span>
 
 struct libusb_context;
 struct libusb_device_handle;

@@ -1,8 +1,6 @@
 #pragma once
 
 #include "client_state.hpp"
-#include "server_constants.hpp"
-#include "camera_header.hpp"
 #include <poll.h>
 #include <atomic>
 #include <thread>
@@ -66,7 +64,6 @@ private:
     static constexpr std::string_view ERR_NONBLOCK       = "[Web Server Error] Failed to set non-blocking on listener.\n";
 
     int listenFileDescriptor = -1;
-
     char headerStackBuf[STACK_BUF_SIZE];
 
     std::unique_ptr<std::array<ClientState, MAX_CLIENTS>> clients;

@@ -3,10 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
-#include <iostream>
-#include <string>
 #include <mutex>
-#include <thread>
 #include <vector>
 
 class MjpegStream {
