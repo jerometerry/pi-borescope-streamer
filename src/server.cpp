@@ -1,3 +1,4 @@
+#include "device_finder.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"
 #include <csignal>
@@ -50,7 +51,7 @@ int main(int argc, const char* argv[]) {
     std::signal(SIGPIPE, SIG_IGN);
 
     try {
-        std::vector<DeviceInfo> cameras = UsbCamera::listCameras();
+        std::vector<DeviceInfo> cameras = DeviceFinder::listDevices(true);
         if (cameras.empty()) {
             std::cerr << "[Fatal] No Useeplus supercamera devices found on the USB bus.\n";
             return EXIT_FAILURE;

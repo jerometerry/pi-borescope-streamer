@@ -57,66 +57,6 @@ UsbCamera::~UsbCamera() {
     }
 }
 
-std::vector<DeviceInfo> UsbCamera::listCameras() {
-    std::vector<DeviceInfo> cameras;
-    libusb_context* ctx = nullptr;
-    
-    if (libusb_init(&ctx) < 0) {
-        return cameras; // Return empty on failure
-    }
-
-    libusb_device** devices = nullptr;
-    ssize_t count = libusb_get_device_list(ctx, &devices);
-    if (count < 0) {
-        libusb_exit(ctx);
-        return cameras;
-    }
-
-    for (ssize_t i = 0; i < count; ++i) {
-        libusb_device* device = devices[i];
-        struct libusb_device_descriptor desc{};
-        
-        if (libusb_get_device_descriptor(device, &desc) < 0) continue;
-
-        // Check against our constexpr VIP/PID array
-        bool isSupported = std::ranges::any_of(VENDOR_PRODUCT_ID_LIST,
-            [&desc](const auto& vp) {
-                return desc.idVendor == vp.first && desc.idProduct == vp.second;
-            });
-
-        if (isSupported) {
-            DeviceInfo info{
-                .bus = libusb_get_bus_number(device),
-                .address = libusb_get_device_address(device),
-                .vendorId = desc.idVendor,
-                .productId = desc.idProduct
-            };
-
-            // Temporarily open to extract human-readable strings
-            libusb_device_handle* handle = nullptr;
-            if (libusb_open(device, &handle) == 0) {
-                unsigned char strBuf[256];
-                
-                if (desc.iManufacturer && libusb_get_string_descriptor_ascii(handle, desc.iManufacturer, strBuf, sizeof(strBuf)) > 0)
-                    info.manufacturer = reinterpret_cast<char*>(strBuf);
-                    
-                if (desc.iProduct && libusb_get_string_descriptor_ascii(handle, desc.iProduct, strBuf, sizeof(strBuf)) > 0)
-                    info.product = reinterpret_cast<char*>(strBuf);
-                    
-                if (desc.iSerialNumber && libusb_get_string_descriptor_ascii(handle, desc.iSerialNumber, strBuf, sizeof(strBuf)) > 0)
-                    info.serialNumber = reinterpret_cast<char*>(strBuf);
-                    
-                libusb_close(handle);
-            }
-            cameras.push_back(info);
-        }
-    }
-
-    libusb_free_device_list(devices, 1);
-    libusb_exit(ctx);
-    return cameras;
-}
-
 int UsbCamera::readFrame(std::vector<uint8_t> &frameBuffer) {
     return read(ENDPOINT_1, frameBuffer, ServerConstants::ONE_KILOBYTE);
 }
