@@ -31,7 +31,7 @@ private:
     libusb_context *context{nullptr};
     libusb_device_handle *deviceHandle{nullptr};
 
-    libusb_device_handle *open(libusb_context *context);
+    static libusb_device_handle *open(libusb_context *context);
 
     int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize);
     int write(unsigned char endpoint, const uint8_t* buffer, size_t length);

@@ -11,7 +11,7 @@ void signalHandler(int signal) {
     stream.stop();
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, const char* argv[]) {
     int port = DEFAULT_PORT;
     bool isUsingDefaultPort = true;
 

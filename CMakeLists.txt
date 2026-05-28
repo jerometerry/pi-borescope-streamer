@@ -41,42 +41,45 @@ if(CPPCHECK_EXE)
     )
 endif()
 
-find_program(IWYU_EXE 
-    NAMES "include-what-you-use"
-    PATHS "/opt/homebrew/bin" "/usr/local/bin"
-)
+find_program(IWYU_EXE NAMES "include-what-you-use" PATHS "/opt/homebrew/bin" "/usr/local/bin")
 if(IWYU_EXE)
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXE}")
 endif()
 
-add_executable(pi-borescope-streamer 
-    src/main.cpp 
-    src/mjpeg_stream.cpp 
-    src/usb_camera.cpp 
-    src/usb_camera_protocol.cpp 
-    src/web_server.cpp 
-    ${GENERATED_HPP}
-)
+add_library(project_warnings INTERFACE)
+target_compile_options(project_warnings INTERFACE -Wall -Wextra)
 
-target_include_directories(pi-borescope-streamer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(pi-borescope-streamer PRIVATE PkgConfig::LIBUSB)
-target_compile_options(pi-borescope-streamer PRIVATE -Wall -Wextra)
-
-if(APPLE)
-    # macOS Specifics (Homebrew is handled automatically via PkgConfig searching)
-    # No extra flags needed here as Clang handles optimizations smoothly
-else()
-    # Linux Specific Configuration
-    target_compile_options(pi-borescope-streamer PRIVATE 
-        -g                        # Generate debug symbols
-        -fno-omit-frame-pointer   # Preserved: Keep frame pointers for debugging/profiling
+if(NOT APPLE)
+    target_compile_options(project_warnings INTERFACE 
+        -g                        
+        -fno-omit-frame-pointer   
     )
-
-    # Detect if we are building on a Raspberry Pi 5 / ARM64 platform
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-        target_compile_options(pi-borescope-streamer PRIVATE 
+        target_compile_options(project_warnings INTERFACE 
             -mcpu=cortex-a76 
             -mtune=cortex-a76
         )
     endif()
 endif()
+
+add_library(useeplus_protocol STATIC 
+    src/usb_camera.cpp 
+    src/usb_camera_protocol.cpp
+)
+target_link_libraries(useeplus_protocol PUBLIC PkgConfig::LIBUSB)
+target_link_libraries(useeplus_protocol PRIVATE project_warnings)
+
+add_library(mjpeg_streamer STATIC 
+    src/mjpeg_stream.cpp 
+    src/web_server.cpp 
+    ${GENERATED_HPP}
+)
+target_include_directories(mjpeg_streamer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_link_libraries(mjpeg_streamer PUBLIC useeplus_protocol)
+target_link_libraries(mjpeg_streamer PRIVATE project_warnings)
+
+add_executable(pi-borescope-streamer 
+    src/main.cpp 
+)
+
+target_link_libraries(pi-borescope-streamer PRIVATE mjpeg_streamer project_warnings)
