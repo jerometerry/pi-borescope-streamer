@@ -67,7 +67,6 @@ add_library(useeplus_protocol STATIC
     src/device_finder.cpp
     src/usb_camera.cpp 
     src/usb_camera_protocol.cpp
-    src/usb_context.cpp
 )
 target_link_libraries(useeplus_protocol PUBLIC PkgConfig::LIBUSB)
 target_link_libraries(useeplus_protocol PRIVATE project_warnings)
@@ -91,3 +90,26 @@ add_executable(supercamera
     src/supercamera.cpp 
 )
 target_link_libraries(supercamera PRIVATE mjpeg_streamer project_warnings)
+
+# --- DOXYGEN CONFIGURATION ---
+option(BUILD_DOC "Build documentation" ON)
+
+if(BUILD_DOC)
+    # Removed REQUIRED so CMake doesn't crash if Doxygen is absent
+    find_package(Doxygen)
+    
+    if(DOXYGEN_FOUND)
+        # Configure Doxygen behavior via CMake variables before adding docs
+        set(DOXYGEN_GENERATE_HTML YES)
+        set(DOXYGEN_GENERATE_LATEX NO)
+        set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
+        
+        # Add the target to generate docs
+        doxygen_add_docs(docs 
+            ${PROJECT_SOURCE_DIR}/src
+            COMMENT "Generating API documentation"
+        )
+    else()
+        message(WARNING "Doxygen not found. Documentation target will not be created.")
+    endif()
+endif()

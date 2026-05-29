@@ -33,6 +33,20 @@
 			"configurePreset": "release"
 		},
 		{
+			"name": "docs-debug",
+			"displayName": "Build Docs (Debug)",
+			"description": "Generates Doxygen documentation using the debug build tree",
+			"configurePreset": "debug",
+			"targets": ["docs"]
+		},
+		{
+			"name": "docs-release",
+			"displayName": "Build Docs (Release)",
+			"description": "Generates Doxygen documentation using the release build tree",
+			"configurePreset": "release",
+			"targets": ["docs"]
+		},
+		{
 			"name": "clean-debug",
 			"configurePreset": "debug",
 			"targets": ["clean"]

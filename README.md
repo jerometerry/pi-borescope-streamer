@@ -56,6 +56,12 @@ cmake . --preset debug
 cmake --build --preset debug
 ```
 
+**For building docs**
+```bash
+cmake . --preset debug
+cmake --build --preset docs-debug
+```
+
 **For production deployment (Optimized with -O2, LTO, and Pi 5 Cortex-A76 core tuning):**
 ```bash
 cmake . --preset release
