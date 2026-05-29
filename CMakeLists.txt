@@ -119,3 +119,40 @@ if(BUILD_DOC)
         message(WARNING "Doxygen not found. Documentation target will not be created.")
     endif()
 endif()
+
+# --- TESTING CONFIGURATION ---
+option(BUILD_TESTING "Build the test suite" ON)
+
+if(BUILD_TESTING)
+    # 1. Enable CTest infrastructure
+    enable_testing()
+
+    # 2. Fetch GoogleTest framework automatically
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        URL https://github.com
+    )
+    # For speed and isolation, prevent GTest from overriding global compiler settings
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    # 3. Create the test runner executable
+    # Replace 'tests/test_main.cpp' with your actual test file paths
+    add_executable(run_project_tests 
+        tests/test_main.cpp
+    )
+
+    # 4. Link project libraries and GTest targets
+    # GTest provides 'GTest::gtest_main' which automatically includes a main() function
+    target_link_libraries(run_project_tests 
+        PRIVATE 
+            mjpeg_streamer 
+            project_warnings 
+            GTest::gtest_main
+    )
+
+    # 5. Enable automatic GoogleTest discovery
+    include(GoogleTest)
+    gtest_discover_tests(run_project_tests)
+endif()
