@@ -102,6 +102,14 @@ if(BUILD_DOC)
         set(DOXYGEN_GENERATE_HTML YES)
         set(DOXYGEN_GENERATE_LATEX NO)
         set(DOXYGEN_BUILTIN_STL_SUPPORT YES)
+        set(DOXYGEN_EXTRACT_ALL YES)
+        set(DOXYGEN_EXTRACT_PRIVATE YES)
+        set(DOXYGEN_EXTRACT_STATIC YES)
+        set(DOXYGEN_RECURSIVE YES)
+        set(DOXYGEN_ENABLE_PREPROCESSING YES)
+        set(DOXYGEN_MACRO_EXPANSION YES)
+        set(DOXYGEN_PREDEFINED "[[gnu::packed]]=")
+
         doxygen_add_docs(docs 
             ${PROJECT_SOURCE_DIR}/src
             ${PROJECT_SOURCE_DIR}/include
