@@ -66,7 +66,7 @@ add_library(useeplus_protocol STATIC
     src/usb_context.cpp
     src/device_finder.cpp
     src/usb_camera.cpp 
-    src/usb_camera_protocol.cpp
+    src/usb_frame_decoder.cpp
 )
 target_include_directories(useeplus_protocol PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(useeplus_protocol PUBLIC PkgConfig::LIBUSB)

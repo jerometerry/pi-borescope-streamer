@@ -1,31 +1,31 @@
 #pragma once
 
-#include "camera_header.hpp"
-#include "usb_frame.hpp"
-
+#include "usb_packet_header.hpp"
+#include "chunk_metadata.hpp"
 #include <cstdint>
 #include <functional>
+#include <span>
 
 /** 
  * @brief Class representing the USB camera protocol
  */
-class UsbCameraProtocol {
+class UsbFrameDecoder {
 public:
     /** 
      * @brief Construct a new USB camera protocol instance
      * @param broadcastHandler The handler for broadcasting frames
      * @param buttonHandler The handler for button events
      */
-    explicit UsbCameraProtocol(
+    explicit UsbFrameDecoder(
         std::function<void(const std::vector<uint8_t>&)> broadcastHandler, 
         std::function<void()> buttonHandler
     );
 
     /** 
      * @brief Handle a frame received from the USB camera
-     * @param frame The frame to handle
+     * @param readBuffer Data streamed from the camera
      */
-    void handleFrame(const std::vector<uint8_t> &frame);
+    void processIncomingCameraData(std::span<const uint8_t> readBuffer);
 
 private:
 
@@ -35,14 +35,14 @@ private:
     static constexpr uint16_t USB_FRAME_HEADER = 0xBBAA;
 
     /** 
-     * @brief The length of the USB header
+     * @brief The length of the USB frame
      */
-    static constexpr size_t USB_HEADER_LENGTH = sizeof(UsbFrame);
+    static constexpr size_t USB_FRAME_LENGTH = sizeof(UsbPacketHeader);
 
     /** 
-     * @brief The length of the camera header
+     * @brief The length of the camera frame
      */
-    static constexpr size_t CAMERA_HEADER_LENGTH = sizeof(CameraHeader);
+    static constexpr size_t CAMERA_FRAME_LENGTH = sizeof(ChunkMetadata);
 
     /** 
      * @brief The frame buffer
@@ -50,9 +50,9 @@ private:
     std::vector<uint8_t> frameBuffer;
 
     /** 
-     * @brief The camera header
+     * @brief The camera frame
      */
-    CameraHeader cameraHeader{};
+    ChunkMetadata cameraFrame{};
     
     /** 
      * @brief The broadcast handler

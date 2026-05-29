@@ -5,7 +5,7 @@
 /** 
  * @brief Structure representing the header of a camera frame
  */
-struct [[gnu::packed]] CameraHeader {
+struct [[gnu::packed]] ChunkMetadata {
     /** 
      * @brief The ID of the frame
      */
@@ -41,7 +41,7 @@ struct [[gnu::packed]] CameraHeader {
      * @param header The other camera header to compare against
      * @return true if the headers are for the same camera, false otherwise
      */
-    bool isSameCamera(CameraHeader header) const {
+    bool isSameCamera(ChunkMetadata header) const {
         return frameId == header.frameId && 
                cameraNumber == header.cameraNumber && 
                hasGravitySensor == header.hasGravitySensor && 

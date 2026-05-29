@@ -17,9 +17,8 @@ class UsbCamera {
 public:
     /** 
      * @brief Construct a new USB camera instance
-     * @param target The device info for the camera
      */
-    explicit UsbCamera(const DeviceInfo& target);
+    explicit UsbCamera();
 
     /** 
      * @brief Destroy the USB camera instance
@@ -62,19 +61,15 @@ public:
     bool close();
 
     /** 
-     * @brief Read a frame from the USB camera
-     * @param frameBuffer The buffer to store the frame data
+     * @brief Read data from the USB camera
+     * @param buffer The buffer to store the data
+     * @param length The number of bytes to read
+     * @param bytesRead
      * @return The number of bytes read, or a negative value on error
      */
-    int readFrame(std::vector<uint8_t> &frameBuffer);
+    int read(std::vector<uint8_t> &buffer, size_t length, int& bytesRead);
 
 private:
-    /** 
-     * @brief The list of supported vendor and product IDs
-     */
-    static constexpr std::pair<uint16_t, uint16_t> VENDOR_PRODUCT_ID_LIST[] = 
-        {{0x2ce3, 0x3828}, {0x0329, 0x2022}};
-
     /** 
      * @brief The number of the interface A
      */
@@ -101,11 +96,6 @@ private:
     static constexpr unsigned char ENDPOINT_2 = 2;
 
     /** 
-     * @brief The target device info
-     */
-    const DeviceInfo& target;
-
-    /** 
      * @brief The USB device handle
      */
     libusb_device_handle *deviceHandle{nullptr};
@@ -114,10 +104,10 @@ private:
      * @brief Read data from the USB camera
      * @param endpoint The endpoint to read from
      * @param buffer The buffer to store the data
-     * @param maxSize The maximum size of the buffer
+     * @param length The number of bytes to read
      * @return The number of bytes read, or a negative value on error
      */
-    int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize);
+    int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t length, int& bytesRead);
 
     /** 
      * @brief Write data to the USB camera

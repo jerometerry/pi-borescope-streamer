@@ -8,19 +8,8 @@
  * @brief Structure representing the state of a client connection
  */
 struct ClientState {
-    /** 
-     * @brief The size of the buffer for reading data from the client
-     */
     static constexpr size_t READ_BUFFER_SIZE = ServerConstants::FOUR_KILOBYTES;
-
-    /** 
-     * @brief The safety margin for the frame header
-     */
     static constexpr size_t FRAME_HEADER_SAFETY_MARGIN = ServerConstants::FOUR_KILOBYTES;
-
-    /** 
-     * @brief The size of the buffer for writing data to the client
-     */
     static constexpr size_t OUTBOX_BUFFER_SIZE = ServerConstants::TWO_MEGABYTES + FRAME_HEADER_SAFETY_MARGIN;
 
     /** 

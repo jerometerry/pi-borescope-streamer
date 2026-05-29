@@ -1,7 +1,7 @@
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"
 #include "usb_context.hpp"
-#include "usb_camera_protocol.hpp"
+#include "usb_frame_decoder.hpp"
 #include "web_server.hpp"
 #include "device_finder.hpp"
 
@@ -11,6 +11,7 @@
 #include <format>
 #include <iostream>
 #include <string>
+#include <span>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -116,14 +117,14 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
         hardwareButtonCallback(); 
     };
 
-    UsbCameraProtocol protocol(broadcastHandler, buttonHandler);
+    UsbFrameDecoder decoder(broadcastHandler, buttonHandler);
 
     DeviceInfo currentTarget = target;
 
     while (running) {
         try {
             UsbContext context;
-            UsbCamera camera(currentTarget);
+            UsbCamera camera;
 
             libusb_device_handle* handle = DeviceFinder::open(context, currentTarget);
 
@@ -147,13 +148,14 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
             std::cout << std::format("{} [Hardware Engine] Pipeline operational...\n", serverTime.get());
             
             std::vector<uint8_t> readBuffer;
-            readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
+            readBuffer.resize(ServerConstants::FOUR_KILOBYTES);
 
             while (running) {
-                int error = camera.readFrame(readBuffer);
+                int bytesRead = 0;
+                int error = camera.read(readBuffer, ServerConstants::FOUR_KILOBYTES, bytesRead);
                 
                 if (error == 0) {
-                    protocol.handleFrame(readBuffer);
+                    decoder.processIncomingCameraData(std::span{readBuffer.data(), static_cast<size_t>(bytesRead)});
                 } else if (error == LIBUSB_ERROR_NO_DEVICE) {
                     std::cerr << "[Hardware Engine] Device unplugged. Waiting for reconnection...\n";
                     break;

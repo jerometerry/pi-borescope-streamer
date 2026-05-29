@@ -1,7 +1,8 @@
-#include "camera_header.hpp"
-#include "usb_camera_protocol.hpp"
+#include "usb_frame_decoder.hpp"
+#include "usb_packet_header.hpp"
+#include "chunk_metadata.hpp"
 #include "server_constants.hpp"
-#include "usb_frame.hpp"
+#include "server_constants.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -12,25 +13,25 @@ static constexpr uint8_t VALID_CAMERA_IDS[] = {7, 11};
 // Ensure that the code is compiled on a little-endian platform, since the protocol relies on little-endian byte order for the USB frame and camera header. This check is important to prevent issues with byte order when interpreting the raw byte data from the USB frames, and to ensure that the code behaves correctly on platforms with different endianness.
 static_assert(std::endian::native == std::endian::little);
 
-UsbCameraProtocol::UsbCameraProtocol(
+UsbFrameDecoder::UsbFrameDecoder(
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler, std::function<void()> buttonHandler) 
     : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {
         frameBuffer.reserve(ServerConstants::ONE_MEGABYTE);
     }
 
-void UsbCameraProtocol::emitFrame() {
+void UsbFrameDecoder::emitFrame() {
     if (broadcastHandler) {
         broadcastHandler(frameBuffer);
     }
     frameBuffer.clear();
 }
 
-void UsbCameraProtocol::handleFrame(const std::vector<uint8_t> &frame) {
-    if (frame.size() < USB_HEADER_LENGTH) {
+void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> readBuffer) {
+    if (readBuffer.size() < USB_FRAME_LENGTH) {
         return;
     }
 
-    const UsbFrame *usbFrame = reinterpret_cast<const UsbFrame *>(frame.data());
+    const UsbPacketHeader *usbFrame = reinterpret_cast<const UsbPacketHeader *>(readBuffer.data());
 
     if (usbFrame->header != USB_FRAME_HEADER) {
         return;
@@ -41,43 +42,43 @@ void UsbCameraProtocol::handleFrame(const std::vector<uint8_t> &frame) {
         return;
     }
 
-    if (USB_HEADER_LENGTH + usbFrame->length > frame.size()) {
+    if (USB_FRAME_LENGTH + usbFrame->length > readBuffer.size()) {
         return;
     }
 
-    if (frame.size() - USB_HEADER_LENGTH < CAMERA_HEADER_LENGTH) {
+    if (readBuffer.size() - USB_FRAME_LENGTH < CAMERA_FRAME_LENGTH) {
         return;
     }
 
-    const CameraHeader *header = reinterpret_cast<const CameraHeader *>(frame.data() + USB_HEADER_LENGTH);
+    const ChunkMetadata *frame = reinterpret_cast<const ChunkMetadata *>(readBuffer.data() + USB_FRAME_LENGTH);
 
     // If the frame ID changes, emit the current frame buffer before processing the new frame
-    if (!frameBuffer.empty() && cameraHeader.frameId != header->frameId) {
+    if (!frameBuffer.empty() && cameraFrame.frameId != frame->frameId) {
         emitFrame();
     }
 
     if (frameBuffer.empty()) {
-        cameraHeader = *header;
+        cameraFrame = *frame;
         if (!isCameraSupported()) {
             return;
         }
     } else {
-        if (!cameraHeader.isSameCamera(*header)) {
+        if (!cameraFrame.isSameCamera(*frame)) {
             return;
         }
     }
 
     // If the button press flag is set, call the button handler
-    if (header->buttonPress && buttonHandler) {
+    if (frame->buttonPress && buttonHandler) {
         buttonHandler();
     }
 
     // Append the camera data to the frame buffer
-    auto cameraDataStart = frame.begin() + USB_HEADER_LENGTH + CAMERA_HEADER_LENGTH;
-    auto cameraDataEnd = frame.begin() + USB_HEADER_LENGTH + usbFrame->length;
+    auto cameraDataStart = readBuffer.begin() + USB_FRAME_LENGTH + CAMERA_FRAME_LENGTH;
+    auto cameraDataEnd = readBuffer.begin() + USB_FRAME_LENGTH + usbFrame->length;
     frameBuffer.insert(frameBuffer.end(), cameraDataStart, cameraDataEnd);
 }
 
-bool UsbCameraProtocol::isCameraSupported() const {
-    return cameraHeader.cameraNumber < 2 && cameraHeader.hasGravitySensor == 0 && cameraHeader.otherFlags == 0;
+bool UsbFrameDecoder::isCameraSupported() const {
+    return cameraFrame.cameraNumber < 2 && cameraFrame.hasGravitySensor == 0 && cameraFrame.otherFlags == 0;
 }
