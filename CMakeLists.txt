@@ -140,7 +140,8 @@ if(BUILD_TESTING)
     # 3. Create the test runner executable
     # Replace 'tests/test_main.cpp' with your actual test file paths
     add_executable(run_project_tests 
-        tests/test_main.cpp
+        tests/test_useeplus_protocol.cpp
+        tests/test_mjpeg_streamer.cpp
     )
 
     # 4. Link project libraries and GTest targets
