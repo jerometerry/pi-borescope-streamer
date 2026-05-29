@@ -92,12 +92,9 @@ add_executable(supercamera
 )
 target_link_libraries(supercamera PRIVATE mjpeg_streamer project_warnings)
 
-# --- DOXYGEN CONFIGURATION ---
 option(BUILD_DOC "Build documentation" ON)
-
 if(BUILD_DOC)
     find_package(Doxygen)
-    
     if(DOXYGEN_FOUND)
         set(DOXYGEN_GENERATE_HTML YES)
         set(DOXYGEN_GENERATE_LATEX NO)
@@ -120,40 +117,47 @@ if(BUILD_DOC)
     endif()
 endif()
 
-# --- TESTING CONFIGURATION ---
 option(BUILD_TESTING "Build the test suite" ON)
-
 if(BUILD_TESTING)
-    # 1. Enable CTest infrastructure
     enable_testing()
 
-    # 2. Fetch GoogleTest framework automatically
     include(FetchContent)
     FetchContent_Declare(
         googletest
-        URL https://github.com
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        v1.17.0
+        SYSTEM
     )
-    # For speed and isolation, prevent GTest from overriding global compiler settings
+
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
 
-    # 3. Create the test runner executable
-    # Replace 'tests/test_main.cpp' with your actual test file paths
+    set_target_properties(gtest gtest_main gmock gmock_main PROPERTIES
+        CXX_CLANG_TIDY ""
+        CXX_INCLUDE_WHAT_YOU_USE ""
+        CXX_CPPCHECK ""
+    )
+
+    target_compile_options(gtest PRIVATE -w)
+    target_compile_options(gtest_main PRIVATE -w)
+    target_compile_options(gmock PRIVATE -w)
+    target_compile_options(gmock_main PRIVATE -w)
+
     add_executable(run_project_tests 
         tests/test_useeplus_protocol.cpp
         tests/test_mjpeg_streamer.cpp
     )
 
-    # 4. Link project libraries and GTest targets
-    # GTest provides 'GTest::gtest_main' which automatically includes a main() function
+    target_include_directories(run_project_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
     target_link_libraries(run_project_tests 
         PRIVATE 
+            useeplus_protocol
             mjpeg_streamer 
             project_warnings 
             GTest::gtest_main
     )
 
-    # 5. Enable automatic GoogleTest discovery
     include(GoogleTest)
     gtest_discover_tests(run_project_tests)
 endif()
