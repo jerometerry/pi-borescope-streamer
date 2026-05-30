@@ -147,6 +147,7 @@ if(BUILD_TESTING)
         tests/test_useeplus_protocol.cpp
         tests/test_mjpeg_stream.cpp
         tests/test_mjpeg_streamer.cpp
+        tests/test_web_server.cpp
     )
 
     target_include_directories(run_project_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
