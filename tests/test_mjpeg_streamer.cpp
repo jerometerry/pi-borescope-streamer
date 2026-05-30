@@ -1,25 +1,24 @@
 #include <gtest/gtest.h>
 #include "server_time.hpp"
 #include "index_html.hpp"
+#include <thread>
+#include <chrono>
 
 TEST(MjpegStreamerTest, GeneratedHeaderIsAccessible) {
-    // Assuming your GenerateHeader.cmake creates a string variable or macro
-    // representing the embedded HTML content (e.g., INDEX_HTML_STR)
-    
-    // This test ensures the build system linked the generated folder paths correctly
-    #ifdef INDEX_HTML_STR
-        EXPECT_STRNE(INDEX_HTML_STR, "");
-    #else
-        // If it's a variable inside a namespace, check it here instead
-        SUCCEED() << "Generated header was successfully included by the compiler.";
-    #endif
+    auto htmlContent = Resources::index_html;
+    ASSERT_FALSE(htmlContent.empty()) << "Could not read or file is empty";
+    EXPECT_NE(htmlContent.find("<title>Borescope Desk</title>"), std::string::npos) 
+        << "Error: <title>Borescope Desk</title> tag not found in the HTML.";
 }
 
-TEST(MjpegStreamerTest, ServerTimeFormat) {
-    // Simple logic check for a utility function
-    // std::string current_time = ServerTime::GetCurrentTimestamp();
-    // EXPECT_FALSE(current_time.empty());
+TEST(ServerTimeTest, MeasuresElapsedMilliseconds) {
+    auto startTime = std::chrono::steady_clock::now();
+    ServerTime timer(startTime);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     
-    std::string mock_time = "2026-05-29 12:00:00";
-    EXPECT_GT(mock_time.length(), 0u);
+    long long elapsed = timer.get();
+
+    EXPECT_GE(elapsed, 50);
+    EXPECT_LT(elapsed, 100);
 }
