@@ -112,7 +112,7 @@ This structure is packed into 7 bytes
 `[[gnu::packed]]` strips all padding / store structure in minimum amount of memory, making this struct fit into 7 
 bytes. 
 
-It controls the video assembly state machine and hardware interrupts:
+ChunkMetadata controls the video assembly state machine and hardware interrupts:
 
 * **The Button Press Flag:** The Useeplus cable features a physical hardware button. When squeezed, the camera does 
 *not* send a separate USB interrupt. Instead, it flips a specific bit (`buttonPress`) inside this metadata block to `1` 
