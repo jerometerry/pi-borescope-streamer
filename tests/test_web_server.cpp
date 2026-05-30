@@ -1,15 +1,25 @@
-#include <gtest/gtest.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "web_server.hpp"
+
+
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <compare>
+#include <iterator>
+#include <mutex>
 #include <thread>
 #include <vector>
 #include <string>
 #include <memory>
 
-#include "web_server.hpp"
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
+#include <gtest/gtest.h>
 
 namespace {
     constexpr int TEST_PORT = 18080; 

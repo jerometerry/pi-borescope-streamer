@@ -1,5 +1,6 @@
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
+#include <cstddef>
 #include <algorithm>
 #include <initializer_list>
 #include <string>

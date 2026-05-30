@@ -1,12 +1,13 @@
 #pragma once
 
-#include "device_info.hpp"
 #include "server_time.hpp"
 #include <atomic>
 #include <chrono>
-#include <csignal>
+#include <cstdint>
 #include <mutex>
 #include <vector>
+
+struct DeviceInfo;
 
 /** 
  * @brief Class representing an MJPEG video stream

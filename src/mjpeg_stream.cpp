@@ -2,11 +2,16 @@
 #include "usb_camera.hpp"
 #include "usb_frame_decoder.hpp"
 #include "web_server.hpp"
+#include "server_constants.hpp"
+#include "device_info.hpp"
 
 #include <atomic>
-#include <chrono>
 #include <csignal>
+#include <cstdlib>
+#include <exception>
+#include <functional>
 #include <iostream>
+#include <span>
 #include <string>
 #include <mutex>
 #include <thread>

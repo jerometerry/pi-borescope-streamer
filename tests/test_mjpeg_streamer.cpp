@@ -2,8 +2,10 @@
 #include "server_time.hpp"
 #include "wall_clock.hpp"
 #include "index_html.hpp"
-#include <thread>
+
 #include <chrono>
+#include <string>
+#include <thread>
 
 TEST(MjpegStreamerTest, GeneratedHeaderIsAccessible) {
     auto htmlContent = Resources::index_html;

@@ -1,11 +1,15 @@
-#include <gtest/gtest.h>
-#include <chrono>
-#include <vector>
-#include <memory>
-
 #include "mjpeg_stream.hpp"
 #include "server_time.hpp"
 #include "clock.hpp"
+
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <string>
+#include <memory>
+#include <vector>
+
+#include <gtest/gtest.h>
 
 class TestClock : public Clock {
 public:

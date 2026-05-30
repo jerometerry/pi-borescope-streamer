@@ -1,13 +1,16 @@
 #pragma once
 
-#include "client_state.hpp"
-#include <poll.h>
+#include <array>
 #include <atomic>
-#include <thread>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <mutex>
+#include <string_view>
+#include <thread>
 #include <vector>
-#include <cstdint>
+
+struct ClientState;
 
 class WebServer {
 public:

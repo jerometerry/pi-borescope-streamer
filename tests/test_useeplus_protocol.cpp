@@ -1,14 +1,18 @@
-#include <gtest/gtest.h>
-#include <gmock/gmock.h>
-#include <vector>
-#include <cstdint>
-#include <span>
-#include <memory>
-#include <algorithm>
-
 #include "usb_frame_decoder.hpp"
 #include "usb_packet_header.hpp"
 #include "chunk_metadata.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <span>
+#include <string>
+#include <vector>
+
+#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 class MockHandlers {
 public:
