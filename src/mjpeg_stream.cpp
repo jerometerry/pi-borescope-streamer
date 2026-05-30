@@ -3,7 +3,6 @@
 #include "usb_frame_decoder.hpp"
 #include "web_server.hpp"
 #include "server_constants.hpp"
-#include "device_info.hpp"
 
 #include <atomic>
 #include <cstdlib>
