@@ -62,6 +62,14 @@ cmake . --preset debug
 cmake --build --preset docs-debug
 ```
 
+**For running tests / generating code coverage report**
+```bash
+cmake . --preset debug -DENABLE_COVERAGE=ON --fresh
+cmake --build --preset debug --target run_project_tests
+ctest --test-dir out/build/debug
+mkdir -p coverage && gcovr -r . --object-directory out/build/debug --filter "src/.*" --html-details coverage/index.html
+```
+
 **For production deployment (Optimized with -O2, LTO, and Pi 5 Cortex-A76 core tuning):**
 ```bash
 cmake . --preset release

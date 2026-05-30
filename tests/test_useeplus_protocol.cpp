@@ -102,3 +102,92 @@ TEST_F(UsbFrameDecoderTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     GetDecoder().processIncomingCameraData(packet1);
     GetDecoder().processIncomingCameraData(packet2);
 }
+
+TEST_F(UsbFrameDecoderTest, IgnoresInvalidCameraId) {
+    std::vector<uint8_t> packet(20, 0x00);
+    auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
+    usb->header = 0xBBAA;
+    usb->cameraId = 99; // <--- Invalid ID (Valid are 7, 11)
+    usb->length = 15;
+
+    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
+    GetDecoder().processIncomingCameraData(packet);
+}
+
+TEST_F(UsbFrameDecoderTest, IgnoresPayloadExceedingBufferSize) {
+    std::vector<uint8_t> packet(10, 0x00); // Total buffer is only 10 bytes
+    auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
+    usb->header = 0xBBAA;
+    usb->cameraId = 11;
+    usb->length = 50; // <--- Malicious/corrupted header claiming 50 bytes of payload
+
+    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
+    GetDecoder().processIncomingCameraData(packet);
+}
+
+TEST_F(UsbFrameDecoderTest, IgnoresTruncatedMetadata) {
+    std::vector<uint8_t> packet(10, 0x00); // Total buffer is 10 bytes
+    auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
+    usb->header = 0xBBAA;
+    usb->cameraId = 11;
+    usb->length = 5; // Matches buffer size: 5 (Header) + 5 (Payload) = 10.
+    
+    // BUT the ChunkMetadata struct is 7 bytes! 
+    // The decoder should realize the metadata is truncated and abort.
+    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
+    GetDecoder().processIncomingCameraData(packet);
+}
+
+TEST_F(UsbFrameDecoderTest, IgnoresUnsupportedCameraConfiguration) {
+    std::vector<uint8_t> packet(20, 0x00);
+    auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
+    usb->header = 0xBBAA;
+    usb->cameraId = 11;
+    usb->length = 15;
+
+    auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
+    chunk->frameId = 1;
+    chunk->cameraNumber = 5; // <--- Fails the "cameraNumber < 2" check
+
+    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
+    GetDecoder().processIncomingCameraData(packet);
+}
+
+TEST_F(UsbFrameDecoderTest, AbortsOnMidFrameCameraShift) {
+    // 1. Send the first chunk of Frame 1 (Valid)
+    std::vector<uint8_t> packet1(20, 0x00);
+    auto* usb1 = reinterpret_cast<UsbPacketHeader*>(packet1.data());
+    usb1->header = 0xBBAA;
+    usb1->cameraId = 11;
+    usb1->length = 15;
+    auto* chunk1 = reinterpret_cast<ChunkMetadata*>(packet1.data() + sizeof(UsbPacketHeader));
+    chunk1->frameId = 1;
+    chunk1->cameraNumber = 0; 
+    
+    GetDecoder().processIncomingCameraData(packet1);
+
+    // 2. Send the second chunk. Same Frame ID, but the cameraNumber flipped!
+    std::vector<uint8_t> packet2(20, 0x00);
+    auto* usb2 = reinterpret_cast<UsbPacketHeader*>(packet2.data());
+    usb2->header = 0xBBAA;
+    usb2->cameraId = 11;
+    usb2->length = 15;
+    auto* chunk2 = reinterpret_cast<ChunkMetadata*>(packet2.data() + sizeof(UsbPacketHeader));
+    chunk2->frameId = 1; // Still frame 1...
+    chunk2->cameraNumber = 1; // ...but suddenly it's camera 1!
+
+    // Ensure it aborts and DOES NOT append the corrupted data
+    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
+    GetDecoder().processIncomingCameraData(packet2);
+}
+
+TEST(UsbFrameDecoderEdgeTest, HandlesNullCallbacksSafely) {
+    // Instantiate WITHOUT your mock handlers
+    UsbFrameDecoder silentDecoder(nullptr, nullptr);
+    
+    std::vector<uint8_t> packet(100, 0x00);
+    // ... [Set up a valid packet with the buttonPress flag set to 1] ...
+
+    // Processing should succeed without throwing a null pointer exception
+    ASSERT_NO_THROW(silentDecoder.processIncomingCameraData(packet));
+}
