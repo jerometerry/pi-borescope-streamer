@@ -183,13 +183,13 @@ array, highlighting the 12-byte safety offset and the 80 bytes of corrupted hard
 
 ```mermaid
 flowchart LR
-    subgraph Buffer [Single 1024-Byte libusb Read Buffer]
+    subgraph Buffer ["Single 1024-Byte libusb Read Buffer"]
         direction LR
         
-        H[USB Header<br/>5 Bytes<br/>AA BB 0B AB 03]
-        M[Chunk Metadata<br/>7 Bytes<br/>ID, Flags, Button]
-        P[Valid JPEG Payload<br/>939 Bytes<br/>(Extracted by C++)]
-        G[Ghost Padding<br/>80 Bytes<br/>(Safely Ignored)]
+        H["USB Header<br/>5 Bytes<br/>AA BB 0B AB 03"]
+        M["Chunk Metadata<br/>7 Bytes<br/>ID, Flags, Button"]
+        P["Valid JPEG Payload<br/>939 Bytes<br/>(Extracted by C++)"]
+        G["Ghost Padding<br/>80 Bytes<br/>(Safely Ignored)"]
 
         H --- M --- P --- G
     end
@@ -199,5 +199,4 @@ flowchart LR
     style M fill:#8b5cf6,stroke:#4c1d95,stroke-width:2px,color:#fff
     style P fill:#10b981,stroke:#064e3b,stroke-width:2px,color:#fff
     style G fill:#ef4444,stroke:#7f1d1d,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
-
 ```
