@@ -1,24 +1,19 @@
 #include "mjpeg_stream.hpp"
-#include "server_constants.hpp"
 #include "usb_camera.hpp"
-#include "usb_context.hpp"
 #include "usb_frame_decoder.hpp"
 #include "web_server.hpp"
-#include "device_finder.hpp"
 
 #include <atomic>
 #include <chrono>
 #include <csignal>
-#include <format>
 #include <iostream>
 #include <string>
-#include <span>
 #include <mutex>
 #include <thread>
 #include <vector>
 #include <libusb.h>
 
-MjpegStream::MjpegStream(const ServerTime& serverTime) : serverTime(serverTime) {}
+MjpegStream::MjpegStream() {}
 
 MjpegStream::~MjpegStream() {}
 
@@ -102,12 +97,36 @@ void MjpegStream::hardwareButtonCallback() {
     auto elapsed = currentTime - buttonLastSeen;
     auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 
-    if (elapsedMs > BUTTON_DEBOUNCE_TIME_MS) {
-        std::cout << "[Hardware Engine] Button pulse received. Capturing snapshot...\n";
-        snapshotNextFrame = true;
+    // If the button is currently not detected as pressed, or it has been detected as pressed but we haven't seen it still pressed for at least the debounce time, we can treat this as a new button press event. We then update the button press start time and set the depressed state to true. If the button is already depressed and we've seen it still pressed within the debounce time, we just update the last seen time to keep tracking how long it's been held down. This allows us to filter out noise and chatter from the button and only respond to legitimate presses.
+    if (!buttonIsDepressed || elapsedMs > BUTTON_DEBOUNCE_TIME_MS) {
+        buttonPressStart = currentTime;
+        buttonIsDepressed = true;
     }
-
     buttonLastSeen = currentTime;
+}
+
+void MjpegStream::checkForButtonQuickPress() {
+    auto currentTime = std::chrono::steady_clock::now();
+    std::scoped_lock<std::mutex> lock(buttonMutex);
+
+    if (buttonIsDepressed) {
+        auto elapsed = currentTime - buttonLastSeen;
+        auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+
+        // If the button was previously detected as pressed but hasn't been seen as still pressed for a certain amount of time, we can infer that it was released. We then check how long the button was held down to determine if it qualifies as a "quick press" for snapshot capture or a long press for lens toggle (which we ignore, since a long press is a hardware event that toggles the lens).
+        if (elapsedMs > QUICK_PRESS_MIN_MS) {
+            auto duration = buttonLastSeen - buttonPressStart;
+            auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+            buttonIsDepressed = false;
+
+            if (durationMs < QUICK_PRESS_MAX_MS) {
+                std::cout << "[Button Filter] Quick press matching window (" << durationMs << "ms). Capturing...\n";
+                snapshotNextFrame = true;
+            } else {
+                std::cout << "[Button Filter] Long press lens toggle bypass (" << durationMs << "ms).\n";
+            }
+        }
+    }
 }
 
 void MjpegStream::startVideoFeed(const DeviceInfo& target) {
@@ -118,55 +137,27 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
         hardwareButtonCallback(); 
     };
 
-    UsbFrameDecoder decoder(broadcastHandler, buttonHandler);
+    try {
+        UsbCamera camera(target);
+        UsbFrameDecoder decoder(broadcastHandler, buttonHandler);
+        std::cout << "[Hardware Engine] Pipeline operational.\n";
 
-    DeviceInfo currentTarget = target;
+        // Main capture loop: continuously read frames from the camera and pass them to the protocol handler for processing. If the camera is disconnected, libusb will return an error code which we check for to break the loop and initiate shutdown. We also call the button release state monitor on each iteration to check for any button release events that may have occurred since the last frame read.
+        std::vector<uint8_t> readBuffer;
+        readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
 
-    while (running) {
-        try {
-            UsbContext context;
-            UsbCamera camera;
-
-            libusb_device_handle* handle = DeviceFinder::open(context, currentTarget);
-
-            if (!camera.open(handle)) {
-                // Camera not found. Sleep for 1 second and check the bus again.
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-
-                // Linux changes the USB address on replug. We must scan the bus 
-                // and update our target with the new OS-assigned address.
-                auto activeDevices = DeviceFinder::superCameras();
-                for (const auto& dev : activeDevices) {
-                    if (dev.isSameDevice(target)) {
-                        currentTarget = dev; 
-                        break;
-                    }
-                }
-
-                continue;
+        while (running) {
+            int error = camera.read(readBuffer);
+            if (error == 0) {
+                decoder.processIncomingCameraData(readBuffer);
+            } else if (error == LIBUSB_ERROR_NO_DEVICE) {
+                std::cerr << "[Hardware Engine] Device disconnected.\n";
+                running = false;
             }
-
-            std::cout << std::format("{} [Hardware Engine] Pipeline operational...\n", serverTime.get());
-            
-            std::vector<uint8_t> readBuffer;
-            readBuffer.resize(ServerConstants::ONE_MEGABYTE);
-
-            while (running) {
-                int bytesRead = 0;
-                int error = camera.read(readBuffer, ServerConstants::ONE_MEGABYTE, bytesRead);
-                
-                if (error == 0) {
-                    decoder.processIncomingCameraData(std::span{readBuffer.data(), static_cast<size_t>(bytesRead)});
-                } else if (error == LIBUSB_ERROR_NO_DEVICE) {
-                    std::cerr << "[Hardware Engine] Device unplugged. Waiting for reconnection...\n";
-                    break;
-                }
-            }
-            
-        } catch (const std::exception &exception) {
-            std::cerr << "[Hardware Engine Exception]: " << exception.what() << "\n";
-            std::cerr << "Retrying in 2 seconds...\n";
-            std::this_thread::sleep_for(std::chrono::seconds(2));
+            checkForButtonQuickPress();
         }
+    } catch (const std::exception &exception) {
+        std::cerr << "[Hardware Engine Exception]: " << exception.what() << "\n";
+        running = false;
     }
 }

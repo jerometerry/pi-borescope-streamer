@@ -1,7 +1,6 @@
 #pragma once
 
 #include "device_info.hpp"
-#include "server_time.hpp"
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -15,9 +14,8 @@ class MjpegStream {
 public:
     /** 
      * @brief Construct a new MJPEG stream
-     * @param serverTime The server time instance
      */
-    explicit MjpegStream(const ServerTime& serverTime);
+    MjpegStream();
 
     /** 
      * @brief Destroy the MJPEG stream
@@ -33,7 +31,6 @@ public:
      * @brief Delete the assignment operator
      */
     MjpegStream& operator=(const MjpegStream&) = delete;
-
     /** 
      * @brief Delete the move constructor
      */
@@ -71,6 +68,11 @@ private:
      */
     void hardwareButtonCallback();
 
+    /**
+     * @brief
+     */
+    void checkForButtonQuickPress();
+
     /** 
      * @brief Start the video feed
      * @param target The target device
@@ -86,6 +88,16 @@ private:
      * @brief The button debounce time in milliseconds
      */
     static constexpr int BUTTON_DEBOUNCE_TIME_MS = 200;
+
+    /**
+     *
+     */
+    static constexpr int QUICK_PRESS_MIN_MS = 150;
+
+    /**
+     * 
+     */
+    static constexpr int QUICK_PRESS_MAX_MS = 450;
 
     /** 
      * @brief The maximum position of the JPEG SOI markers
@@ -135,10 +147,15 @@ private:
     /** 
      * @brief The last time the button was seen
      */
-    std::chrono::steady_clock::time_point buttonLastSeen = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point buttonPressStart = std::chrono::steady_clock::now();
 
     /** 
-     * @brief The server time instance
+     * @brief The last time the button was seen
      */
-    const ServerTime serverTime;
+    std::chrono::steady_clock::time_point buttonLastSeen = std::chrono::steady_clock::now();
+
+    /**
+     * 
+     */
+    bool buttonIsDepressed = false;
 };

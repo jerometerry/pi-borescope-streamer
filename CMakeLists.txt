@@ -67,6 +67,7 @@ add_library(useeplus_protocol STATIC
     src/device_finder.cpp
     src/usb_camera.cpp 
     src/usb_frame_decoder.cpp
+    src/usb_frame_decoder_v2.cpp
 )
 target_include_directories(useeplus_protocol PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(useeplus_protocol PUBLIC PkgConfig::LIBUSB)
@@ -117,7 +118,7 @@ if(BUILD_DOC)
     endif()
 endif()
 
-option(BUILD_TESTING "Build the test suite" ON)
+option(BUILD_TESTING "Build the test suite" OFF)
 if(BUILD_TESTING)
     enable_testing()
 

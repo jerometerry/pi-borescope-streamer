@@ -18,7 +18,7 @@ public:
     /** 
      * @brief Construct a new USB camera instance
      */
-    explicit UsbCamera();
+    explicit UsbCamera(const DeviceInfo& target);
 
     /** 
      * @brief Destroy the USB camera instance
@@ -49,10 +49,10 @@ public:
 
     /** 
      * @brief Open the USB camera
-     * @param handle The USB device handle
+     * @param target The target USB device
      * @return True if the camera was opened successfully, false otherwise
      */
-    bool open(libusb_device_handle* handle);
+    static libusb_device_handle *open(libusb_context *context, const DeviceInfo& target);
 
     /** 
      * @brief Close the USB camera
@@ -60,16 +60,21 @@ public:
      */
     bool close();
 
+    static std::vector<DeviceInfo> listCameras();
+
     /** 
      * @brief Read data from the USB camera
      * @param buffer The buffer to store the data
-     * @param length The number of bytes to read
-     * @param bytesRead
      * @return The number of bytes read, or a negative value on error
      */
-    int read(std::vector<uint8_t> &buffer, size_t length, int& bytesRead);
+    int read(std::vector<uint8_t> &buffer);
 
 private:
+    /**
+     * @brief
+     */
+    static constexpr std::pair<uint16_t, uint16_t> VENDOR_PRODUCT_ID_LIST[] = {{0x2ce3, 0x3828}, {0x0329, 0x2022}};
+
     /** 
      * @brief The number of the interface A
      */
@@ -95,6 +100,16 @@ private:
      */
     static constexpr unsigned char ENDPOINT_2 = 2;
 
+    /**
+     * @brief
+     */
+    static constexpr unsigned int USB_TIMEOUT = 1000;
+
+    /**
+     * @brief
+     */
+    libusb_context *context{nullptr};
+
     /** 
      * @brief The USB device handle
      */
@@ -107,7 +122,7 @@ private:
      * @param length The number of bytes to read
      * @return The number of bytes read, or a negative value on error
      */
-    int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t length, int& bytesRead);
+    int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize);
 
     /** 
      * @brief Write data to the USB camera

@@ -6,7 +6,7 @@
 #include <memory>
 #include <algorithm>
 
-#include "usb_frame_decoder.hpp"
+#include "usb_frame_decoder_v2.hpp"
 #include "usb_packet_header.hpp"
 #include "chunk_metadata.hpp"
 
@@ -20,11 +20,11 @@ class UsbFrameDecoderTest : public ::testing::Test {
 private:
     // Kept private to satisfy cppcoreguidelines-non-private-member-variables-in-classes
     MockHandlers mock_handlers_;
-    std::unique_ptr<UsbFrameDecoder> decoder_;
+    std::unique_ptr<UsbFrameDecoderV2> decoder_;
 
 protected:
     void SetUp() override {
-        decoder_ = std::make_unique<UsbFrameDecoder>(
+        decoder_ = std::make_unique<UsbFrameDecoderV2>(
             [this](const std::vector<uint8_t>& data) { mock_handlers_.OnBroadcast(data); },
             [this]() { mock_handlers_.OnButtonPress(); }
         );
@@ -32,7 +32,7 @@ protected:
 
     // Helper functions to safely access private fixture members
     MockHandlers& GetMock() { return mock_handlers_; }
-    UsbFrameDecoder& GetDecoder() { return *decoder_; }
+    UsbFrameDecoderV2& GetDecoder() { return *decoder_; }
 };
 
 TEST_F(UsbFrameDecoderTest, ExposesBoundaryTruncationBug) {
@@ -368,7 +368,7 @@ TEST_F(UsbFrameDecoderTest, AbortsOnMidFrameCameraShift) {
 
 TEST(UsbFrameDecoderEdgeTest, HandlesNullCallbacksSafely) {
     // Instantiate WITHOUT your mock handlers
-    UsbFrameDecoder silentDecoder(nullptr, nullptr);
+    UsbFrameDecoderV2 silentDecoder(nullptr, nullptr);
     
     std::vector<uint8_t> packet(100, 0x00);
     // ... [Set up a valid packet with the buttonPress flag set to 1] ...
