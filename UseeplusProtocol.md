@@ -74,13 +74,18 @@ struct [[gnu::packed]] UsbPacketHeader {
 };
 ```
 
+UsbPacketHeader is packed into 5 bytes
+- header: 2 bytes
+- cameraId: 1 byte
+- length: 2 bytes
+
 Immediately following the 5-byte USB Packet Header (`aa bb 0b ab 03`), the camera inserts exactly 7 bytes of 
 proprietary `ChunkMetadata` before the actual JPEG pixels begin.
 
 Let's look at the 12 bytes preceding the JPEG SOI (`ff d8`) from our hex dump:
 `aa bb 0b ab 03` **`02 00 00 60 33 30 24`** `ff d8...`
 
-This 7-byte block (**`02 00 00 60 33 30 24`**) is mapped directly to our C++ `ChunkMetadata` struct. 
+This 7-byte block (**`02 00 00 60 33 30 24`**) is mapped directly to the `ChunkMetadata` struct. 
 
 ```
 struct [[gnu::packed]] ChunkMetadata {
@@ -92,6 +97,20 @@ struct [[gnu::packed]] ChunkMetadata {
     uint32_t gravitySensor;
 };
 ```
+
+Note that the 3 `unsigned char` fields in the middle of the struct are all combined into a single byte. 
+- `hasGravitySensor` specifies storage as a single bit
+- `buttonPress` specifies storage as a single bit
+- `otherFlags` specifies storage in 6 bits
+
+This structure is packed into 7 bytes
+- frameId: 1 byte
+- cameraId: 1 byte
+- hasGravitySensor, buttonPress, otherFlags: 1 byte (combined)
+- gravitySensor: 4 bytes
+
+`[[gnu::packed]]` strips all padding / store structure in minimum amount of memory, making this struct fit into 7 
+bytes. 
 
 It controls the video assembly state machine and hardware interrupts:
 
@@ -120,7 +139,7 @@ fully assembled JPEG to the broadcast queue.
 *(Note: If you run the `binary_stream_capture` tool for just 3 to 5 seconds at 30 FPS, your `raw_camera_dump.bin` file 
 will contain between 90 and 150 completely intact, fully extractable JPEG images!)*
 
-### Macro Layout: Frame Assembly
+### Frame Assembly
 
 This diagram illustrates how consecutive 1KB chunks are logically linked together by the `Frame ID` to form fully 
 bounded JPEG images.
@@ -173,13 +192,14 @@ firmware fails to initialize the final 80 bytes of this burst, resulting in a me
 padding containing stale headers from previous frames.
 
 Our C++ `UsbFrameDecoder` is explicitly designed to be immune to this flaw. By reading a 1MB buffer and strictly 
-bounding our vector insertion to the declared `header->length`, we extract the valid JPEG data and surgically discard 
+bounding our vector insertion to the declared `header->length`, we extract the valid JPEG data and discard 
 the uninitialized hardware memory leak.
 
-### Micro Layout: The 1024-Byte Kernel Buffer
+### The 1024-Byte Kernel Buffer
 
-This diagram is perfect for the "Hardware Fragmentation Flaw" section. It visually breaks down a single 1024-byte read 
-array, highlighting the 12-byte safety offset and the 80 bytes of corrupted hardware memory that the V1 decoder drops.
+This diagram illustrates the "Hardware Fragmentation Flaw" section. It visually breaks down a single 1024-byte read 
+array, highlighting the 12-byte safety offset and the 80 bytes of corrupted hardware memory that the UsbFrameDecoder 
+drops.
 
 ```mermaid
 flowchart LR
