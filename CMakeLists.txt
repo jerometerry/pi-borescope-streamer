@@ -152,10 +152,10 @@ if(BUILD_TESTING)
 
     target_link_libraries(run_project_tests 
         PRIVATE 
-            useeplus_protocol
             mjpeg_streamer 
             project_warnings 
             GTest::gtest_main
+            GTest::gmock
     )
 
     include(GoogleTest)

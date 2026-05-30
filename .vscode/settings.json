@@ -1,5 +1,7 @@
 {
-	"clangd.arguments": [
-		"--compile-commands-dir=out/build/default"
-	]
+	"cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
+    "cmake.options.statusBarVisibility": "visible",
+    "clangd.arguments": [
+        "--compile-commands-dir=${workspaceFolder}/out/build/debug"
+    ]
 }
