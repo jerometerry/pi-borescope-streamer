@@ -145,6 +145,7 @@ if(BUILD_TESTING)
 
     add_executable(run_project_tests 
         tests/test_useeplus_protocol.cpp
+        tests/test_mjpeg_stream.cpp
         tests/test_mjpeg_streamer.cpp
     )
 

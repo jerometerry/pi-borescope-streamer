@@ -58,6 +58,8 @@ public:
     void stop();
 
 private:
+    friend class MjpegStreamTest;
+
     /** 
      * @brief Broadcast the latest frame
      * @param frame The frame to broadcast
