@@ -3,6 +3,7 @@
 #include "usb_context.hpp"
 #include "usb_device_list.hpp"
 #include <algorithm>
+#include <span>
 #include <string>
 
 #include <libusb.h>

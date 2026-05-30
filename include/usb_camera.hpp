@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
-#include <utility>
 
 struct libusb_context;
 struct libusb_device_handle;
