@@ -23,7 +23,7 @@
 static bool running = true;
 static std::mutex frameMutex;
 static uint32_t frameId = 0;
-static constexpr std::string DUMP_FILE("raw_camera_dump.bin");
+static const std::string DUMP_FILE("raw_camera_dump.bin");
 
 void signalHandler(int signal) {
     std::cout << "\nSignal " << signal << " received. Initiating shutdown...\n";
