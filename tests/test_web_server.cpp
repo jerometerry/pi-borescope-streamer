@@ -1,6 +1,9 @@
-#include "web_server.hpp"
-
-
+#include <arpa/inet.h>
+#include <gtest/gtest.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -12,14 +15,7 @@
 #include <vector>
 #include <string>
 #include <memory>
-
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
-
-#include <gtest/gtest.h>
+#include "web_server.hpp"
 
 namespace {
     constexpr int TEST_PORT = 18080; 

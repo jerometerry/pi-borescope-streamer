@@ -1,9 +1,3 @@
-#include "mjpeg_stream.hpp"
-#include "usb_camera.hpp"
-#include "wall_clock.hpp"
-#include "device_info.hpp"
-#include "server_time.hpp"
-
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
@@ -12,6 +6,11 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include "device_info.hpp"
+#include "mjpeg_stream.hpp"
+#include "server_time.hpp"
+#include "usb_camera.hpp"
+#include "wall_clock.hpp"
 
 static constexpr int DEFAULT_PORT = 8080;
 static MjpegStream* globalStream = nullptr;

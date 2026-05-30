@@ -1,12 +1,11 @@
 #pragma once
 
-#include "server_time.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <vector>
-
+#include "server_time.hpp"
 struct DeviceInfo;
 
 /** 

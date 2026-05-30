@@ -1,13 +1,12 @@
 #pragma once
 
-#include "chunk_metadata.hpp"
-#include "usb_packet_header.hpp"
-
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <span>
 #include <vector>
+#include "chunk_metadata.hpp"
+#include "usb_packet_header.hpp"
 
 class UsbFrameDecoder {
 public:

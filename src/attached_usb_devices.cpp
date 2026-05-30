@@ -1,12 +1,11 @@
-#include "device_info.hpp"
-#include "device_finder.hpp"
-
 #include <csignal>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
 #include <string>
 #include <vector>
+#include "device_finder.hpp"
+#include "device_info.hpp"
 
 void signalHandler(int signal) {
     std::cout << "\nSignal " << signal << " received. Initiating shutdown...\n";

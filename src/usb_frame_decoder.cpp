@@ -1,12 +1,11 @@
-#include "chunk_metadata.hpp"
-#include "usb_frame_decoder.hpp"
-#include "server_constants.hpp"
-#include "usb_packet_header.hpp"
-
 #include <algorithm>
 #include <bit>
 #include <iterator>
 #include <utility>
+#include "chunk_metadata.hpp"
+#include "server_constants.hpp"
+#include "usb_frame_decoder.hpp"
+#include "usb_packet_header.hpp"
 
 // Ensure that the code is compiled on a little-endian platform, since the protocol relies on little-endian byte order for the USB frame and camera header. This check is important to prevent issues with byte order when interpreting the raw byte data from the USB frames, and to ensure that the code behaves correctly on platforms with different endianness.
 static_assert(std::endian::native == std::endian::little);

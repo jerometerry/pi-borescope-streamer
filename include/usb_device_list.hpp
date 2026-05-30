@@ -1,8 +1,8 @@
 #pragma once
 
-#include "usb_context.hpp"
 #include <libusb.h>
 #include <span>
+#include "usb_context.hpp"
 
 /** 
  * @brief Class representing a list of USB devices

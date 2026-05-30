@@ -1,7 +1,5 @@
-#include "usb_frame_decoder.hpp"
-#include "usb_packet_header.hpp"
-#include "chunk_metadata.hpp"
-
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -10,9 +8,9 @@
 #include <span>
 #include <string>
 #include <vector>
-
-#include <gtest/gtest.h>
-#include <gmock/gmock.h>
+#include "chunk_metadata.hpp"
+#include "usb_frame_decoder.hpp"
+#include "usb_packet_header.hpp"
 
 class MockHandlers {
 public:

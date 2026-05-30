@@ -1,10 +1,9 @@
 #pragma once
 
-#include "device_info.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <vector>
-
+#include "device_info.hpp"
 struct libusb_context;
 struct libusb_device_handle;
 

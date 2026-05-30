@@ -1,8 +1,8 @@
 #pragma once
 
-#include "server_constants.hpp"
 #include <array>
 #include <cstdint>
+#include "server_constants.hpp"
 
 /** 
  * @brief Structure representing the state of a client connection

@@ -1,8 +1,10 @@
-#include "web_server.hpp"
-#include "index_html.hpp"
-#include "client_state.hpp"
-#include "server_constants.hpp"
-
+#include <arpa/inet.h> 
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <algorithm>
 #include <cerrno>
 #include <charconv>
@@ -11,14 +13,10 @@
 #include <format>
 #include <iostream>
 #include <system_error>
-
-#include <arpa/inet.h> 
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
+#include "client_state.hpp"
+#include "index_html.hpp"
+#include "server_constants.hpp"
+#include "web_server.hpp"
 
 WebServer::WebServer(const int port,
                      const std::atomic<bool>& running,                 

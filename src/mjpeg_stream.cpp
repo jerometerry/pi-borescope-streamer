@@ -1,9 +1,4 @@
-#include "mjpeg_stream.hpp"
-#include "usb_camera.hpp"
-#include "usb_frame_decoder.hpp"
-#include "web_server.hpp"
-#include "server_constants.hpp"
-
+#include <libusb.h>
 #include <atomic>
 #include <cstdlib>
 #include <exception>
@@ -14,7 +9,11 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-#include <libusb.h>
+#include "mjpeg_stream.hpp"
+#include "usb_camera.hpp"
+#include "usb_frame_decoder.hpp"
+#include "web_server.hpp"
+#include "server_constants.hpp"
 
 MjpegStream::MjpegStream(const ServerTime& serverTime) : serverTime(serverTime) {}
 

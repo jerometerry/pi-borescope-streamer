@@ -1,6 +1,7 @@
 #pragma once
-#include "clock.hpp"
+
 #include <chrono>
+#include "clock.hpp"
 
 class WallClock : public Clock {
 public:

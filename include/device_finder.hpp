@@ -1,7 +1,7 @@
 #pragma once
 
-#include "device_info.hpp"
 #include <vector>
+#include "device_info.hpp"
 
 class UsbContext;
 struct libusb_device_handle;

@@ -1,11 +1,10 @@
 #include <gtest/gtest.h>
-#include "server_time.hpp"
-#include "wall_clock.hpp"
-#include "index_html.hpp"
-
 #include <chrono>
 #include <string>
 #include <thread>
+#include "index_html.hpp"
+#include "server_time.hpp"
+#include "wall_clock.hpp"
 
 TEST(MjpegStreamerTest, GeneratedHeaderIsAccessible) {
     auto htmlContent = Resources::index_html;

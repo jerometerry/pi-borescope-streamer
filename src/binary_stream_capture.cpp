@@ -1,9 +1,4 @@
-#include "usb_camera.hpp"
-#include "device_info.hpp"
-#include "usb_camera.hpp"
-#include "usb_frame_decoder.hpp"
-#include "server_constants.hpp"
-
+#include <libusb.h>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -17,8 +12,10 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#include <libusb.h>
+#include "device_info.hpp"
+#include "server_constants.hpp"
+#include "usb_camera.hpp"
+#include "usb_frame_decoder.hpp"
 
 static bool running = true;
 static std::mutex frameMutex;

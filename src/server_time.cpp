@@ -1,6 +1,6 @@
-#include "server_time.hpp"
-#include "clock.hpp"
 #include <chrono>
+#include "clock.hpp"
+#include "server_time.hpp"
 
 ServerTime::ServerTime(const Clock& clock, std::chrono::steady_clock::time_point start) 
     : start_(start), clock_(&clock) {}

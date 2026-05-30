@@ -1,14 +1,12 @@
-#include "usb_camera.hpp"
-#include "server_constants.hpp"
-
+#include <libusb.h>
+#include <sys/types.h>
 #include <algorithm>
 #include <cstddef>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
-
-#include <sys/types.h>
-#include <libusb.h>
+#include "server_constants.hpp"
+#include "usb_camera.hpp"
 
 static constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
 static constexpr uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};

@@ -1,12 +1,11 @@
+#include <libusb.h>
+#include <algorithm>
+#include <span>
+#include <string>
 #include "device_finder.hpp"
 #include "server_constants.hpp"
 #include "usb_context.hpp"
 #include "usb_device_list.hpp"
-#include <algorithm>
-#include <span>
-#include <string>
-
-#include <libusb.h>
 
 std::vector<DeviceInfo> DeviceFinder::all() {
     return find(false);
