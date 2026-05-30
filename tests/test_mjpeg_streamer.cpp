@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "server_time.hpp"
+#include "wall_clock.hpp"
 #include "index_html.hpp"
 #include <thread>
 #include <chrono>
@@ -12,8 +13,9 @@ TEST(MjpegStreamerTest, GeneratedHeaderIsAccessible) {
 }
 
 TEST(ServerTimeTest, MeasuresElapsedMilliseconds) {
-    auto startTime = std::chrono::steady_clock::now();
-    ServerTime timer(startTime);
+    WallClock clock;
+    auto startTime = clock.now();
+    ServerTime timer(clock, startTime);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     

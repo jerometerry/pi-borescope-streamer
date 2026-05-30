@@ -1,15 +1,18 @@
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"
+#include "wall_clock.hpp" // <-- Added the concrete clock implementation
 #include <csignal>
 #include <iostream>
 #include <string>
 
 static constexpr int DEFAULT_PORT = 8080;
-static MjpegStream stream;
+static MjpegStream* globalStream = nullptr;
 
 void signalHandler(int signal) {
     std::cout << "\nSignal " << signal << " received. Initiating shutdown...\n";
-    stream.stop();
+    if (globalStream) {
+        globalStream->stop();
+    }
 }
 
 int main(int argc, const char* argv[]) {
@@ -82,6 +85,11 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
+
+        WallClock systemClock;
+        const ServerTime serverTime(systemClock, std::chrono::steady_clock::now());
+        MjpegStream stream(serverTime);
+        globalStream = &stream;
 
         stream.run(port, camera);
         

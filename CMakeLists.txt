@@ -118,7 +118,7 @@ if(BUILD_DOC)
     endif()
 endif()
 
-option(BUILD_TESTING "Build the test suite" OFF)
+option(BUILD_TESTING "Build the test suite" ON)
 if(BUILD_TESTING)
     enable_testing()
 

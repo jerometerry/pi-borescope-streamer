@@ -1,6 +1,7 @@
 #pragma once
 
 #include "device_info.hpp"
+#include "server_time.hpp"
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -14,8 +15,9 @@ class MjpegStream {
 public:
     /** 
      * @brief Construct a new MJPEG stream
+     * @param serverTime The server time instance
      */
-    MjpegStream();
+    explicit MjpegStream(const ServerTime& serverTime);
 
     /** 
      * @brief Destroy the MJPEG stream
@@ -158,4 +160,9 @@ private:
      * 
      */
     bool buttonIsDepressed = false;
+
+    /** 
+     * @brief The server time instance
+     */
+    const ServerTime serverTime;
 };
