@@ -14,7 +14,6 @@
 #include <mutex>
 #include <thread>
 #include <vector>
-//#include <fstream>
 #include <libusb.h>
 
 MjpegStream::MjpegStream(const ServerTime& serverTime) : serverTime(serverTime) {}
@@ -67,8 +66,8 @@ void MjpegStream::broadcastFrame(const std::vector<uint8_t>& frame) {
 
         // Attempt to find the JPEG SOI markers within the first 32 bytes of the frame data.
         size_t offset = std::string::npos;
-        for (size_t index = 0; index + 1 < frame.size() && index < JPEG_SOI_MARKERS_MAX_POSITION; ++index) {
-            if (frame[index] == JPEG_SOI_MARKERS[0] && frame[index + 1] == JPEG_SOI_MARKERS[1]) {
+        for (size_t index = 0; index + 1 < frame.size() && index < ServerConstants::JPEG_SOI_MARKERS_MAX_POSITION; ++index) {
+            if (frame[index] == ServerConstants::JPEG_SOI_MARKERS[0] && frame[index + 1] == ServerConstants::JPEG_SOI_MARKERS[1]) {
                 offset = index;
                 break;
             }
@@ -101,7 +100,7 @@ void MjpegStream::hardwareButtonCallback() {
     auto elapsedMs = serverTime.getElapsedMilliseconds(buttonLastSeen, currentTime);
 
     // If the button is currently not detected as pressed, or it has been detected as pressed but we haven't seen it still pressed for at least the debounce time, we can treat this as a new button press event. We then update the button press start time and set the depressed state to true. If the button is already depressed and we've seen it still pressed within the debounce time, we just update the last seen time to keep tracking how long it's been held down. This allows us to filter out noise and chatter from the button and only respond to legitimate presses.
-    if (!buttonIsDepressed || elapsedMs > BUTTON_DEBOUNCE_TIME_MS) {
+    if (!buttonIsDepressed || elapsedMs > ServerConstants::BUTTON_DEBOUNCE_TIME_MS) {
         buttonPressStart = currentTime;
         buttonIsDepressed = true;
     }
@@ -116,12 +115,12 @@ void MjpegStream::checkForButtonQuickPress() {
         auto elapsedMs = serverTime.getElapsedMilliseconds(buttonLastSeen, currentTime);
 
         // If the button was previously detected as pressed but hasn't been seen as still pressed for a certain amount of time, we can infer that it was released. We then check how long the button was held down to determine if it qualifies as a "quick press" for snapshot capture or a long press for lens toggle (which we ignore, since a long press is a hardware event that toggles the lens).
-        if (elapsedMs > QUICK_PRESS_MIN_MS) {
+        if (elapsedMs > ServerConstants::QUICK_PRESS_MIN_MS) {
             auto durationMs = serverTime.getElapsedMilliseconds(
                 buttonPressStart, buttonLastSeen);
             buttonIsDepressed = false;
 
-            if (durationMs < QUICK_PRESS_MAX_MS) {
+            if (durationMs < ServerConstants::QUICK_PRESS_MAX_MS) {
                 std::cout << "[Button Filter] Quick press matching window (" << durationMs << "ms). Capturing...\n";
                 snapshotNextFrame = true;
             } else {
@@ -144,10 +143,6 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
         UsbFrameDecoder decoder(broadcastHandler, buttonHandler);
         std::cout << "[Hardware Engine] Pipeline operational.\n";
 
-        // --- BINARY FILE LOGGER ---
-        //std::cout << "[Debug] Opening binary stream dump: raw_camera_dump.bin\n";
-        //std::ofstream rawDump("raw_camera_dump.bin", std::ios::binary);
-
         // Main capture loop: continuously read frames from the camera and pass them to the protocol handler for processing. If the camera is disconnected, libusb will return an error code which we check for to break the loop and initiate shutdown. We also call the button release state monitor on each iteration to check for any button release events that may have occurred since the last frame read.
         std::vector<uint8_t> readBuffer;
         readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
@@ -155,12 +150,6 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
         while (running) {
             int error = camera.read(readBuffer);
             if (error == 0) {
-
-                //if (rawDump.is_open()) {
-                //    rawDump.write(reinterpret_cast<const char*>(readBuffer.data()), readBuffer.size());
-                //    rawDump.flush(); // Ensure data survives a crash/Ctrl+C
-                //}
-
                 decoder.processIncomingCameraData(std::span<const uint8_t>{readBuffer});
             } else if (error == LIBUSB_ERROR_NO_DEVICE) {
                 std::cerr << "[Hardware Engine] Device disconnected.\n";

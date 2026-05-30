@@ -83,31 +83,6 @@ private:
     void startVideoFeed(const DeviceInfo& target);
 
     /** 
-     * @brief The JPEG SOI markers
-     */
-    static constexpr uint8_t JPEG_SOI_MARKERS[] = { 0xFF, 0xD8 };
-
-    /** 
-     * @brief The button debounce time in milliseconds
-     */
-    static constexpr int BUTTON_DEBOUNCE_TIME_MS = 200;
-
-    /**
-     *
-     */
-    static constexpr int QUICK_PRESS_MIN_MS = 150;
-
-    /**
-     * 
-     */
-    static constexpr int QUICK_PRESS_MAX_MS = 450;
-
-    /** 
-     * @brief The maximum position of the JPEG SOI markers
-     */
-    static constexpr int JPEG_SOI_MARKERS_MAX_POSITION = 32;
-
-    /** 
      * @brief Whether the stream is running
      */
     std::atomic<bool> running{true};

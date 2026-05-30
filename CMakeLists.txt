@@ -87,10 +87,15 @@ add_executable(pi-borescope-streamer
 )
 target_link_libraries(pi-borescope-streamer PRIVATE mjpeg_streamer project_warnings)
 
-add_executable(supercamera
-    src/supercamera.cpp 
+add_executable(attached_usb_devices
+    src/attached_usb_devices.cpp 
 )
-target_link_libraries(supercamera PRIVATE mjpeg_streamer project_warnings)
+target_link_libraries(attached_usb_devices PRIVATE mjpeg_streamer project_warnings)
+
+add_executable(binary_stream_capture
+    src/binary_stream_capture.cpp 
+)
+target_link_libraries(binary_stream_capture PRIVATE mjpeg_streamer project_warnings)
 
 option(BUILD_DOC "Build documentation" ON)
 if(BUILD_DOC)

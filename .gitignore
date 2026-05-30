@@ -265,4 +265,7 @@ pyrightconfig.json
 .history
 .ionide
 
+# Binary Stream Capture Files
+*.bin
+
 # End of https://www.toptal.com/developers/gitignore/api/c++,macos,python,visualstudiocode,cmake
