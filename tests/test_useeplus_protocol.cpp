@@ -35,6 +35,51 @@ protected:
     UsbFrameDecoder& GetDecoder() { return *decoder_; }
 };
 
+TEST_F(UsbFrameDecoderTest, ReassemblesMultiChunkMjpegStream) {
+    // 1. Define the expected final JPEG payload for Frame 1
+    std::vector<uint8_t> expectedPayload;
+
+    // A reusable lambda to safely pack headers and payloads into a raw byte stream
+    auto buildPacket = [](uint8_t frameId, const std::vector<uint8_t>& payload) {
+        std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(ChunkMetadata) + payload.size(), 0x00);
+        
+        auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
+        usb->header = 0xBBAA;
+        usb->cameraId = 11;
+        usb->length = sizeof(ChunkMetadata) + payload.size();
+
+        auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
+        chunk->frameId = frameId;
+        chunk->cameraNumber = 0; // Valid supported camera
+        
+        // Copy the raw JPEG pixels into the end of the packet
+        std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata));
+        
+        return packet;
+    };
+
+    // 2. Construct Frame 1 (Fragmented across two chunks)
+    std::vector<uint8_t> payload1 = {0xFF, 0xD8, 0x01, 0x02}; // JPEG SOI
+    expectedPayload.insert(expectedPayload.end(), payload1.begin(), payload1.end());
+    auto packet1 = buildPacket(1, payload1);
+
+    std::vector<uint8_t> payload2 = {0x03, 0x04, 0x05, 0x06, 0xFF, 0xD9}; // JPEG EOI
+    expectedPayload.insert(expectedPayload.end(), payload2.begin(), payload2.end());
+    auto packet2 = buildPacket(1, payload2);
+
+    // 3. Construct Frame 2 (This change in ID triggers the emission of Frame 1)
+    auto packet3 = buildPacket(2, {0xFF, 0xD8, 0xAA, 0xBB});
+
+    // 4. Assert that OnBroadcast is called EXACTLY ONCE, 
+    // and that it contains the perfectly concatenated Frame 1 payload.
+    EXPECT_CALL(GetMock(), OnBroadcast(expectedPayload)).Times(1);
+
+    // 5. Stream the fragmented data into the decoder
+    GetDecoder().processIncomingCameraData(packet1);
+    GetDecoder().processIncomingCameraData(packet2);
+    GetDecoder().processIncomingCameraData(packet3); // <--- Triggers the emit
+}
+
 TEST_F(UsbFrameDecoderTest, IgnoresInvalidHeaderOrShortBuffer) {
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     EXPECT_CALL(GetMock(), OnButtonPress()).Times(0);
