@@ -80,6 +80,50 @@ TEST_F(UsbFrameDecoderTest, ReassemblesMultiChunkMjpegStream) {
     GetDecoder().processIncomingCameraData(packet3); // <--- Triggers the emit
 }
 
+TEST_F(UsbFrameDecoderTest, TriggersButtonHandlerOnHardwareFlag) {
+    // 1. Expand the lambda to control the hardware button flag
+    auto buildPacket = [](uint8_t frameId, bool isButtonPressed, const std::vector<uint8_t>& payload) {
+        std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(ChunkMetadata) + payload.size(), 0x00);
+        
+        auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
+        usb->header = 0xBBAA;
+        usb->cameraId = 11;
+        usb->length = sizeof(ChunkMetadata) + payload.size();
+
+        auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
+        chunk->frameId = frameId;
+        chunk->cameraNumber = 0; 
+        
+        // Directly map the boolean to the 1-bit hardware flag
+        chunk->buttonPress = isButtonPressed ? 1 : 0; 
+        
+        std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata));
+        
+        return packet;
+    };
+
+    // 2. We assert that the button callback is fired EXACTLY once, 
+    // proving it doesn't double-fire or get lost in the stream.
+    EXPECT_CALL(GetMock(), OnButtonPress()).Times(1);
+
+    // We do not care about the frame broadcast for this specific test, 
+    // so we can explicitly ignore any broadcast calls.
+    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(::testing::AnyNumber());
+
+    // 3. Simulate the stream and the hardware pulse
+    // Chunk 1: Normal video data, button NOT pressed
+    auto packet1 = buildPacket(1, false, {0xFF, 0xD8, 0x01});
+    GetDecoder().processIncomingCameraData(packet1);
+
+    // Chunk 2: The exact millisecond the user clicks the physical button on the cable
+    auto packet2 = buildPacket(1, true, {0x02, 0x03, 0x04});
+    GetDecoder().processIncomingCameraData(packet2);
+
+    // Chunk 3: Normal video data resumes, button is instantly released (the 0ms pulse)
+    auto packet3 = buildPacket(1, false, {0x05, 0xFF, 0xD9});
+    GetDecoder().processIncomingCameraData(packet3);
+}
+
 TEST_F(UsbFrameDecoderTest, IgnoresInvalidHeaderOrShortBuffer) {
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     EXPECT_CALL(GetMock(), OnButtonPress()).Times(0);
