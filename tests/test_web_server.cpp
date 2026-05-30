@@ -84,9 +84,16 @@ protected:
         std::string response;
         char buffer[4096] = {0};
         
-        int bytesRead = read(sock, buffer, sizeof(buffer));
-        if (bytesRead > 0) {
-            response.assign(buffer, bytesRead);
+        // Loop until the server closes the connection (returns 0) or times out (returns < 0)
+        while (true) {
+            std::fill(std::begin(buffer), std::end(buffer), 0);
+            int bytesRead = read(sock, buffer, sizeof(buffer));
+
+            if (bytesRead > 0) {
+                response.append(buffer, bytesRead);
+            } else {
+                break; 
+            }
         }
         
         close(sock);

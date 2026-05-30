@@ -35,6 +35,102 @@ protected:
     UsbFrameDecoder& GetDecoder() { return *decoder_; }
 };
 
+TEST_F(UsbFrameDecoderTest, ExposesBoundaryTruncationBug) {
+    // 1. Reusable lambda to build individual valid packets
+    auto buildPacket = [](uint8_t frameId, const std::vector<uint8_t>& payload) {
+        std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(ChunkMetadata) + payload.size(), 0x00);
+        
+        auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
+        usb->header = 0xBBAA;
+        usb->cameraId = 11;
+        usb->length = sizeof(ChunkMetadata) + payload.size();
+
+        auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
+        chunk->frameId = frameId;
+        chunk->cameraNumber = 0; 
+        
+        std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata));
+        
+        return packet;
+    };
+
+    // 2. Build a single chunk with a known payload.
+    // Total size: 5 (Header) + 7 (Metadata) + 10 (Payload) = 22 bytes.
+    std::vector<uint8_t> expectedPayload = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A};
+    auto packet = buildPacket(1, expectedPayload);
+
+    // 3. THE TRUNCATION: Split the 22-byte packet across two separate buffers.
+    // This perfectly mimics libusb cutting off a chunk because the 4KB transit buffer filled up.
+    std::vector<uint8_t> buffer1(packet.begin(), packet.begin() + 18); // Contains Header, Metadata, and FIRST 6 bytes of payload
+    std::vector<uint8_t> buffer2(packet.begin() + 18, packet.end());   // Contains the LAST 4 bytes of payload
+
+    // 4. Append a new frame to buffer2 to trigger the broadcast
+    auto triggerPacket = buildPacket(2, {0xFF, 0xD8});
+    buffer2.insert(buffer2.end(), triggerPacket.begin(), triggerPacket.end());
+
+    // 5. We now EXPECT the decoder to safely drop the corrupted, truncated data
+    // rather than emitting a mangled frame.
+    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
+
+    // 6. Execute the streaming sequence
+    GetDecoder().processIncomingCameraData(buffer1); 
+    GetDecoder().processIncomingCameraData(buffer2);
+}
+
+TEST_F(UsbFrameDecoderTest, ProcessesMultiplePacketsInSingleBufferClump) {
+    // 1. Reusable lambda to build individual valid packets
+    auto buildPacket = [](uint8_t frameId, const std::vector<uint8_t>& payload) {
+        std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(ChunkMetadata) + payload.size(), 0x00);
+        
+        auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
+        usb->header = 0xBBAA;
+        usb->cameraId = 11;
+        usb->length = sizeof(ChunkMetadata) + payload.size();
+
+        auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
+        chunk->frameId = frameId;
+        chunk->cameraNumber = 0; 
+        
+        std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata));
+        
+        return packet;
+    };
+
+    // 2. Create three distinct payloads for Frame 1
+    std::vector<uint8_t> payload1 = {0x01, 0x02, 0x03};
+    std::vector<uint8_t> payload2 = {0x04, 0x05, 0x06};
+    std::vector<uint8_t> payload3 = {0x07, 0x08, 0x09};
+
+    auto packet1 = buildPacket(1, payload1);
+    auto packet2 = buildPacket(1, payload2);
+    auto packet3 = buildPacket(1, payload3);
+
+    // 3. THE CLUMP: Combine all three packets into a single continuous buffer
+    // This perfectly mimics libusb handing us an optimized 4KB block of memory
+    std::vector<uint8_t> clumpedBuffer;
+    clumpedBuffer.insert(clumpedBuffer.end(), packet1.begin(), packet1.end());
+    clumpedBuffer.insert(clumpedBuffer.end(), packet2.begin(), packet2.end());
+    clumpedBuffer.insert(clumpedBuffer.end(), packet3.begin(), packet3.end());
+
+    // 4. Add a final packet claiming to be Frame 2. 
+    // This forces the decoder to emit the Frame 1 buffer it just accumulated.
+    auto triggerPacket = buildPacket(2, {0xFF, 0xD8});
+    clumpedBuffer.insert(clumpedBuffer.end(), triggerPacket.begin(), triggerPacket.end());
+
+    // 5. Build the expected final JPEG payload.
+    // If the 'while' loop works, it should strip all headers and neatly stack the payloads.
+    std::vector<uint8_t> expectedFinalPayload;
+    expectedFinalPayload.insert(expectedFinalPayload.end(), payload1.begin(), payload1.end());
+    expectedFinalPayload.insert(expectedFinalPayload.end(), payload2.begin(), payload2.end());
+    expectedFinalPayload.insert(expectedFinalPayload.end(), payload3.begin(), payload3.end());
+
+    // 6. Assert that OnBroadcast is called exactly once with ALL 9 bytes
+    EXPECT_CALL(GetMock(), OnBroadcast(expectedFinalPayload)).Times(1);
+
+    // 7. Execute the test: Pass the massive multi-packet buffer in a single span
+    GetDecoder().processIncomingCameraData(clumpedBuffer);
+}
+
 TEST_F(UsbFrameDecoderTest, ReassemblesMultiChunkMjpegStream) {
     // 1. Define the expected final JPEG payload for Frame 1
     std::vector<uint8_t> expectedPayload;

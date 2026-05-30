@@ -26,57 +26,76 @@ void UsbFrameDecoder::emitFrame() {
     frameBuffer.clear();
 }
 
-void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> readBuffer) {
-    if (readBuffer.size() < USB_FRAME_LENGTH) {
-        return;
-    }
+void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
+    size_t offset = 0;
 
-    const UsbPacketHeader *usbFrame = reinterpret_cast<const UsbPacketHeader *>(readBuffer.data());
+    // Continue as long as there are enough bytes left to form a valid routing header
+    while (offset + USB_FRAME_LENGTH <= data.size()) {
+        
+        const UsbPacketHeader *usbFrame = reinterpret_cast<const UsbPacketHeader *>(data.data() + offset);
 
-    if (usbFrame->header != USB_FRAME_HEADER) {
-        return;
-    }
-
-    auto it = std::find(std::begin(VALID_CAMERA_IDS), std::end(VALID_CAMERA_IDS), usbFrame->cameraId);
-    if (it == std::end(VALID_CAMERA_IDS)) {
-        return;
-    }
-
-    if (USB_FRAME_LENGTH + usbFrame->length > readBuffer.size()) {
-        return;
-    }
-
-    if (readBuffer.size() - USB_FRAME_LENGTH < CAMERA_FRAME_LENGTH) {
-        return;
-    }
-
-    const ChunkMetadata *frame = reinterpret_cast<const ChunkMetadata *>(readBuffer.data() + USB_FRAME_LENGTH);
-
-    // If the frame ID changes, emit the current frame buffer before processing the new frame
-    if (!frameBuffer.empty() && cameraFrame.frameId != frame->frameId) {
-        emitFrame();
-    }
-
-    if (frameBuffer.empty()) {
-        cameraFrame = *frame;
-        if (!isCameraSupported()) {
-            return;
+        // 1. SLIDING WINDOW SYNC: If we lose the header due to electrical noise, 
+        // advance byte-by-byte until we find the next 0xBBAA signature.
+        if (usbFrame->header != USB_FRAME_HEADER) {
+            offset++;
+            continue;
         }
-    } else {
-        if (!cameraFrame.isSameCamera(*frame)) {
-            return;
+
+        // Validate Camera ID
+        auto it = std::find(std::begin(VALID_CAMERA_IDS), std::end(VALID_CAMERA_IDS), usbFrame->cameraId);
+        if (it == std::end(VALID_CAMERA_IDS)) {
+            offset++; // Invalid ID. Assume corruption and try to resync.
+            continue;
         }
-    }
 
-    // If the button press flag is set, call the button handler
-    if (frame->buttonPress && buttonHandler) {
-        buttonHandler();
-    }
+        size_t totalChunkSize = USB_FRAME_LENGTH + usbFrame->length;
 
-    // Append the camera data to the frame buffer
-    auto cameraDataStart = readBuffer.begin() + USB_FRAME_LENGTH + CAMERA_FRAME_LENGTH;
-    auto cameraDataEnd = readBuffer.begin() + USB_FRAME_LENGTH + usbFrame->length;
-    frameBuffer.insert(frameBuffer.end(), cameraDataStart, cameraDataEnd);
+        // 2. BOUNDARY CHECK: If libusb cut the final packet in half at the end of our 4KB buffer,
+        // break and wait for the remaining bytes in the next read loop.
+        if (offset + totalChunkSize > data.size()) {
+            break;
+        }
+
+        // Validate payload length
+        if (usbFrame->length < CAMERA_FRAME_LENGTH) {
+            offset += totalChunkSize;
+            continue;
+        }
+
+        const ChunkMetadata *frame = reinterpret_cast<const ChunkMetadata *>(data.data() + offset + USB_FRAME_LENGTH);
+
+        // 3. EMIT FRAME: If the frame ID changes, we finished the last JPEG
+        if (!frameBuffer.empty() && cameraFrame.frameId != frame->frameId) {
+            emitFrame();
+        }
+
+        // 4. HARDWARE STATE: Track the active camera
+        if (frameBuffer.empty()) {
+            cameraFrame = *frame;
+            if (!isCameraSupported()) {
+                offset += totalChunkSize;
+                continue;
+            }
+        } else {
+            if (!cameraFrame.isSameCamera(*frame)) {
+                offset += totalChunkSize;
+                continue;
+            }
+        }
+
+        // 5. HARDWARE INTERRUPT: Trigger the snapshot if button is clicked
+        if (frame->buttonPress && buttonHandler) {
+            buttonHandler();
+        }
+
+        // 6. ACCUMULATION: Strip the headers and append ONLY the JPEG pixels
+        auto payloadStart = data.begin() + offset + USB_FRAME_LENGTH + CAMERA_FRAME_LENGTH;
+        auto payloadEnd   = data.begin() + offset + totalChunkSize;
+        frameBuffer.insert(frameBuffer.end(), payloadStart, payloadEnd);
+
+        // 7. ADVANCE: Move the offset pointer perfectly to the start of the next packet in the span
+        offset += totalChunkSize;
+    }
 }
 
 bool UsbFrameDecoder::isCameraSupported() const {

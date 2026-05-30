@@ -1,4 +1,5 @@
 #include "mjpeg_stream.hpp"
+#include "server_constants.hpp"
 #include "usb_camera.hpp"
 #include "usb_context.hpp"
 #include "usb_frame_decoder.hpp"
@@ -148,11 +149,11 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
             std::cout << std::format("{} [Hardware Engine] Pipeline operational...\n", serverTime.get());
             
             std::vector<uint8_t> readBuffer;
-            readBuffer.resize(ServerConstants::FOUR_KILOBYTES);
+            readBuffer.resize(ServerConstants::ONE_MEGABYTE);
 
             while (running) {
                 int bytesRead = 0;
-                int error = camera.read(readBuffer, ServerConstants::FOUR_KILOBYTES, bytesRead);
+                int error = camera.read(readBuffer, ServerConstants::ONE_MEGABYTE, bytesRead);
                 
                 if (error == 0) {
                     decoder.processIncomingCameraData(std::span{readBuffer.data(), static_cast<size_t>(bytesRead)});
