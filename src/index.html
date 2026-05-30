@@ -26,36 +26,30 @@
         </div>
     </div>
     <script>
-        // 1. Unified Reconnection Logic
         function resyncLiveStream() {
             const liveStream = document.getElementById('live-stream');
             if (liveStream) {
-                // Appending a timestamp forces the browser to discard the old 
-                // broken MJPEG socket and open a fresh one.
                 liveStream.src = '/?cb=' + Date.now();
             }
         }
 
-        // 2. Browser Visibility Resilience
         function handleResume() {
             if (document.visibilityState === "visible") {
                 resyncLiveStream();
             }
         }
+
         document.addEventListener("visibilitychange", handleResume);
         window.addEventListener("focus", handleResume);
 
-        // 3. Automated Error Recovery
         function reconnectStream() {
             console.log("Stream error detected. Retrying in 2 seconds...");
             setTimeout(resyncLiveStream, 2000);
         }
 
-        // 4. Snapshot Health-Check (Optional: use fetch here for better error control)
         async function refreshSnapshot() {
             const snap = document.getElementById('snap_view');
             try {
-                // We use fetch here so we can catch 404s/503s cleanly
                 const response = await fetch('/snapshot?t=' + Date.now());
                 if (response.ok) {
                     snap.src = response.url;
@@ -65,9 +59,8 @@
             }
         }
 
-        // Start everything
         setInterval(refreshSnapshot, 5000);
-        resyncLiveStream(); // Start the MJPEG stream once on load
+        resyncLiveStream();
     </script>
 </body>
 </html>

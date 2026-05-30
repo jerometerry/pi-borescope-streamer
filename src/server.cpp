@@ -1,6 +1,6 @@
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"
-#include "wall_clock.hpp" // <-- Added the concrete clock implementation
+#include "wall_clock.hpp"
 #include <csignal>
 #include <iostream>
 #include <string>

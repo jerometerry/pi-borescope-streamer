@@ -51,7 +51,6 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
 
     const ChunkMetadata *metadata = reinterpret_cast<const ChunkMetadata *>(data.data() + USB_PACKET_HEADER_LENGTH);
 
-    // If the frame ID changes, emit the current frame buffer before processing the new frame
     if (!frameBuffer.empty()) {
         if (metadata_.frameId != metadata->frameId) {
             emitFrame();
@@ -69,12 +68,10 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
         }
     }
 
-    // If the button press flag is set, call the button handler
     if (metadata->buttonPress && buttonHandler) {
         buttonHandler();
     }
 
-    // Append the camera data to the frame buffer
     auto cameraDataStart = data.begin() + USB_PACKET_HEADER_LENGTH + CHUNK_METADATA_LENGTH;
     auto cameraDataEnd = data.begin() + USB_PACKET_HEADER_LENGTH + header->length;
     frameBuffer.insert(frameBuffer.end(), cameraDataStart, cameraDataEnd);

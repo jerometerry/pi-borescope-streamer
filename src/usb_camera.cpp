@@ -27,7 +27,6 @@ UsbCamera::UsbCamera(const DeviceInfo& target) {
         throw std::runtime_error("Failed to claim USB hardware interfaces");
     }
 
-    // --- Heartbeat Draining (Interface 0) ---
     // Loop 30 times with a rapid 100ms timeout to clear out pending heartbeat data 
     // from the iAP interface before we attempt to stream.
     int drainBytes = 0;
@@ -61,7 +60,7 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
     libusb_context* ctx = nullptr;
     
     if (libusb_init(&ctx) < 0) {
-        return cameras; // Return empty on failure
+        return cameras;
     }
 
     libusb_device** devices = nullptr;
@@ -77,7 +76,6 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
         
         if (libusb_get_device_descriptor(device, &desc) < 0) continue;
 
-        // Check against our constexpr VIP/PID array
         bool isSupported = std::ranges::any_of(VENDOR_PRODUCT_ID_LIST,
             [&desc](const auto& vp) {
                 return desc.idVendor == vp.first && desc.idProduct == vp.second;
@@ -91,7 +89,6 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
                 .productId = desc.idProduct
             };
 
-            // Temporarily open to extract human-readable strings
             libusb_device_handle* handle = nullptr;
             if (libusb_open(device, &handle) == 0) {
                 unsigned char strBuf[256];
@@ -133,7 +130,7 @@ libusb_device_handle* UsbCamera::open(libusb_context *context, const DeviceInfo&
             libusb_get_device_address(device) == target.address) {
             
             if (libusb_open(device, &handle) == 0) {
-                break; // Found and opened successfully
+                break;
             }
         }
     }
@@ -145,7 +142,6 @@ libusb_device_handle* UsbCamera::open(libusb_context *context, const DeviceInfo&
 int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize) {
     int numBytes = 0;
 
-    // Ensure we don't overflow the pre-allocated capacity
     size_t readSize = std::min(maxSize, buffer.capacity());
 
     buffer.resize(readSize);

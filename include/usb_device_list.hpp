@@ -21,7 +21,6 @@ public:
      */
     ~UsbDeviceList() {
         if (devices) {
-            // The '1' automatically unrefs the devices in the list
             libusb_free_device_list(devices, 1);
         }
     }

@@ -7,8 +7,6 @@
 #include "server_time.hpp"
 #include "clock.hpp"
 
-// 1. A lightweight Test Stub (Replaces Google Mock)
-// This perfectly respects the 'noexcept' contract because it does no string manipulation.
 class TestClock : public Clock {
 public:
     std::chrono::steady_clock::time_point currentTime{std::chrono::steady_clock::now()};
@@ -32,16 +30,13 @@ protected:
     void SetUp() override {
         stream_ = std::make_unique<MjpegStream>(serverTime_);
 
-        // Artificially age the debounce timer into the past using our synthetic timeline
         stream_->buttonLastSeen = clock_.now() - std::chrono::milliseconds(250);
     }
 
-    // --- TIME TRAVEL HELPER ---
     void advanceTime(std::chrono::milliseconds ms) {
         clock_.advance(ms);
     }
 
-    // --- Proxy methods to access private MjpegStream members ---
     void callBroadcastFrame(const std::vector<uint8_t>& frame) {
         stream_->broadcastFrame(frame);
     }
@@ -79,7 +74,6 @@ protected:
     }
 };
 
-// 1. Tests the early return optimization
 TEST_F(MjpegStreamTest, IgnoresEmptyFrames) {
     callBroadcastFrame({});
     
@@ -87,7 +81,6 @@ TEST_F(MjpegStreamTest, IgnoresEmptyFrames) {
     EXPECT_EQ(getFrameId(), 0);
 }
 
-// 2. Tests the SOI (Start of Image) marker stripping algorithm
 TEST_F(MjpegStreamTest, StripsLeadingGarbageBeforeJpegSoi) {
     std::vector<uint8_t> corruptedFrame = {0x01, 0x02, 0x03, 0xFF, 0xD8, 0xAA, 0xBB, 0xCC};
     
@@ -99,14 +92,12 @@ TEST_F(MjpegStreamTest, StripsLeadingGarbageBeforeJpegSoi) {
     EXPECT_EQ(getFrameId(), 1); 
 }
 
-// 3. Tests the Snapshot pipeline integration
 TEST_F(MjpegStreamTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     EXPECT_FALSE(getButtonIsDepressed());
     
     callHardwareButtonCallback();
     EXPECT_TRUE(getButtonIsDepressed());
 
-    // Instantly jump time forward by 250ms
     advanceTime(std::chrono::milliseconds(250));
 
     callCheckForButtonQuickPress();
@@ -119,17 +110,13 @@ TEST_F(MjpegStreamTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     EXPECT_FALSE(getSnapshotNextFrame());
 }
 
-// 4. Tests the chrono math to prevent switch chatter AND long press bypass
 TEST_F(MjpegStreamTest, DebouncesRapidHardwareButtonPresses) {
-    // --- 1. Test Quick Press with Hardware Chatter ---
-    callHardwareButtonCallback(); // Initial press
+    callHardwareButtonCallback();
     EXPECT_TRUE(getButtonIsDepressed());
 
-    // Advance 20ms and simulate a hardware chatter pulse
     advanceTime(std::chrono::milliseconds(20));
     callHardwareButtonCallback(); 
 
-    // Instantly bypass the silence window
     advanceTime(std::chrono::milliseconds(250));
 
     callCheckForButtonQuickPress();
@@ -137,16 +124,13 @@ TEST_F(MjpegStreamTest, DebouncesRapidHardwareButtonPresses) {
     
     setSnapshotNextFrame(false);
 
-    // --- 2. Test Long Press (Lens Toggle Bypass) ---
-    callHardwareButtonCallback(); // Press starts
-    
-    // Simulate a 600ms hold, dropping a pulse every 50ms
+    callHardwareButtonCallback();
+
     for (int i = 0; i < 12; ++i) {
         advanceTime(std::chrono::milliseconds(50));
         callHardwareButtonCallback();
     }
-    
-    // Jump past the silence window
+
     advanceTime(std::chrono::milliseconds(250)); 
     
     callCheckForButtonQuickPress();

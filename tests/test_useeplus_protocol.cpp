@@ -33,30 +33,27 @@ protected:
     UsbFrameDecoder& GetDecoder() { return *decoder_; }
 };
 
-// 1. Tests how UsbFrameDecoder defeats the 1104-byte hardware fragmentation
 TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     size_t headerSize = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
-    
-    // Build the 1024-byte packet dynamically to ensure exact compiler sizing
+
     std::vector<uint8_t> hardwarePacket(1024, 0xDD); 
     
-    auto* usb1 = reinterpret_cast<UsbPacketHeader*>(hardwarePacket.data());
-    usb1->header = 0xBBAA;
-    usb1->cameraId = 11;
-    usb1->length = 939; // Deceptive declared length
+    auto* usb = reinterpret_cast<UsbPacketHeader*>(hardwarePacket.data());
+    usb->header = 0xBBAA;
+    usb->cameraId = 11;
+    usb->length = 939;
 
-    auto* chunk1 = reinterpret_cast<ChunkMetadata*>(hardwarePacket.data() + sizeof(UsbPacketHeader));
-    chunk1->frameId = 2;
-    chunk1->cameraNumber = 0;
-    chunk1->hasGravitySensor = 0;
-    chunk1->gravitySensor = 0;
-    chunk1->otherFlags = 0;
+    auto* chunk = reinterpret_cast<ChunkMetadata*>(hardwarePacket.data() + sizeof(UsbPacketHeader));
+    chunk->frameId = 2;
+    chunk->cameraNumber = 0;
+    chunk->hasGravitySensor = 0;
+    chunk->gravitySensor = 0;
+    chunk->otherFlags = 0;
 
     // Place the JPEG SOI markers immediately after the headers
     hardwarePacket[headerSize] = 0xFF;
     hardwarePacket[headerSize + 1] = 0xD8;
-    
-    // Create a second frame to trigger the emission of Frame 2
+
     std::vector<uint8_t> triggerFrame = hardwarePacket; 
     auto* triggerChunk = reinterpret_cast<ChunkMetadata*>(triggerFrame.data() + sizeof(UsbPacketHeader));
     triggerChunk->frameId = 3;
@@ -65,10 +62,9 @@ TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     triggerChunk->gravitySensor = 0;
     triggerChunk->otherFlags = 0;
 
-    // EXPECTATION: The decoder extracts EVERYTHING after the dynamic header size
     std::vector<uint8_t> expectedPayload(
         hardwarePacket.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata),
-        hardwarePacket.begin() + sizeof(UsbPacketHeader) + usb1->length
+        hardwarePacket.begin() + sizeof(UsbPacketHeader) + usb->length
     );
     EXPECT_CALL(GetMock(), OnBroadcast(expectedPayload)).Times(1);
 
@@ -76,9 +72,7 @@ TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     GetDecoder().processIncomingCameraData(triggerFrame);
 }
 
-// 2. Tests how UsbFrameDecoder safely discards fractured hardware tails
 TEST_F(UsbFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
-    // Simulate the first 1024-byte valid read
     std::vector<uint8_t> validHeader(1024, 0x00);
     auto* usb = reinterpret_cast<UsbPacketHeader*>(validHeader.data());
     usb->header = 0xBBAA;
@@ -91,11 +85,9 @@ TEST_F(UsbFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
     chunk->hasGravitySensor = 0;
     chunk->gravitySensor = 0;
     chunk->otherFlags = 0;
-    
-    // Simulate the leftover 80-byte Short Packet from the hardware burst.
+
     std::vector<uint8_t> shortPacketTail(80, 0xFF);
 
-    // Simulate the start of the next hardware burst
     std::vector<uint8_t> triggerFrame = validHeader;
     auto* triggerChunk = reinterpret_cast<ChunkMetadata*>(triggerFrame.data() + sizeof(UsbPacketHeader));
     triggerChunk->frameId = 2;
@@ -104,7 +96,6 @@ TEST_F(UsbFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
     triggerChunk->gravitySensor = 0;
     triggerChunk->otherFlags = 0;
 
-    // EXPECTATION: The decoder extracts the valid 1024 buffer minus the dynamic headers
     std::vector<uint8_t> expectedPayload(1024 - sizeof(UsbPacketHeader) - sizeof(ChunkMetadata), 0x00);
     EXPECT_CALL(GetMock(), OnBroadcast(expectedPayload)).Times(1);
 
@@ -216,7 +207,6 @@ TEST_F(UsbFrameDecoderTest, TriggersButtonHandlerOnFlag) {
     chunk->otherFlags = 0;
 
     EXPECT_CALL(GetMock(), OnButtonPress()).Times(1);
-
     GetDecoder().processIncomingCameraData(packet);
 }
 
@@ -266,7 +256,7 @@ TEST_F(UsbFrameDecoderTest, IgnoresInvalidCameraId) {
     std::vector<uint8_t> packet(20, 0x00);
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
     usb->header = 0xBBAA;
-    usb->cameraId = 99; // Invalid ID 
+    usb->cameraId = 99;
     usb->length = 15;
 
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
@@ -280,8 +270,6 @@ TEST_F(UsbFrameDecoderTest, IgnoresPayloadExceedingBufferSize) {
     usb->cameraId = 11;
     usb->length = 50; 
 
-    // Because V1 doesn't bounds-check the declared length against the buffer size
-    // it will fail at the CAMERA_HEADER_LENGTH check: 10 - 5 < 7
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     GetDecoder().processIncomingCameraData(packet);
 }
