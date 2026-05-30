@@ -161,3 +161,12 @@ if(BUILD_TESTING)
     include(GoogleTest)
     gtest_discover_tests(run_project_tests)
 endif()
+
+option(ENABLE_COVERAGE "Enable code coverage tracking" OFF)
+if(ENABLE_COVERAGE)
+    target_compile_options(useeplus_protocol PUBLIC --coverage)
+    target_link_options(useeplus_protocol PUBLIC --coverage)
+    
+    target_compile_options(mjpeg_streamer PUBLIC --coverage)
+    target_link_options(mjpeg_streamer PUBLIC --coverage)
+endif()
