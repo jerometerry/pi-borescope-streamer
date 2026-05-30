@@ -1,8 +1,6 @@
 #pragma once
 
 #include "device_info.hpp"
-#include <cstdint>
-#include <utility>
 #include <vector>
 
 class UsbContext;
@@ -38,10 +36,4 @@ namespace DeviceFinder {
      * @return A pointer to the opened device handle, or nullptr if failed
      */
     libusb_device_handle* open(UsbContext& context, const DeviceInfo& target);
-
-    /** 
-     * @brief A list of vendor and product IDs for supported devices
-     */
-    inline constexpr std::pair<uint16_t, uint16_t> VENDOR_PRODUCT_ID_LIST[] = 
-        {{0x2ce3, 0x3828}, {0x0329, 0x2022}};
 };

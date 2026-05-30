@@ -19,7 +19,6 @@ public:
     void processIncomingCameraData(std::span<const uint8_t> data);
 
 private:
-    static constexpr uint16_t USB_FRAME_HEADER = 0xBBAA;
     static constexpr size_t USB_PACKET_HEADER_LENGTH = sizeof(UsbPacketHeader);
     static constexpr size_t CHUNK_METADATA_LENGTH = sizeof(ChunkMetadata);
 

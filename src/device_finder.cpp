@@ -1,8 +1,8 @@
 #include "device_finder.hpp"
+#include "server_constants.hpp"
 #include "usb_context.hpp"
 #include "usb_device_list.hpp"
 #include <algorithm>
-#include <span>
 #include <string>
 
 #include <libusb.h>
@@ -27,7 +27,7 @@ std::vector<DeviceInfo> DeviceFinder::find(bool onlySuperCameras) {
             continue; 
         }
 
-        bool isSuperCamera = std::ranges::any_of(VENDOR_PRODUCT_ID_LIST,
+        bool isSuperCamera = std::ranges::any_of(ServerConstants::VENDOR_PRODUCT_ID_LIST,
             [&desc](const auto& vp) {
                 return desc.idVendor == vp.first && desc.idProduct == vp.second;
             });

@@ -207,7 +207,7 @@ TEST_F(UsbFrameDecoderTest, TriggersButtonHandlerOnFlag) {
     chunk->buttonPress = 1;
     chunk->cameraNumber = 0;
     chunk->hasGravitySensor = 0;
-    chunk->hasGravitySensor = 0;
+    chunk->gravitySensor = 0;
     chunk->otherFlags = 0;
 
     EXPECT_CALL(GetMock(), OnButtonPress()).Times(1);

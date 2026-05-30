@@ -69,11 +69,6 @@ public:
     int read(std::vector<uint8_t> &buffer);
 
 private:
-    /**
-     * @brief
-     */
-    static constexpr std::pair<uint16_t, uint16_t> VENDOR_PRODUCT_ID_LIST[] = {{0x2ce3, 0x3828}, {0x0329, 0x2022}};
-
     /** 
      * @brief The number of the interface A
      */

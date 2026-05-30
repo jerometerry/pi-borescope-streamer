@@ -1,12 +1,9 @@
 #include "usb_camera.hpp"
-#include "wall_clock.hpp"
 #include "device_info.hpp"
-#include "server_time.hpp"
 #include "usb_camera.hpp"
 #include "usb_frame_decoder.hpp"
 #include "server_constants.hpp"
 
-#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -26,7 +23,7 @@
 static bool running = true;
 static std::mutex frameMutex;
 static uint32_t frameId = 0;
-static char DUMP_FILE[] = "raw_camera_dump.bin";
+static constexpr std::string DUMP_FILE = "raw_camera_dump.bin";
 
 void signalHandler(int signal) {
     std::cout << "\nSignal " << signal << " received. Initiating shutdown...\n";
@@ -53,7 +50,7 @@ void startVideoFeed(const DeviceInfo& target) {
         std::cout << "[Hardware Engine] Pipeline operational.\n";
 
         std::cout << "[Debug] Opening binary stream dump: raw_camera_dump.bin\n";
-        std::ofstream rawDump(DUMP_FILE, std::ios::binary);
+        std::ofstream rawDump(DUMP_FILE.data(), std::ios::binary);
 
         std::vector<uint8_t> readBuffer;
         readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
@@ -120,9 +117,6 @@ int main() {
 
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
-
-        WallClock systemClock;
-        const ServerTime serverTime(systemClock, std::chrono::steady_clock::now());
 
         std::thread streamThread(startVideoFeed, camera);
 

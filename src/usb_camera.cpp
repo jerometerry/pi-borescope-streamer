@@ -83,7 +83,7 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
         
         if (libusb_get_device_descriptor(device, &desc) < 0) continue;
 
-        bool isSupported = std::ranges::any_of(VENDOR_PRODUCT_ID_LIST,
+        bool isSupported = std::ranges::any_of(ServerConstants::VENDOR_PRODUCT_ID_LIST,
             [&desc](const auto& vp) {
                 return desc.idVendor == vp.first && desc.idProduct == vp.second;
             });

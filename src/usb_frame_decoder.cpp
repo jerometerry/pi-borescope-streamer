@@ -8,9 +8,6 @@
 #include <iterator>
 #include <utility>
 
-// Define a list of valid camera IDs that we expect to receive in the USB frames. This list is used to validate the camera ID in the USB frame header and ensure that we only process frames from known camera IDs. This is important to prevent processing invalid or unexpected frames that could cause errors or unexpected behavior in our application.
-static constexpr uint8_t VALID_CAMERA_IDS[] = {7, 11};
-
 // Ensure that the code is compiled on a little-endian platform, since the protocol relies on little-endian byte order for the USB frame and camera header. This check is important to prevent issues with byte order when interpreting the raw byte data from the USB frames, and to ensure that the code behaves correctly on platforms with different endianness.
 static_assert(std::endian::native == std::endian::little);
 
@@ -34,12 +31,12 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
 
     const UsbPacketHeader *header = reinterpret_cast<const UsbPacketHeader *>(data.data());
 
-    if (header->header != USB_FRAME_HEADER) {
+    if (header->header != ServerConstants::USB_FRAME_HEADER) {
         return;
     }
 
-    auto it = std::find(std::begin(VALID_CAMERA_IDS), std::end(VALID_CAMERA_IDS), header->cameraId);
-    if (it == std::end(VALID_CAMERA_IDS)) {
+    auto it = std::find(std::begin(ServerConstants::VALID_CAMERA_IDS), std::end(ServerConstants::VALID_CAMERA_IDS), header->cameraId);
+    if (it == std::end(ServerConstants::VALID_CAMERA_IDS)) {
         return;
     }
 
