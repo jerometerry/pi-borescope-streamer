@@ -1,7 +1,7 @@
 #include "chunk_metadata.hpp"
 #include "usb_frame_decoder.hpp"
 #include "server_constants.hpp"
-#include "usb_frame.hpp"
+#include "usb_packet_header.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -25,59 +25,61 @@ void UsbFrameDecoder::emitFrame() {
     frameBuffer.clear();
 }
 
-void UsbFrameDecoder::processIncomingCameraData(const std::vector<uint8_t> &data) {
-    if (data.size() < USB_HEADER_LENGTH) {
+void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
+    if (data.size() < USB_PACKET_HEADER_LENGTH) {
         return;
     }
 
-    const UsbFrame *usbFrame = reinterpret_cast<const UsbFrame *>(data.data());
+    const UsbPacketHeader *header = reinterpret_cast<const UsbPacketHeader *>(data.data());
 
-    if (usbFrame->header != USB_FRAME_HEADER) {
+    if (header->header != USB_FRAME_HEADER) {
         return;
     }
 
-    auto it = std::find(std::begin(VALID_CAMERA_IDS), std::end(VALID_CAMERA_IDS), usbFrame->cameraId);
+    auto it = std::find(std::begin(VALID_CAMERA_IDS), std::end(VALID_CAMERA_IDS), header->cameraId);
     if (it == std::end(VALID_CAMERA_IDS)) {
         return;
     }
 
-    if (USB_HEADER_LENGTH + usbFrame->length > data.size()) {
+    if (USB_PACKET_HEADER_LENGTH + header->length > data.size()) {
         return;
     }
 
-    if (data.size() - USB_HEADER_LENGTH < CAMERA_HEADER_LENGTH) {
+    if (data.size() - USB_PACKET_HEADER_LENGTH < CHUNK_METADATA_LENGTH) {
         return;
     }
 
-    const ChunkMetadata *header = reinterpret_cast<const ChunkMetadata *>(data.data() + USB_HEADER_LENGTH);
+    const ChunkMetadata *metadata = reinterpret_cast<const ChunkMetadata *>(data.data() + USB_PACKET_HEADER_LENGTH);
 
     // If the frame ID changes, emit the current frame buffer before processing the new frame
-    if (!frameBuffer.empty() && cameraHeader.frameId != header->frameId) {
-        emitFrame();
-    }
+    if (!frameBuffer.empty()) {
+        if (metadata_.frameId != metadata->frameId) {
+            emitFrame();
+        }
+    }    
 
     if (frameBuffer.empty()) {
-        cameraHeader = *header;
+        metadata_ = *metadata;
         if (!isCameraSupported()) {
             return;
         }
     } else {
-        if (!cameraHeader.isSameCamera(*header)) {
+        if (!metadata_.isSameCamera(*metadata)) {
             return;
         }
     }
 
     // If the button press flag is set, call the button handler
-    if (header->buttonPress && buttonHandler) {
+    if (metadata->buttonPress && buttonHandler) {
         buttonHandler();
     }
 
     // Append the camera data to the frame buffer
-    auto cameraDataStart = data.begin() + USB_HEADER_LENGTH + CAMERA_HEADER_LENGTH;
-    auto cameraDataEnd = data.begin() + USB_HEADER_LENGTH + usbFrame->length;
+    auto cameraDataStart = data.begin() + USB_PACKET_HEADER_LENGTH + CHUNK_METADATA_LENGTH;
+    auto cameraDataEnd = data.begin() + USB_PACKET_HEADER_LENGTH + header->length;
     frameBuffer.insert(frameBuffer.end(), cameraDataStart, cameraDataEnd);
 }
 
 bool UsbFrameDecoder::isCameraSupported() const {
-    return cameraHeader.cameraNumber < 2 && cameraHeader.hasGravitySensor == 0 && cameraHeader.otherFlags == 0;
+    return metadata_.cameraNumber < 2 && metadata_.hasGravitySensor == 0 && metadata_.otherFlags == 0;
 }

@@ -1,10 +1,12 @@
 #pragma once
 
 #include "chunk_metadata.hpp"
-#include "usb_frame.hpp"
+#include "usb_packet_header.hpp"
 
 #include <cstdint>
 #include <functional>
+#include <span>
+#include <vector>
 
 class UsbFrameDecoder {
 public:
@@ -13,15 +15,15 @@ public:
         std::function<void()> buttonHandler
     );
 
-    void processIncomingCameraData(const std::vector<uint8_t> &data);
+    void processIncomingCameraData(std::span<const uint8_t> data);
 
 private:
     static constexpr uint16_t USB_FRAME_HEADER = 0xBBAA;
-    static constexpr size_t USB_HEADER_LENGTH = sizeof(UsbFrame);
-    static constexpr size_t CAMERA_HEADER_LENGTH = sizeof(ChunkMetadata);
+    static constexpr size_t USB_PACKET_HEADER_LENGTH = sizeof(UsbPacketHeader);
+    static constexpr size_t CHUNK_METADATA_LENGTH = sizeof(ChunkMetadata);
 
     std::vector<uint8_t> frameBuffer;
-    ChunkMetadata cameraHeader{};
+    ChunkMetadata metadata_{};
     
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler;
     std::function<void()> buttonHandler;

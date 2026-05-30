@@ -11,6 +11,7 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+//#include <fstream>
 #include <libusb.h>
 
 MjpegStream::MjpegStream(const ServerTime& serverTime) : serverTime(serverTime) {}
@@ -140,6 +141,10 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
         UsbFrameDecoder decoder(broadcastHandler, buttonHandler);
         std::cout << "[Hardware Engine] Pipeline operational.\n";
 
+        // --- BINARY FILE LOGGER ---
+        //std::cout << "[Debug] Opening binary stream dump: raw_camera_dump.bin\n";
+        //std::ofstream rawDump("raw_camera_dump.bin", std::ios::binary);
+
         // Main capture loop: continuously read frames from the camera and pass them to the protocol handler for processing. If the camera is disconnected, libusb will return an error code which we check for to break the loop and initiate shutdown. We also call the button release state monitor on each iteration to check for any button release events that may have occurred since the last frame read.
         std::vector<uint8_t> readBuffer;
         readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
@@ -147,7 +152,13 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
         while (running) {
             int error = camera.read(readBuffer);
             if (error == 0) {
-                decoder.processIncomingCameraData(readBuffer);
+
+                //if (rawDump.is_open()) {
+                //    rawDump.write(reinterpret_cast<const char*>(readBuffer.data()), readBuffer.size());
+                //    rawDump.flush(); // Ensure data survives a crash/Ctrl+C
+                //}
+
+                decoder.processIncomingCameraData(std::span<const uint8_t>{readBuffer});
             } else if (error == LIBUSB_ERROR_NO_DEVICE) {
                 std::cerr << "[Hardware Engine] Device disconnected.\n";
                 running = false;

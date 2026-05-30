@@ -1,7 +1,6 @@
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
 #include <stdexcept>
-#include <span>
 #include <libusb.h>
 
 static constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
