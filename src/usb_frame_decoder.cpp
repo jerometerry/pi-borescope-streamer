@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <bit>
+#include <iterator>
+#include <utility>
 
 // Define a list of valid camera IDs that we expect to receive in the USB frames. This list is used to validate the camera ID in the USB frame header and ensure that we only process frames from known camera IDs. This is important to prevent processing invalid or unexpected frames that could cause errors or unexpected behavior in our application.
 static constexpr uint8_t VALID_CAMERA_IDS[] = {7, 11};

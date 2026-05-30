@@ -1,9 +1,8 @@
 #pragma once
 
 #include "device_info.hpp"
-#include <algorithm>
+#include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <vector>
 #include <utility>
 

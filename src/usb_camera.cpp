@@ -1,5 +1,8 @@
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
+#include <algorithm>
+#include <initializer_list>
+#include <string>
 #include <stdexcept>
 #include <libusb.h>
 
@@ -86,7 +89,11 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
                 .bus = libusb_get_bus_number(device),
                 .address = libusb_get_device_address(device),
                 .vendorId = desc.idVendor,
-                .productId = desc.idProduct
+                .productId = desc.idProduct,
+                .manufacturer = "Unknown",
+                .product = "Unknown",
+                .serialNumber = "Unknown",
+                .isSuperCamera = true
             };
 
             libusb_device_handle* handle = nullptr;

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "clock.hpp"
 #include <chrono>
+class Clock;
 
 /**
  * @brief Class representing the time for the server
