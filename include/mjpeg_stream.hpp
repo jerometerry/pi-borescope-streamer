@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <format>
 #include <mutex>
 #include <vector>
 #include "server_time.hpp"

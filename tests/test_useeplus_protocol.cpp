@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <memory>
 #include <span>

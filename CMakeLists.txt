@@ -27,6 +27,8 @@ if(CLANG_TIDY_EXE)
         "-checks=-*,performance-*,concurrency-*,bugprone-*,modernize-*,cppcoreguidelines-*,-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-avoid-c-arrays,-modernize-avoid-c-arrays,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-non-const-global-variables,-bugprone-throwing-static-initialization,-modernize-use-designated-initializers,-modernize-use-integer-sign-comparison,-modernize-use-auto,-modernize-use-ranges,-bugprone-narrowing-conversions,-cppcoreguidelines-narrowing-conversions,-modernize-avoid-c-style-cast,-cppcoreguidelines-pro-type-const-cast,-modernize-use-nodiscard,-modernize-use-equals-default,-cppcoreguidelines-special-member-functions,-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access"
         "-warnings-as-errors=*"
     )
+else()
+    message(WARNING "clang-tidy not found")
 endif()
 
 find_program(CPPCHECK_EXE NAMES "cppcheck" PATHS "/opt/homebrew/bin" "/usr/local/bin")
@@ -39,11 +41,15 @@ if(CPPCHECK_EXE)
         "--suppress=unmatchedSuppression"
         "--suppress=style" 
     )
+else()
+    message(WARNING "cppcheck not found")
 endif()
 
 find_program(IWYU_EXE NAMES "include-what-you-use" PATHS "/opt/homebrew/bin" "/usr/local/bin")
 if(IWYU_EXE)
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXE}")
+else()
+    message(WARNING "include-what-you-use not found")
 endif()
 
 add_library(project_warnings INTERFACE)

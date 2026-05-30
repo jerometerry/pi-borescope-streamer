@@ -1,10 +1,10 @@
 #pragma once
 
+#include <libusb.h>
 #include <vector>
 #include "device_info.hpp"
 
 class UsbContext;
-struct libusb_device_handle;
 
 /** 
  * @brief Namespace for finding and managing USB devices

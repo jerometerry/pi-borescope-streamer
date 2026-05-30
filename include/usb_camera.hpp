@@ -1,11 +1,10 @@
 #pragma once
 
+#include <libusb.h>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
 #include "device_info.hpp"
-struct libusb_context;
-struct libusb_device_handle;
 
 /** 
  * @brief Class representing a USB camera
