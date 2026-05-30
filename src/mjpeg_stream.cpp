@@ -6,7 +6,6 @@
 #include "device_info.hpp"
 
 #include <atomic>
-#include <csignal>
 #include <cstdlib>
 #include <exception>
 #include <functional>
