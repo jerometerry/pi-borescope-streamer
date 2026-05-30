@@ -62,14 +62,38 @@ translates to `JFIF` in ASCII, confirming the payload is a standard JPEG file fo
 
 ## The Chunk Metadata (The 7-Byte Payload Header)
 
-Immediately following the 5-byte USB Frame Header (`aa bb 0b ab 03`), the camera inserts exactly 7 bytes of 
+The 2-byte USB_FRAME_HEADER `aa bb` (`UsbPacketHeader.header`) is followed by a 1-byte camera ID 
+(`UsbPacketHeader.cameraId`), and then 2-byte length specifier (`UsbPacketHeader.length`). These 5 bytes map to the 
+`UsbPacketHeader` struct. 
+
+```
+struct [[gnu::packed]] UsbPacketHeader {
+    uint16_t header;
+    uint8_t cameraId;
+    uint16_t length;
+};
+```
+
+Immediately following the 5-byte USB Packet Header (`aa bb 0b ab 03`), the camera inserts exactly 7 bytes of 
 proprietary `ChunkMetadata` before the actual JPEG pixels begin.
 
 Let's look at the 12 bytes preceding the JPEG SOI (`ff d8`) from our hex dump:
 `aa bb 0b ab 03` **`02 00 00 60 33 30 24`** `ff d8...`
 
-This 7-byte block (**`02 00 00 60 33 30 24`**) is mapped directly to our C++ `ChunkMetadata` struct. It controls the 
-video assembly state machine and hardware interrupts:
+This 7-byte block (**`02 00 00 60 33 30 24`**) is mapped directly to our C++ `ChunkMetadata` struct. 
+
+```
+struct [[gnu::packed]] ChunkMetadata {
+    uint8_t frameId;
+    uint8_t cameraNumber;
+    unsigned char hasGravitySensor:1;
+    unsigned char buttonPress:1;
+    unsigned char otherFlags:6;
+    uint32_t gravitySensor;
+};
+```
+
+It controls the video assembly state machine and hardware interrupts:
 
 * **The Button Press Flag:** The Useeplus cable features a physical hardware button. When squeezed, the camera does 
 *not* send a separate USB interrupt. Instead, it flips a specific bit (`buttonPress`) inside this metadata block to `1` 

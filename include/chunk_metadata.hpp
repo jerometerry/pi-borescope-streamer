@@ -19,7 +19,7 @@ struct [[gnu::packed]] ChunkMetadata {
     /** 
      * @brief Flag indicating if the gravity sensor is present
      */
-     unsigned char hasGravitySensor:1;
+    unsigned char hasGravitySensor:1;
 
      /** 
      * @brief Flag indicating if the button is pressed
