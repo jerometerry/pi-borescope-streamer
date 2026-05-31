@@ -49,8 +49,13 @@ By mapping this hex dump to our C++ implementation, we can decode the Useeplus h
 using specific vendor and product IDs (e.g., `0x2ce3:0x3828` or `0x0329:0x2022`).
 * **The Packet Delimiter (`USB_FRAME_HEADER`):** On line 3, we see the sequence `aa bb`. This matches our C++ 
 definition of `0xBBAA` (Little-Endian) and marks the start of a new USB chunk.
-* **The Camera ID (`VALID_CAMERA_IDS`):** Immediately following the `aa bb` header is the byte `0b`. In decimal, 
-`0x0B` is `11`. This matches our supported array `{7, 11}`, proving the chunk came from a valid sensor.
+* **The Camera ID (`VALID_CAMERA_IDS`):** The Useeplus hardware multiplexes two separate streams over the 
+USB pipe.
+  * Camera `11` (`0x0B`) is the **Video Feed** (transmitting 939-byte payloads).
+    * When decoding the video feed we filter to Camera `11`(`0x0B`) to assemble video frames
+  * Camera `7` (`0x07`) is the **Gravity Sensor Feed** (transmitting 427-byte payloads).
+    * Decoding of the video feed does not need to use this feed. However, if you want to ensure the video is rendered 
+    in the correct orientation, this data would be necessary then. This isn't being done for this project (yet).
 * **The JPEG SOI Marker (`JPEG_SOI_MARKERS`):** On line 4, we see the sequence `ff d8`. This is the universal JPEG 
 Start of Image (SOI) marker. Our decoder expects to find this marker within the first 32 bytes of the payload 
 (`JPEG_SOI_MARKERS_MAX_POSITION`).
@@ -195,21 +200,21 @@ Our C++ `UsbFrameDecoder` is explicitly designed to be immune to this flaw. By r
 bounding our vector insertion to the declared `header->length`, we extract the valid JPEG data and discard 
 the uninitialized hardware memory leak.
 
-### The 1024-Byte Kernel Buffer
+### The 1104-Byte Hardware Burst
 
-This diagram illustrates the "Hardware Fragmentation Flaw" section. It visually breaks down a single 1024-byte read 
-array, highlighting the 12-byte safety offset and the 80 bytes of corrupted hardware memory that the UsbFrameDecoder 
+This diagram illustrates the "Hardware Fragmentation Flaw" section. It visually breaks down a single 1104-byte hardware 
+burst, highlighting the 12-byte safety offset and the 153 bytes of corrupted hardware memory that the UsbFrameDecoder 
 drops.
 
 ```mermaid
 flowchart LR
-    subgraph Buffer ["Single 1024-Byte libusb Read Buffer"]
+    subgraph Buffer ["Single 1104-Byte Hardware Burst"]
         direction LR
         
         H["USB Header<br/>5 Bytes<br/>AA BB 0B AB 03"]
         M["Chunk Metadata<br/>7 Bytes<br/>ID, Flags, Button"]
         P["Valid JPEG Payload<br/>939 Bytes<br/>(Extracted by C++)"]
-        G["Ghost Padding<br/>80 Bytes<br/>(Safely Ignored)"]
+        G["Ghost Padding<br/>153 Bytes<br/>(Safely Ignored)"]
 
         H --- M --- P --- G
     end
@@ -219,4 +224,5 @@ flowchart LR
     style M fill:#8b5cf6,stroke:#4c1d95,stroke-width:2px,color:#fff
     style P fill:#10b981,stroke:#064e3b,stroke-width:2px,color:#fff
     style G fill:#ef4444,stroke:#7f1d1d,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+
 ```
