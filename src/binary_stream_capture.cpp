@@ -15,69 +15,84 @@
 #include <mutex>
 #include <span>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <vector>
+#include <atomic>
+#include <array>
 
-#include <libusb.h>
+constexpr size_t CACHE_LINE_SIZE = 64;
 
-static bool running = true;
+static std::atomic<bool> running{true};
 static std::mutex frameMutex;
 static uint32_t frameId = 0;
-static const std::string DUMP_FILE = "raw_camera_dump.bin";
 
-void signalHandler(int signal) {
-    std::cout << "\nSignal " << signal << " received. Initiating shutdown...\n";
-    running = false;
-}
+static constexpr const char* DUMP_FILE = "raw_camera_dump.bin";
 
-void startVideoFeed(const DeviceInfo& target) {
-    auto broadcastHandler = [](const std::vector<uint8_t>& frame) { 
-        if (frame.empty()) {
-            return;
-        }
+template <size_t QueueSize = 16>
+class StreamDisruptor {
+    static_assert((QueueSize & (QueueSize - 1)) == 0, "QueueSize must be a power of 2.");
 
-        {
-            std::scoped_lock<std::mutex> lock(frameMutex);
-            frameId++;
+    struct Slot {
+        std::vector<uint8_t> buffer;
+        Slot() {
+            buffer.reserve(ServerConstants::ONE_MEGABYTE); 
         }
     };
+
+    std::array<Slot, QueueSize> ring;
+
+    alignas(CACHE_LINE_SIZE) std::atomic<uint64_t> published_sequence{0};
+    alignas(CACHE_LINE_SIZE) std::atomic<uint64_t> consumed_sequence{0};
     
-    auto buttonHandler = []() {};
+    alignas(CACHE_LINE_SIZE) uint64_t cached_consumed_sequence{0};
+    alignas(CACHE_LINE_SIZE) uint64_t next_claim_sequence{0};
 
-    try {
-        UsbCamera camera(target);
-        UsbFrameDecoder decoder(broadcastHandler, buttonHandler);
-        
-        // Open the binary dump file
-        std::ofstream dumpFile(DUMP_FILE.data(), std::ios::binary);
-        if (!dumpFile) {
-            std::cerr << "[Error] Failed to open " << DUMP_FILE << " for writing.\n";
-            return;
-        }
-
-        std::cout << "[Hardware Engine] Pipeline operational. Writing raw URB stream to disk...\n";
-
-        std::vector<uint8_t> readBuffer;
-        readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
-
-        while (running) {
-            int error = camera.read(readBuffer);
-            if (error == 0) {
-                // EXACT HARDWARE MIRROR: Write the raw libusb buffer (including the 80-byte ghost padding) 
-                // directly to disk before the decoder touches it.
-                dumpFile.write(reinterpret_cast<const char*>(readBuffer.data()), readBuffer.size());
-                
-                decoder.processIncomingCameraData(std::span<const uint8_t>{readBuffer});
-            } else if (error == LIBUSB_ERROR_NO_DEVICE) {
-                std::cerr << "[Hardware Engine] Device disconnected.\n";
-                running = false;
+public:
+    std::vector<uint8_t>* claim() {
+        while (next_claim_sequence - cached_consumed_sequence >= QueueSize) {
+            if (!running.load(std::memory_order_relaxed)) return nullptr;
+            
+            cached_consumed_sequence = consumed_sequence.load(std::memory_order_acquire);
+            if (next_claim_sequence - cached_consumed_sequence >= QueueSize) {
+                std::this_thread::yield(); 
             }
         }
-    } catch (const std::exception &exception) {
-        std::cerr << "[Hardware Engine Exception]: " << exception.what() << "\n";
-        running = false;
+        
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+        return &ring[next_claim_sequence & (QueueSize - 1)].buffer;
     }
+
+    void publish() {
+        next_claim_sequence++;
+        published_sequence.store(next_claim_sequence, std::memory_order_release);
+    }
+
+    // --- THE GRACEFUL SHUTDOWN BARRIER ---
+    const std::vector<uint8_t>* waitForAvailable(uint64_t sequence_to_consume) {
+        while (published_sequence.load(std::memory_order_acquire) <= sequence_to_consume) {
+            if (!running.load(std::memory_order_relaxed)) {
+                // The Producer has signaled a shutdown.
+                // We double-check the published sequence one final time to prevent a race condition
+                // where the Producer published a frame exactly as the shutdown flag was flipped.
+                if (published_sequence.load(std::memory_order_acquire) <= sequence_to_consume) {
+                    return nullptr; 
+                }
+            }
+            std::this_thread::yield();
+        }
+        
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index)
+        return &ring[sequence_to_consume & (QueueSize - 1)].buffer;
+    }
+
+    void release(uint64_t sequence_to_consume) {
+        consumed_sequence.store(sequence_to_consume + 1, std::memory_order_release);
+    }
+};
+
+void signalHandler(int signal) {
+    std::cout << "\nSignal " << signal << " received. Initiating graceful shutdown...\n";
+    running.store(false, std::memory_order_release);
 }
 
 int main() {
@@ -92,7 +107,7 @@ int main() {
             return EXIT_FAILURE;
         }
 
-        DeviceInfo camera = cameras[0];
+        DeviceInfo cameraInfo = cameras[0];
         
         if (cameras.size() > 1) {
             std::cout << "Multiple Useeplus cameras detected:\n";
@@ -100,30 +115,85 @@ int main() {
                 std::cout << "  [" << i << "] Bus " << static_cast<int>(cameras[i].bus)
                           << " Address " << static_cast<int>(cameras[i].address)
                           << " - " << cameras[i].manufacturer << " " << cameras[i].product
-                          << " (Serial: " << (cameras[i].serialNumber.empty() ? "N/A" : cameras[i].serialNumber) << ")\n";
+                          << "\n";
             }
             
             size_t choice = 0;
             while (true) {
                 std::cout << "\nSelect camera to stream [0-" << (cameras.size() - 1) << "]: ";
                 if (std::cin >> choice && choice < cameras.size()) {
-                    camera = cameras[choice];
+                    cameraInfo = cameras[choice];
                     break;
                 }
-                std::cout << "Invalid selection. Please try again.\n";
+                std::cout << "Invalid selection.\n";
                 std::cin.clear();
                 std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
             }
         }
 
-        std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
-                  << " Address " << static_cast<int>(camera.address) << "...\n";
+        std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(cameraInfo.bus)
+                  << " Address " << static_cast<int>(cameraInfo.address) << "...\n";
 
-        std::thread streamThread(startVideoFeed, camera);
+        UsbCamera camera(cameraInfo);
+        StreamDisruptor<16> disruptor;
 
-        if (streamThread.joinable()) {
-            streamThread.join();
-        }        
+        std::thread consumerThread([&]() {
+            std::ofstream dumpFile(DUMP_FILE, std::ios::binary);
+            if (!dumpFile) {
+                std::cerr << "[Error] Failed to open " << DUMP_FILE << " for writing.\n";
+                running.store(false, std::memory_order_release);
+                return;
+            }
+
+            auto broadcastHandler = [](const std::vector<uint8_t>& frame) { 
+                if (frame.empty()) return;
+                std::scoped_lock<std::mutex> lock(frameMutex);
+                frameId++;
+            };
+            
+            UsbFrameDecoder decoder(broadcastHandler, [](){});
+            uint64_t sequence = 0;
+
+            std::cout << "[Consumer Thread] Ready. Waiting for sequence barriers...\n";
+
+            // Loop infinitely. The break condition is purely driven by waitForAvailable returning nullptr.
+            while (true) {
+                const auto* buffer = disruptor.waitForAvailable(sequence);
+                if (!buffer) {
+                    std::cout << "[Consumer Thread] Ring buffer safely drained to disk. Shutting down.\n";
+                    break;
+                }
+
+                dumpFile.write(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+                decoder.processIncomingCameraData(std::span<const uint8_t>{*buffer});
+
+                disruptor.release(sequence);
+                sequence++;
+            }
+        });
+
+        std::cout << "[Producer Thread] Pipeline operational. Polling hardware at maximum velocity...\n";
+        
+        while (running.load(std::memory_order_relaxed)) {
+            std::vector<uint8_t>* buffer = disruptor.claim();
+            if (!buffer) break;
+
+            int error = camera.read(*buffer);
+            if (error == 0 && !buffer->empty()) {
+                disruptor.publish();
+            } else if (error == LIBUSB_ERROR_NO_DEVICE) {
+                std::cerr << "[Producer Thread] Device disconnected.\n";
+                running.store(false, std::memory_order_release);
+                break;
+            }
+        }
+
+        // Cleanup: Main thread will block here until the Consumer finishes draining the buffer.
+        running.store(false, std::memory_order_release);
+        if (consumerThread.joinable()) {
+            consumerThread.join();
+        }
+        
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";
         return EXIT_FAILURE;
