@@ -103,6 +103,11 @@ add_executable(binary_stream_capture
 )
 target_link_libraries(binary_stream_capture PRIVATE mjpeg_streamer project_warnings)
 
+add_executable(frame_extractor
+    src/frame_extractor.cpp 
+)
+target_link_libraries(frame_extractor PRIVATE mjpeg_streamer project_warnings)
+
 option(BUILD_DOC "Build documentation" ON)
 if(BUILD_DOC)
     find_package(Doxygen)
