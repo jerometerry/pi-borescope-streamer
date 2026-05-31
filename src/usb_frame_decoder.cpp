@@ -15,7 +15,8 @@ UsbFrameDecoder::UsbFrameDecoder(
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler, std::function<void()> buttonHandler) 
     : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {
         frameBuffer.reserve(ServerConstants::ONE_MEGABYTE);
-        streamBuffer.reserve(ServerConstants::ONE_MEGABYTE); // Prevent reallocations
+        streamBuffer.reserve(ServerConstants::ONE_MEGABYTE);
+        emitBuffer.reserve(ServerConstants::ONE_MEGABYTE);
 }
 
 void UsbFrameDecoder::trimAndEmitFrame() {
@@ -44,9 +45,17 @@ void UsbFrameDecoder::trimAndEmitFrame() {
 
     // If we have valid boundaries, slice the pure JPEG and broadcast
     if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
-        std::vector<uint8_t> cleanJpeg(frameBuffer.begin() + soiOffset, frameBuffer.begin() + eoiOffset);
+        size_t frameSize = eoiOffset - soiOffset;
+        emitBuffer.clear();
+
+        if (emitBuffer.capacity() < frameSize) {
+            emitBuffer.reserve(frameSize); 
+        }
+
+        emitBuffer.insert(emitBuffer.end(), frameBuffer.begin() + soiOffset, frameBuffer.begin() + eoiOffset);
+
         if (broadcastHandler) {
-            broadcastHandler(cleanJpeg);
+            broadcastHandler(emitBuffer);
         }
     }
     

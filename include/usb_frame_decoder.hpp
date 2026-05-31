@@ -23,6 +23,7 @@ private:
 
     std::vector<uint8_t> streamBuffer;
     std::vector<uint8_t> frameBuffer;
+    std::vector<uint8_t> emitBuffer;
     ChunkMetadata metadata_{};
     
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler;
