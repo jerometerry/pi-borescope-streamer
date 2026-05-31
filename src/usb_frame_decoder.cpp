@@ -57,11 +57,11 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
 
     if (frameBuffer.empty()) {
         metadata_ = *metadata;
-        if (!isCameraSupported()) {
+        if (!fromVideoFeed(metadata_)) {
             return;
         }
     } else {
-        if (!areSameCameras(metadata_, *metadata)) {
+        if (!forSameCameraAndFrame(metadata_, *metadata)) {
             return;
         }
     }
@@ -75,18 +75,16 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
     frameBuffer.insert(frameBuffer.end(), cameraDataStart, cameraDataEnd);
 }
 
-bool UsbFrameDecoder::isCameraSupported() const {
-    return metadata_.cameraNumber < 2 && !metadata_.hasGravitySensor() && metadata_.getOtherFlags() == 0;
+bool UsbFrameDecoder::fromVideoFeed(ChunkMetadata metadata) {
+    return metadata.cameraNumber < 2 && !metadata.hasGravitySensor() && metadata.getOtherFlags() == 0;
 }
 
- /** 
-     * @brief Check if this camera header is for the same camera as another header
-     * @param header The other camera header to compare against
-     * @return true if the headers are for the same camera, false otherwise
-     */
-bool UsbFrameDecoder::areSameCameras(ChunkMetadata first, ChunkMetadata second) {
-    return first.frameId == second.frameId && 
-            first.cameraNumber == second.cameraNumber && 
-            first.hasGravitySensor() == second.hasGravitySensor() && 
-            first.getOtherFlags() == second.getOtherFlags();
+bool UsbFrameDecoder::forSameCamera(ChunkMetadata first, ChunkMetadata second) {
+    return first.cameraNumber == second.cameraNumber && 
+           first.hasGravitySensor() == second.hasGravitySensor() && 
+           first.getOtherFlags() == second.getOtherFlags();
+}
+
+bool UsbFrameDecoder::forSameCameraAndFrame(ChunkMetadata first, ChunkMetadata second) {
+    return forSameCamera(first, second) && first.frameId == second.frameId;
 }
