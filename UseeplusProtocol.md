@@ -146,3 +146,36 @@ Our C++ `UsbFrameDecoder` bypasses this flaw by operating on fixed, linear 4KB r
 * [32 to N-3] (Variable Bytes): Core Quantization and Huffman Coded JPEG Image Streams.
 * Mathematical Boundary Definition: $N$ represents the Total Packet Size ($5 \text{ bytes Header} + 939 \text{ bytes Length} = 944$). Therefore, this region runs from index 32 up to 941.
 * [N-2 to N-1] (2 bytes): JPEG End of Image (EOI) Line Cap — ff d9. Located strictly at indices 942 and 943 of a complete, unfragmented physical chunk.
+
+## USB Packet Visualization
+
+```mermaid
+packet-beta
+title Useeplus Custom USB Protocol - Packet Byte Layout (944 Bytes Total)
+  0-1: "Magic Magic Delimiter (0xBBAA)"
+  2: "Camera ID (0x0B / 0x07)"
+  3-4: "Declared Length (0x03AB = 939B)"
+  5: "Frame ID Sequence"
+  6: "Camera Sub-System No."
+  7: "Bitfield Flags"
+  8-11: "Gravity Sensor Data"
+  12-13: "JPEG SOI Anchor (0xFFD8)"
+  14-15: "JPEG APP0 Marker (0xFFE0)"
+  16-17: "APP0 Segment Length (16B)"
+  18-22: "ASCII Identifier ('JFIF\0')"
+  23-24: "JFIF Version (v1.02)"
+  25: "Density Units (DPI)"
+  26-27: "Horizontal Density (72)"
+  28-29: "Vertical Density (72)"
+  30: "Thumbnail Width (0)"
+  31: "Thumbnail Height (0)"
+  32-941: "Core Huffman & Quantization JPEG Data Stream"
+  942-943: "JPEG EOI Line Cap (0xFFD9)"
+```
+
+## Visual Sections Key
+
+* Bytes 0–4 (Blue/Top): UsbPacketHeader structural wrapper used by libusb for memory bounding.
+* Bytes 5–11 (Green): The 7-byte packed ChunkMetadata block that controls button events and frame updates.
+* Bytes 12–31 (Yellow): Standard JPEG/JFIF file header overhead injected by the camera sensor.
+* Bytes 32–943 (Purple/Bottom): The compressed pixel entropy payload, cleanly terminated by the End of Image (EOI) marker at the final two byte addresses.
