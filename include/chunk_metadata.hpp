@@ -16,35 +16,73 @@ struct [[gnu::packed]] ChunkMetadata {
      */
     uint8_t cameraNumber;
 
-    /** 
-     * @brief Flag indicating if the gravity sensor is present
+    /**
+     * @brief Bit-mask containing 3 values
+     * <p>
+     * Bit-mask:
+     * <ul>
+     *   <li>unsigned char hasGravitySensor:1;</li>
+     *   <li>unsigned char buttonPress:1;</li>
+     *   <li>unsigned char otherFlags:6;</li>
+     * </ul>
      */
-    unsigned char hasGravitySensor:1;
-
-     /** 
-     * @brief Flag indicating if the button is pressed
-     */
-    unsigned char buttonPress:1;
-
-    /** 
-     * @brief Other flags
-     */
-    unsigned char otherFlags:6;
+    uint8_t flags;
 
     /** 
      * @brief The value of the gravity sensor
      */
     uint32_t gravitySensor;
 
-    /** 
-     * @brief Check if this camera header is for the same camera as another header
-     * @param header The other camera header to compare against
-     * @return true if the headers are for the same camera, false otherwise
+    /**
+     * @brief Get hasGravitySensor bit from the flags field
      */
-    bool isSameCamera(ChunkMetadata header) const {
-        return frameId == header.frameId && 
-               cameraNumber == header.cameraNumber && 
-               hasGravitySensor == header.hasGravitySensor && 
-               otherFlags == header.otherFlags;
+    bool hasGravitySensor() const { 
+        return (flags & 0x01) != 0; 
+    }
+
+    /**
+     * @brief Set hasGravitySensor bit in the flags field
+     */
+    void setHasGravitySensor(bool hasGravitySensor) { 
+        if (hasGravitySensor) {
+            flags |= 0x01;
+        } else {
+            flags &= ~0x01;
+        }
+    }
+
+    /**
+     * @brief Get buttonPressed bit from the flags field
+     */
+    bool isButtonPressed() const  { 
+        return (flags & 0x02) != 0; 
+    }
+
+    /**
+     * @brief Set buttonPressed bit in the flags field
+     */
+    void setButtonPressed(bool pressed) {
+        if (pressed) {
+            flags |= 0x02;
+        } else {
+            flags &= ~0x02;
+        }
+    }
+
+    /**
+     * @brief Get otherFlags value from the flags field
+     */
+    uint8_t getOtherFlags() const { 
+        return (flags >> 2) & 0x3F; 
+    }
+
+    /**
+     * @brief Set otherFlags value in the flags field
+     */
+    void setOtherFlags(uint8_t val) {
+        flags &= 0x03;
+        flags |= ((val & 0x3F) << 2); 
     }
 };
+
+static_assert(sizeof(ChunkMetadata) == 7, "ChunkMetadata size must be exactly 7 bytes!");

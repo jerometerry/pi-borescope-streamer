@@ -29,5 +29,21 @@ private:
 
     void emitFrame();
 
-    bool isCameraSupported() const;
+    static bool fromVideoFeed(ChunkMetadata metadata);
+
+     /** 
+     * @brief Check if the first header is for the same camera as the second header
+     * @param first The other camera header to compare against
+     * @param second The other camera header to compare against
+     * @return true if the headers are for the same camera, false otherwise
+     */
+    static bool forSameCamera(ChunkMetadata first, ChunkMetadata second);
+
+    /** 
+     * @brief Check if the first header is for the same camera as the second header
+     * @param first The other camera header to compare against
+     * @param second The other camera header to compare against
+     * @return true if the headers are for the same camera, false otherwise
+     */
+    static bool forSameCameraAndFrame(ChunkMetadata first, ChunkMetadata second);
 };
