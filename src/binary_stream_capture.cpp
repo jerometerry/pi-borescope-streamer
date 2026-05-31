@@ -4,92 +4,35 @@
 #include <cstdlib>
 #include <exception>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <limits>
-#include <mutex>
-#include <span>
 #include <string>
-#include <thread>
 #include <vector>
 #include "device_finder.hpp"
 #include "device_info.hpp"
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
-#include "usb_frame_decoder.hpp"
 
-static bool running = true;
-static std::mutex frameMutex;
-static uint32_t frameId = 0;
-static const std::string DUMP_FILE = "raw_camera_dump.bin";
+// Global flag to allow clean exiting via Ctrl+C
+volatile sig_atomic_t keepRunning = 1;
 
-void signalHandler(int signal) {
-    std::cout << "\nSignal " << signal << " received. Initiating shutdown...\n";
-    running = false;
-}
-
-void startVideoFeed(const DeviceInfo& target) {
-    auto broadcastHandler = [](const std::vector<uint8_t>& frame) { 
-        if (frame.empty()) {
-            return;
-        }
-
-        {
-            std::scoped_lock<std::mutex> lock(frameMutex);
-            frameId++;
-        }
-    };
-    
-    auto buttonHandler = []() {};
-
-    try {
-        UsbCamera camera(target);
-        UsbFrameDecoder decoder(broadcastHandler, buttonHandler);
-        
-        // Open the binary dump file
-        std::ofstream dumpFile(DUMP_FILE.data(), std::ios::binary);
-        if (!dumpFile) {
-            std::cerr << "[Error] Failed to open " << DUMP_FILE << " for writing.\n";
-            return;
-        }
-
-        std::cout << "[Hardware Engine] Pipeline operational. Writing raw URB stream to disk...\n";
-
-        std::vector<uint8_t> readBuffer;
-        readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
-
-        while (running) {
-            int error = camera.read(readBuffer);
-            if (error == 0) {
-                // EXACT HARDWARE MIRROR: Write the raw libusb buffer (including the 80-byte ghost padding) 
-                // directly to disk before the decoder touches it.
-                dumpFile.write(reinterpret_cast<const char*>(readBuffer.data()), readBuffer.size());
-                
-                decoder.processIncomingCameraData(std::span<const uint8_t>{readBuffer});
-            } else if (error == LIBUSB_ERROR_NO_DEVICE) {
-                std::cerr << "[Hardware Engine] Device disconnected.\n";
-                running = false;
-            }
-        }
-    } catch (const std::exception &exception) {
-        std::cerr << "[Hardware Engine Exception]: " << exception.what() << "\n";
-        running = false;
-    }
+void signalHandler(int signum) {
+    keepRunning = 0;
 }
 
 int main() {
+    // Register signal handler to cleanly close the file stream
     std::signal(SIGINT, signalHandler);
-    std::signal(SIGTERM, signalHandler);
-    std::signal(SIGPIPE, SIG_IGN);
 
-    try {
-        std::vector<DeviceInfo> cameras = DeviceFinder::all();
+	try {
+
+		std::vector<DeviceInfo> cameras = DeviceFinder::superCameras();
         if (cameras.empty()) {
             std::cerr << "No Useeplus supercamera devices found on the USB bus.\n";
             return EXIT_FAILURE;
         }
 
-        DeviceInfo camera = cameras[0];
+        DeviceInfo cameraInfo = cameras[0];
         
         if (cameras.size() > 1) {
             std::cout << "Multiple Useeplus cameras detected:\n";
@@ -104,7 +47,7 @@ int main() {
             while (true) {
                 std::cout << "\nSelect camera to stream [0-" << (cameras.size() - 1) << "]: ";
                 if (std::cin >> choice && choice < cameras.size()) {
-                    camera = cameras[choice];
+                    cameraInfo = cameras[choice];
                     break;
                 }
                 std::cout << "Invalid selection. Please try again.\n";
@@ -113,14 +56,61 @@ int main() {
             }
         }
 
-        std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
-                  << " Address " << static_cast<int>(camera.address) << "...\n";
+        std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(cameraInfo.bus)
+                  << " Address " << static_cast<int>(cameraInfo.address) << "...\n";
+		
+		// Note: You will likely need to call whatever initialization/open methods 
+		// your class has here, e.g., camera.connect() or camera.open()
 
-        std::thread streamThread(startVideoFeed, camera);
+		// 2. Open binary output file
+		std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
+		if (!outFile.is_open()) {
+			std::cerr << "Error: Could not open output file for writing." << "\n";
+			return EXIT_FAILURE;
+		}
 
-        if (streamThread.joinable()) {
-            streamThread.join();
-        }        
+		// 3. Setup Buffer
+		// 64KB is a standard, efficient chunk size for USB bulk transfers
+		const size_t MAX_BUFFER_SIZE = ServerConstants::SIXTY_FOUR_KILOBYTES; 
+		std::vector<uint8_t> buffer;
+		
+		// Pre-allocate capacity so your read method's buffer.capacity() check works correctly
+		buffer.reserve(MAX_BUFFER_SIZE); 
+
+		int numBytes = 0;
+		size_t totalBytesWritten = 0;
+
+		std::cout << "Recording video stream to 'camera_stream.mjpeg'..." << "\n";
+		std::cout << "Press Ctrl+C to stop." << "\n";
+
+		UsbCamera camera(cameraInfo);
+
+		// 4. Main Capture Loop
+		while (keepRunning) {
+			int status = camera.read(1, buffer, MAX_BUFFER_SIZE, numBytes);
+
+			if (status == 0 && numBytes > 0) {
+				// Write the exact bytes read to the file. 
+				// Because your read() resizes the buffer, buffer.size() == numBytes
+				outFile.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
+				totalBytesWritten += buffer.size();
+			} 
+			else if (status != 0) {
+				// Check for timeouts. USB bulk transfers often time out if the camera 
+				// has no new frame data yet. We usually want to ignore timeouts and keep trying.
+				if (status == LIBUSB_ERROR_TIMEOUT) {
+					continue; 
+				} else {
+					std::cerr << "\nCritical USB Read Error: " << libusb_error_name(status) << "\n";
+					break;
+				}
+			}
+		}
+
+		// 5. Cleanup
+		std::cout << "\nRecording stopped. Total bytes written: " << totalBytesWritten << "\n";
+		outFile.close();
+
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";
         return EXIT_FAILURE;

@@ -148,7 +148,7 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
 
 int UsbCamera::read(std::vector<uint8_t> &buffer) {
     int numBytes = 0;
-    return read(ENDPOINT_1, buffer, ServerConstants::ONE_KILOBYTE, numBytes);
+    return read(ENDPOINT_1, buffer, ServerConstants::SIXTY_FOUR_KILOBYTES, numBytes);
 }
 
 int UsbCamera::read(uint8_t* buffer, size_t maxSize, int& numBytes) {

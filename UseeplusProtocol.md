@@ -2,8 +2,8 @@
 
 ## Binary Stream Capture
 
-Running a build will generate all binaries, including `binary_stream_capture`. This is a command line utility that 
-allows you to select an attached camera, and stream the incoming data to a binary file - `raw_camera_dump.bin` in the 
+Running a build will generate all binaries, including `binary_stream_capture`. This is a command line utility that
+allows you to select an attached camera, and stream the incoming data to a binary file - `raw_camera_dump.bin` in the
 current working directory.
 
 **Build Script**
@@ -11,6 +11,7 @@ current working directory.
 ```bash
 cmake . --preset release
 cmake --build --preset release
+
 ```
 
 **Capturing Stream Data**
@@ -18,16 +19,18 @@ To save the raw camera stream to a binary file for debugging and protocol analys
 
 ```bash
 ./out/build/release/binary_stream_capture
+
 ```
 
 To view the raw camera data, use the `xxd` command to convert the binary file to hex, then pipe it to `grep`.
 
-Because the Useeplus protocol uses little-endian byte order, the C++ constant `0xBBAA` appears on the wire as `aa bb`. 
-Here is a command that searches the binary file for this exact sequence, which serves as the packet delimiter. Each 
+Because the Useeplus protocol uses little-endian byte order, the C++ constant `0xBBAA` appears on the wire as `aa bb`.
+Here is a command that searches the binary file for this exact sequence, which serves as the packet delimiter. Each
 line represents 16 bytes of data, grouped into 2-byte columns.
 
 ```bash
 xxd raw_camera_dump.bin | grep -A 2 -B 2 "aa bb" | head -n 30
+
 ```
 
 Here is an example of the output:
@@ -39,60 +42,57 @@ Here is an example of the output:
 00023610: 0800 0060 3330 24ff d8ff e000 104a 4649  ...`30$......JFI
 00023620: 4600 0102 0100 4800 4800 00ff db00 8400  F.....H.H.......
 --
+
 ```
 
 ## The Protocol Breakdown
 
 By mapping this hex dump to our C++ implementation, we can decode the Useeplus hardware behavior:
 
-* **The Hardware Handshake (`VENDOR_PRODUCT_ID_LIST`):** Before this stream even begins, `libusb` locates the hardware 
+* **The Hardware Handshake (`VENDOR_PRODUCT_ID_LIST`):** Before this stream even begins, `libusb` locates the hardware
 using specific vendor and product IDs (e.g., `0x2ce3:0x3828` or `0x0329:0x2022`).
-* **The Packet Delimiter (`USB_FRAME_HEADER`):** On line 3, we see the sequence `aa bb`. This matches our C++ 
+* **The Packet Delimiter (`USB_FRAME_HEADER`):** On line 3, we see the sequence `aa bb`. This matches our C++
 definition of `0xBBAA` (Little-Endian) and marks the start of a new USB chunk.
-* **The Camera ID (`VALID_CAMERA_IDS`):** The Useeplus hardware multiplexes two separate streams over the 
+* **The Camera ID (`VALID_CAMERA_IDS`):** The Useeplus hardware multiplexes two separate streams over the
 USB pipe.
-  * Camera `11` (`0x0B`) is the **Video Feed** (transmitting 939-byte payloads).
-    * When decoding the video feed we filter to Camera `11`(`0x0B`) to assemble video frames
-  * Camera `7` (`0x07`) is the **Gravity Sensor Feed** (transmitting 427-byte payloads).
-    * Decoding of the video feed does not need to use this feed. However, if you want to ensure the video is rendered 
-    in the correct orientation, this data would be necessary then. This isn't being done for this project (yet).
-* **The JPEG SOI Marker (`JPEG_SOI_MARKERS`):** On line 4, we see the sequence `ff d8`. This is the universal JPEG 
-Start of Image (SOI) marker. Our decoder expects to find this marker within the first 32 bytes of the payload 
-(`JPEG_SOI_MARKERS_MAX_POSITION`).
-* **The JPEG EOI Marker:** On line 3, the two bytes immediately preceding the `aa bb` delimiter are `ff d9`. This is 
-the universal JPEG End of Image (EOI) marker, cleanly terminating the previous video frame just before the new header 
-begins.
-* **The App0 Segment:** Immediately after the SOI marker, we see `ff e0`, followed shortly by `4a 46 49 46 00`. This 
+* Camera `11` (`0x0B`) is the **Video Feed** (transmitting 939-byte payloads).
+* Camera `7` (`0x07`) is the **Gravity Sensor Feed** (transmitting 427-byte payloads).
+* Decoding of the video feed requires explicitly filtering out packets matching Camera 7, or packets where the `hasGravitySensor` flag is true, to prevent injecting raw telemetry data directly into the Huffman-encoded JPEG stream.
+
+
+
+
+* **The JPEG SOI Marker (`JPEG_SOI_MARKERS`):** On line 4, we see the sequence `ff d8`. This is the universal JPEG
+Start of Image (SOI) marker. Due to hardware garbage padding, our decoder must actively scan the start of the buffer for this marker before assembling the final image.
+* **The JPEG EOI Marker:** On line 3, the two bytes immediately preceding the `aa bb` delimiter are `ff d9`. This is
+the universal JPEG End of Image (EOI) marker, cleanly terminating the previous video frame.
+* **The App0 Segment:** Immediately after the SOI marker, we see `ff e0`, followed shortly by `4a 46 49 46 00`. This
 translates to `JFIF` in ASCII, confirming the payload is a standard JPEG file format.
 
 ## The Chunk Metadata (The 7-Byte Payload Header)
 
-The 2-byte USB_FRAME_HEADER `aa bb` (`UsbPacketHeader.header`) is followed by a 1-byte camera ID 
-(`UsbPacketHeader.cameraId`), and then 2-byte length specifier (`UsbPacketHeader.length`). These 5 bytes map to the 
-`UsbPacketHeader` struct. 
+The 2-byte USB_FRAME_HEADER `aa bb` (`UsbPacketHeader.header`) is followed by a 1-byte camera ID
+(`UsbPacketHeader.cameraId`), and then 2-byte length specifier (`UsbPacketHeader.length`). These 5 bytes map to the
+`UsbPacketHeader` struct.
 
-```
+```cpp
 struct [[gnu::packed]] UsbPacketHeader {
     uint16_t header;
     uint8_t cameraId;
     uint16_t length;
 };
+
 ```
 
-UsbPacketHeader is packed into 5 bytes
-- header: 2 bytes
-- cameraId: 1 byte
-- length: 2 bytes
-
-Immediately following the 5-byte USB Packet Header (`aa bb 0b ab 03`), the camera inserts exactly 7 bytes of 
+Immediately following the 5-byte USB Packet Header (`aa bb 0b ab 03`), the camera inserts exactly 7 bytes of
 proprietary `ChunkMetadata` before the actual JPEG pixels begin.
 
 Let's look at the 12 bytes preceding the JPEG SOI (`ff d8`) from our hex dump:
 `aa bb 0b ab 03` **`02 00 00 60 33 30 24`** `ff d8...`
 
-This 7-byte block (**`02 00 00 60 33 30 24`**) is mapped directly to the `ChunkMetadata` struct. 
+This 7-byte block (**`02 00 00 60 33 30 24`**) is mapped directly to the `ChunkMetadata` struct.
 
-```
+```cpp
 struct [[gnu::packed]] ChunkMetadata {
     uint8_t frameId;
     uint8_t cameraNumber;
@@ -101,52 +101,31 @@ struct [[gnu::packed]] ChunkMetadata {
     unsigned char otherFlags:6;
     uint32_t gravitySensor;
 };
+
 ```
 
-Note that the 3 `unsigned char` fields in the middle of the struct are all combined into a single byte. 
-- `hasGravitySensor` specifies storage as a single bit
-- `buttonPress` specifies storage as a single bit
-- `otherFlags` specifies storage in 6 bits
-
-This structure is packed into 7 bytes
-- frameId: 1 byte
-- cameraId: 1 byte
-- hasGravitySensor, buttonPress, otherFlags: 1 byte (combined)
-- gravitySensor: 4 bytes
-
-`[[gnu::packed]]` strips all padding / store structure in minimum amount of memory, making this struct fit into 7 
-bytes. 
+`[[gnu::packed]]` ensures this structure fits flawlessly into exactly 7 bytes of memory without compiler padding.
 
 ChunkMetadata controls the video assembly state machine and hardware interrupts:
 
-* **The Button Press Flag:** The Useeplus cable features a physical hardware button. When squeezed, the camera does 
-*not* send a separate USB interrupt. Instead, it flips a specific bit (`buttonPress`) inside this metadata block to `1` 
-for the duration of the press.
-* **Hardware Interrupts:** Our decoder checks `metadata->buttonPress` on every single chunk. If it detects a `1`, it 
-fires the `hardwareButtonCallback()`, which evaluates the duration of the press to determine if it was a quick click 
-(triggering a high-res snapshot) or a long hold (a hardware-level lens toggle that we safely ignore).
-* **The Total Offset:** Because the `UsbFrame` header is 5 bytes and the `ChunkMetadata` is 7 bytes, we know 
-mathematically that the actual JPEG pixels *always* begin exactly **12 bytes** into the kernel buffer.
+* **The Frame ID:** This is a sequential packet identifier. Our state machine relies entirely on this byte. The exact moment the `frameId` changes, we know the previous frame has finished transmitting.
+* **The Button Press Flag:** The physical hardware button flips the `buttonPress` bit to `1` for the duration of the press.
+* **The Total Offset:** Because the `UsbPacketHeader` is 5 bytes and the `ChunkMetadata` is 7 bytes, we know
+mathematically that the actual JPEG pixels *always* begin exactly **12 bytes** into the chunk payload.
 
 ## Assembling a Complete JPEG Frame
 
-While the hex dump above shows individual USB packets, a single packet does not contain a full image.
+A single USB packet does not contain a full image.
 
-* **The Payload Math:** Each hardware burst provides exactly **939 bytes** of valid JPEG payload (declared by the 
-`ab 03` length bytes).
-* **The Frame Size:** Depending on the camera's resolution and the visual complexity of the scene, a single MJPEG 
-frame typically ranges from **30,000 to 100,000 bytes** (30KB - 100KB).
-* **The Assembly:** To transmit a 60KB image, the camera must send roughly 64 consecutive USB chunks. The **Frame ID** 
-inside the metadata remains constant across all 64 chunks. Our `UsbFrameDecoder` continually appends the 939-byte 
-payloads to a buffer. The exact moment the Frame ID increments, the decoder knows the image is complete and flushes the 
-fully assembled JPEG to the broadcast queue.
-
-*(Note: If you run the `binary_stream_capture` tool for just 3 to 5 seconds at 30 FPS, your `raw_camera_dump.bin` file 
-will contain between 90 and 150 completely intact, fully extractable JPEG images!)*
+* **The Payload Math:** Each hardware burst provides exactly **939 bytes** of valid payload (declared by the
+`ab 03` length bytes). Because 12 bytes are consumed by headers, only **927 bytes** of pure JPEG data are provided per chunk.
+* **The Frame Size:** Depending on the camera's resolution, a single MJPEG
+frame typically ranges from **15,000 to 40,000 bytes** (15KB - 40KB).
+* **The Assembly:** To transmit a 20KB image, the camera must send roughly 22 consecutive USB chunks. The **Frame ID** inside the metadata remains constant across all 22 chunks. Our `UsbFrameDecoder` continually appends the JPEG payloads to a buffer. When the Frame ID increments, the decoder initiates the "Dirty Start/Padded Tail" filter to slice the `FF D8` and `FF D9` bounds before flushing the image to the broadcast queue.
 
 ### Frame Assembly
 
-This diagram illustrates how consecutive 1KB chunks are logically linked together by the `Frame ID` to form fully 
+This diagram illustrates how consecutive chunks are logically linked together by the `Frame ID` to form fully
 bounded JPEG images.
 
 ```mermaid
@@ -158,23 +137,23 @@ flowchart TD
     end
 
     %% Frame Breakdown
-    subgraph Frame_Assembly [JPEG Frame N : ~60KB Total]
+    subgraph Frame_Assembly [JPEG Frame N : ~20KB Total]
         direction LR
-        C1[Chunk 1<br/>ID: N] --> C2[Chunk 2<br/>ID: N] --> C3[... Chunk 64<br/>ID: N]
+        C1[Chunk 1<br/>ID: N] --> C2[Chunk 2<br/>ID: N] --> C3[... Chunk 22<br/>ID: N]
     end
     Frame1 -. logically contains .-> Frame_Assembly
 
     %% Start Chunk
     subgraph Start_Chunk [Chunk 1: Start of Image]
         direction LR
-        H1[Header<br/>5 Bytes] --- M1[Metadata<br/>7 Bytes] --- P1[Payload<br/>939 Bytes<br/>Starts w/ FF D8]
+        H1[Header<br/>5 Bytes] --- M1[Metadata<br/>7 Bytes] --- P1[Payload<br/>927 Bytes<br/>Starts w/ FF D8]
     end
     C1 -.-> Start_Chunk
 
     %% End Chunk
-    subgraph End_Chunk [Chunk 64: End of Image]
+    subgraph End_Chunk [Chunk 22: End of Image]
         direction LR
-        H64[Header<br/>5 Bytes] --- M64[Metadata<br/>7 Bytes] --- P64[Payload<br/>939 Bytes<br/>Ends w/ FF D9]
+        H64[Header<br/>5 Bytes] --- M64[Metadata<br/>7 Bytes] --- P64[Payload<br/>927 Bytes<br/>Contains FF D9]
     end
     C3 -.-> End_Chunk
 
@@ -187,43 +166,47 @@ flowchart TD
 
 ```
 
-## The Hardware Fragmentation Flaw (The 1104-Byte Bug)
+## The 4KB Hardware Alignment Flaw (Ghost Headers)
 
-If you look closely at the binary dump, you will notice that the payload length declared in the USB header is usually 
-around `939` bytes. However, the camera's physical endpoint natively transmits in **1,104-byte** bursts.
+If you look closely at the binary dump, you will notice gaps between chunks. The camera's physical endpoint natively forces its transmissions to align with **4096-byte (4KB) standard USB bulk transfer boundaries**.
 
-Because High-Speed USB 2.0 uses 512-byte packets, the Linux kernel receives `512 + 512 + 80 = 1104` bytes. The camera's 
-firmware fails to initialize the final 80 bytes of this burst, resulting in a memory leak that transmits "ghost" 
-padding containing stale headers from previous frames.
+To fit four 944-byte packets seamlessly into a 4096-byte page, the camera's firmware must inject 320 bytes of padding. It does this dynamically, leaving gaps of 0, 80, or 160 bytes between chunks.
 
-Our C++ `UsbFrameDecoder` is explicitly designed to be immune to this flaw. By reading a 1MB buffer and strictly 
-bounding our vector insertion to the declared `header->length`, we extract the valid JPEG data and discard 
-the uninitialized hardware memory leak.
+The firmware fails to zero-initialize this padding. As a result, the camera leaks stale memory from its internal hardware buffer, creating "Ghost Headers" (stale `AA BB` markers) inside the padding.
 
-### The 1104-Byte Hardware Burst
+Our C++ `UsbFrameDecoder` is explicitly designed to be immune to this flaw. By mathematically calculating `chunkTotalSize = sizeof(UsbPacketHeader) + header->length`, the parser leaps completely over the valid packet. It then uses a "Proximity Scanner" to peek ahead; if it sees an `AA BB` header, but detects *another* `AA BB` header less than 300 bytes away, it mathematically proves the first header is a ghost trap caused by 4KB padding, bypasses it, and safely resynchronizes with the stream.
 
-This diagram illustrates the "Hardware Fragmentation Flaw" section. It visually breaks down a single 1104-byte hardware 
-burst, highlighting the 12-byte safety offset and the 153 bytes of corrupted hardware memory that the UsbFrameDecoder 
-drops.
+### The 4KB Hardware Transfer Page
+
+This diagram illustrates how the dynamic padding and memory leaks interact with the 4KB microframe boundary.
 
 ```mermaid
 flowchart LR
-    subgraph Buffer ["Single 1104-Byte Hardware Burst"]
+    subgraph Buffer ["Single 4096-Byte (4KB) USB Hardware Page"]
         direction LR
         
-        H["USB Header<br/>5 Bytes<br/>AA BB 0B AB 03"]
-        M["Chunk Metadata<br/>7 Bytes<br/>ID, Flags, Button"]
-        P["Valid JPEG Payload<br/>939 Bytes<br/>(Extracted by C++)"]
-        G["Ghost Padding<br/>153 Bytes<br/>(Safely Ignored)"]
+        C1["Packet 1<br/>(944 Bytes)"]
+        P1["Padding<br/>(0 Bytes)"]
+        C2["Packet 2<br/>(944 Bytes)"]
+        P2["Ghost Padding<br/>(80 Bytes)"]
+        C3["Packet 3<br/>(944 Bytes)"]
+        P3["Ghost Padding<br/>(80 Bytes)"]
+        C4["Packet 4<br/>(944 Bytes)"]
+        P4["Ghost Padding<br/>(160 Bytes)"]
 
-        H --- M --- P --- G
+        C1 --- P1 --- C2 --- P2 --- C3 --- P3 --- C4 --- P4
     end
 
     %% Visual Styling
-    style H fill:#3b82f6,stroke:#1e3a8a,stroke-width:2px,color:#fff
-    style M fill:#8b5cf6,stroke:#4c1d95,stroke-width:2px,color:#fff
-    style P fill:#10b981,stroke:#064e3b,stroke-width:2px,color:#fff
-    style G fill:#ef4444,stroke:#7f1d1d,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    style C1 fill:#10b981,stroke:#064e3b,stroke-width:2px,color:#fff
+    style C2 fill:#10b981,stroke:#064e3b,stroke-width:2px,color:#fff
+    style C3 fill:#10b981,stroke:#064e3b,stroke-width:2px,color:#fff
+    style C4 fill:#10b981,stroke:#064e3b,stroke-width:2px,color:#fff
+    
+    style P1 fill:#ef4444,stroke:#7f1d1d,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    style P2 fill:#ef4444,stroke:#7f1d1d,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    style P3 fill:#ef4444,stroke:#7f1d1d,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
+    style P4 fill:#ef4444,stroke:#7f1d1d,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
 
 ```
 
