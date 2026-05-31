@@ -2,12 +2,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
-
 #include "chunk_metadata.hpp"
 #include "server_constants.hpp"
 #include "usb_packet_header.hpp"
@@ -21,10 +19,6 @@ struct Padding {
     size_t start;
     size_t length;
 };
-
-#include <iostream>
-#include <vector>
-#include <format>
 
 // Helper to print hex dump
 void printPaddingDump(const std::vector<uint8_t>& data, Padding padding) {
