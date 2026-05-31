@@ -1,5 +1,50 @@
 # Useeplus Protocol
 
+## Binary Stream Capture
+
+Running a build will generate all binaries, including `binary_stream_capture`. This is a command line utility that
+allows you to select an attached camera, and stream the incoming data to a binary file - `raw_camera_dump.bin` in the
+current working directory.
+
+**Build Script**
+
+```bash
+cmake . --preset release
+cmake --build --preset release
+
+```
+
+**Capturing Stream Data**
+To save the raw camera stream to a binary file for debugging and protocol analysis:
+
+```bash
+./out/build/release/binary_stream_capture
+
+```
+
+To view the raw camera data, use the `xxd` command to convert the binary file to hex, then pipe it to `grep`.
+
+Because the Useeplus protocol uses little-endian byte order, the C++ constant `0xBBAA` appears on the wire as `aa bb`.
+Here is a command that searches the binary file for this exact sequence, which serves as the packet delimiter. Each
+line represents 16 bytes of data, grouped into 2-byte columns.
+
+```bash
+xxd raw_camera_dump.bin | grep -A 2 -B 2 "aa bb" | head -n 30
+
+```
+
+Here is an example of the output:
+
+```text
+000235e0: c007 d690 9084 e28e 7bd1 60b7 5171 c537  ........{.`.Qq.7
+000235f0: a734 fa02 dac1 bb3d b349 9dc3 b8e6 919d  .4.....=.I......
+00023600: b50e 0f5a 6d05 5968 7fff d9aa bb0b ab03  ...Zm.Yh........
+00023610: 0800 0060 3330 24ff d8ff e000 104a 4649  ...`30$......JFI
+00023620: 4600 0102 0100 4800 4800 00ff db00 8400  F.....H.H.......
+--
+
+```
+
 ## The Protocol Breakdown
 
 By mapping this hex dump to our C++ implementation, we can decode the Useeplus hardware behavior:
