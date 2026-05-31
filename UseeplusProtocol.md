@@ -150,6 +150,53 @@ Our C++ `UsbFrameDecoder` bypasses this flaw by operating on fixed, linear 4KB r
 ## USB Packet Visualization
 
 ```mermaid
+grid-beta
+  title Useeplus Protocol Overhead Structure (Bytes 0 - 11)
+  
+  %% Row 1: UsbPacketHeader (5 Bytes)
+  00_Byte: "Magic High<br>0xAA"
+  01_Byte: "Magic Low<br>0xBB"
+  02_Byte: "Camera ID<br>0x0B / 0x07"
+  03_Byte: "Length High<br>0x03"
+  04_Byte: "Length Low<br>0xAB"
+  
+  %% Row 2: ChunkMetadata (First 3 Bytes)
+  05_Byte: "Frame ID<br>Counter"
+  06_Byte: "Camera Sub<br>System No."
+  07_Byte: "Packed Bitfield<br>Flags"
+  blank_1: " "
+  blank_2: " "
+  
+  %% Row 3: ChunkMetadata Gravity Telemetry Matrix (Final 4 Bytes)
+  08_Byte: "Gravity Accel<br>Byte 1"
+  09_Byte: "Gravity Accel<br>Byte 2"
+  10_Byte: "Gravity Accel<br>Byte 3"
+  11_Byte: "Gravity Accel<br>Byte 4"
+  blank_3: " "
+```
+
+
+```mermaid
+graph TD
+    title Useeplus Total 944-Byte Block Allocations
+
+    subgraph Headers [Protocol Envelopes (Bytes 0 - 11)]
+        A[UsbPacketHeader: Bytes 0-4] -->|5 Bytes| B[ChunkMetadata: Bytes 5-11]
+    end
+
+    subgraph JPEG [Standard JFIF Image Data (Bytes 12 - 943)]
+        B -->|Starts at Byte 12| C[JPEG SOI Marker: Bytes 12-13]
+        C --> D[APP0 JFIF Header Segment: Bytes 14-31]
+        D --> E[Compressed Image Payload: Bytes 32-941]
+        E --> F[JPEG EOI Termination Tail: Bytes 942-943]
+    end
+
+    style Headers fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px
+    style JPEG fill:#f1f8e9,stroke:#8bc34a,stroke-width:2px
+```
+
+
+```mermaid
 packet-beta
 title Useeplus Custom USB Protocol - Packet Byte Layout (944 Bytes Total)
   0-1: "Magic Magic Delimiter (0xBBAA)"
