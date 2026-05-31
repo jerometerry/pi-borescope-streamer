@@ -125,7 +125,7 @@ void MjpegStream::startVideoFeed(const DeviceInfo& target) {
 
         // Main capture loop: continuously read frames from the camera and pass them to the protocol handler for processing. If the camera is disconnected, libusb will return an error code which we check for to break the loop and initiate shutdown. We also call the button release state monitor on each iteration to check for any button release events that may have occurred since the last frame read.
         std::vector<uint8_t> readBuffer;
-        readBuffer.reserve(ServerConstants::ONE_MEGABYTE);
+        readBuffer.reserve(ServerConstants::FOUR_KILOBYTES);
 
         while (running) {
             int error = camera.read(readBuffer);

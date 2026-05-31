@@ -29,8 +29,6 @@ private:
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler;
     std::function<void()> buttonHandler;
 
-    void emitFrame();
-
     void trimAndEmitFrame();
 
     static bool fromVideoFeed(ChunkMetadata metadata);

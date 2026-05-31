@@ -16,6 +16,21 @@ namespace ServerConstants {
     inline constexpr size_t ONE_KILOBYTE = 1024;
 
     /** 
+     * @brief The size of four kilobytes
+     */
+    inline constexpr size_t FOUR_KILOBYTES = 4 * ONE_KILOBYTE;
+
+    /** 
+     * @brief The size of 8 kilobytes
+     */
+    inline constexpr size_t EIGHT_KILOBYTES = 8 * ONE_KILOBYTE;
+
+    /** 
+     * @brief The size of 40 kilobytes
+     */
+    inline constexpr size_t FORTY_KILOBYTES = 40 * ONE_KILOBYTE;
+
+    /** 
      * @brief The size of 64 kilobytes
      */
     inline constexpr size_t SIXTY_FOUR_KILOBYTES = 64 * ONE_KILOBYTE;
@@ -26,14 +41,9 @@ namespace ServerConstants {
     inline constexpr size_t ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES = 128 * ONE_KILOBYTE;
 
     /** 
-     * @brief The size of 128 kilobytes
+     * @brief The size of 256 kilobytes
      */
     inline constexpr size_t TWO_HUNDRED_FIFTY_SIX_KILOBYTES = 256 * ONE_KILOBYTE;
-
-    /** 
-     * @brief The size of four kilobytes
-     */
-    inline constexpr size_t FOUR_KILOBYTES = 4 * ONE_KILOBYTE;
 
     /** 
      * @brief The size of one megabyte

@@ -148,7 +148,7 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
 
 int UsbCamera::read(std::vector<uint8_t> &buffer) {
     int numBytes = 0;
-    return read(ENDPOINT_1, buffer, ServerConstants::SIXTY_FOUR_KILOBYTES, numBytes);
+    return read(ENDPOINT_1, buffer, ServerConstants::FOUR_KILOBYTES, numBytes);
 }
 
 int UsbCamera::read(uint8_t* buffer, size_t maxSize, int& numBytes) {
@@ -167,14 +167,13 @@ int UsbCamera::read(unsigned char endpoint, uint8_t* buffer, size_t maxSize, int
 }
 
 int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize, int& numBytes) {
-    size_t readSize = std::min(maxSize, buffer.capacity());
-    buffer.resize(readSize);
+    buffer.resize(maxSize);
 
     int error = libusb_bulk_transfer(
         deviceHandle, 
         LIBUSB_ENDPOINT_IN | endpoint, 
         buffer.data(), 
-        readSize, 
+        maxSize, 
         &numBytes, 
         USB_TIMEOUT
     );
