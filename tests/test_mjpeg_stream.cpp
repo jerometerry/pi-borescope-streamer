@@ -5,9 +5,12 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include "chunk_metadata.hpp"
 #include "clock.hpp"
 #include "mjpeg_stream.hpp"
 #include "server_time.hpp"
+#include "usb_frame_decoder.hpp"
+#include "usb_packet_header.hpp"
 
 class TestClock : public Clock {
 public:
@@ -84,15 +87,54 @@ TEST_F(MjpegStreamTest, IgnoresEmptyFrames) {
 }
 
 TEST_F(MjpegStreamTest, StripsLeadingGarbageBeforeJpegSoi) {
-    std::vector<uint8_t> corruptedFrame = {0x01, 0x02, 0x03, 0xFF, 0xD8, 0xAA, 0xBB, 0xCC};
-    
-    callBroadcastFrame(corruptedFrame);
+    // 1. ARRANGE: Set up a local decoder mapped directly to our stream under test
+    auto testBroadcastHandler = [this](const std::vector<uint8_t>& frame) { 
+        this->callBroadcastFrame(frame); 
+    };
+    auto testButtonHandler = [this]() { 
+        this->callHardwareButtonCallback(); 
+    };
 
-    std::vector<uint8_t> expectedPayload = {0xFF, 0xD8, 0xAA, 0xBB, 0xCC};
+    UsbFrameDecoder testDecoder(testBroadcastHandler, testButtonHandler);
+
+    // We must wrap our corrupted frame inside a valid hardware packet 
+    // structure so it survives the decoder's raw protocol checks.
+    size_t headerSize = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
+    std::vector<uint8_t> corruptedFrame = {0x01, 0x02, 0x03, 0xFF, 0xD8, 0xAA, 0xBB, 0xCC, 0xFF, 0xD9};
+    
+    std::vector<uint8_t> hardwarePacket(headerSize + corruptedFrame.size(), 0x00);
+    
+    // Initialize valid mock hardware packet parameters
+    auto* usb = reinterpret_cast<UsbPacketHeader*>(hardwarePacket.data());
+    usb->header = 0xBBAA; // ServerConstants::USB_FRAME_HEADER
+    usb->cameraId = 11;   // 0x0B
+    usb->length = sizeof(ChunkMetadata) + corruptedFrame.size();
+
+    auto* chunk = reinterpret_cast<ChunkMetadata*>(hardwarePacket.data() + sizeof(UsbPacketHeader));
+    chunk->frameId = 1;
+    chunk->cameraNumber = 0;
+    chunk->flags = 0;
+    chunk->gravitySensor = 0;
+
+    // Copy the corrupted frame data directly into the packet's payload region
+    std::memcpy(hardwarePacket.data() + headerSize, corruptedFrame.data(), corruptedFrame.size());
+
+    // Create a second packet with a new Frame ID to force the decoder to emit the first one
+    std::vector<uint8_t> triggerPacket = hardwarePacket;
+    auto* triggerChunk = reinterpret_cast<ChunkMetadata*>(triggerPacket.data() + sizeof(UsbPacketHeader));
+    triggerChunk->frameId = 2;
+
+    // 2. ACT: Feed the data through the parser pipeline
+    testDecoder.processIncomingCameraData(hardwarePacket);
+    testDecoder.processIncomingCameraData(triggerPacket); // Triggers trimAndEmitFrame()
+
+    // 3. ASSERT: Verify the stream output contains only the stripped, pure JPEG
+    std::vector<uint8_t> expectedPayload = {0xFF, 0xD8, 0xAA, 0xBB, 0xCC, 0xFF, 0xD9};
     
     EXPECT_EQ(getFrameBuffer(), expectedPayload);
     EXPECT_EQ(getFrameId(), 1); 
 }
+
 
 TEST_F(MjpegStreamTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     EXPECT_FALSE(getButtonIsDepressed());

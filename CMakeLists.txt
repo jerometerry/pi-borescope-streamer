@@ -160,7 +160,7 @@ if(BUILD_TESTING)
     target_compile_options(gmock_main PRIVATE -w)
 
     add_executable(run_project_tests 
-        tests/test_useeplus_protocol.cpp
+        tests/test_usb_frame_decoder.cpp
         tests/test_mjpeg_stream.cpp
         tests/test_mjpeg_streamer.cpp
         tests/test_web_server.cpp
