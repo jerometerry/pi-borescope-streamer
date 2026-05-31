@@ -60,10 +60,14 @@ namespace ServerConstants {
      */
     inline constexpr int JPEG_SOI_MARKERS_MAX_POSITION = 32;
 
+    inline constexpr uint8_t GRAVITY_SENSOR_CAMERA_ID = 0x07;
+
+    inline constexpr uint8_t VIDEO_CAMERA_ID = 0x0B;
+
     /**
      * @brief
      */
-    inline constexpr uint8_t VALID_CAMERA_IDS[] = {7, 11};
+    inline constexpr uint8_t VALID_CAMERA_IDS[] = {GRAVITY_SENSOR_CAMERA_ID, VIDEO_CAMERA_ID};
 
     /**
      * @brief
