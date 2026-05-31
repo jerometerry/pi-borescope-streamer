@@ -19,7 +19,7 @@ struct [[gnu::packed]] ChunkMetadata {
     /**
      * @brief Bit-mask containing 3 values
      * <p>
-     * Supported features include:
+     * Bit-mask:
      * <ul>
      *   <li>unsigned char hasGravitySensor:1;</li>
      *   <li>unsigned char buttonPress:1;</li>
