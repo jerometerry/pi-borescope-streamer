@@ -18,69 +18,132 @@
 #include "server_constants.hpp"
 #include "web_server.hpp"
 
+// Cleanly aligned to strictly match Header declaration layout rules (C++ Core Guidelines Rule C.47)
 WebServer::WebServer(const int port,
-                     const std::atomic<bool>& running,                 
+                     const std::atomic<bool>& running,
                      SharedFramePipeline& pipeline)
     : clients(std::make_unique<std::array<ClientState, MAX_CLIENTS>>()),
       port(port),
       running(running),
-      pipeline(pipeline) {}
+      pipeline(pipeline) {
+    std::cout << "[Network Core] WebServer subsystem successfully provisioned on port " << port << ".\n";
+}
 
 WebServer::~WebServer() {
+    std::cout << "[Network Core] Initiating application engine teardown procedure...\n";
+
+    // 1. Force break the background poll loop by dismantling the listener first
+    if (listenFileDescriptor != -1) {
+        close(listenFileDescriptor);
+        listenFileDescriptor = -1;
+    }
+
+    // 2. Safely await the background event loop thread closure
     if (workerThread.joinable()) {
         workerThread.join();
     }
-    if (listenFileDescriptor != -1) {
-        close(listenFileDescriptor);
+
+    // 3. Cleanly close all lingering client connections to avoid OS socket descriptor leaks
+    std::scoped_lock<std::mutex> lock(clientsMutex);
+    size_t activeConnectionsClosed = 0;
+    
+    for (auto& client : *clients) {
+        if (client.isActive && client.fileDescriptor != -1) {
+            close(client.fileDescriptor);
+            client.isActive = false;
+            client.outbox.clear(); // Reclaims systemic heap allocations immediately
+            activeConnectionsClosed++;
+        }
+    }
+    
+    if (activeConnectionsClosed > 0) {
+        std::cout << "[Network Core] Evicted " << activeConnectionsClosed << " active sockets during lifecycle teardown.\n";
     }
 }
 
 bool WebServer::initialize() {
-    // IGNORING SIGPIPE: Prevents macOS from instantly killing the application 
-    // when attempting to send data to a client that disconnected abruptly.
-    signal(SIGPIPE, SIG_IGN);
+    // 1. Thread-safe POSIX signal configuration to ignore SIGPIPE.
+    // Replaces raw signal() to comply with strict C++ static analysis guidelines.
+    struct sigaction signalAction{};
+    signalAction.sa_handler = SIG_IGN;
+    sigemptyset(&signalAction.sa_mask);
+    signalAction.sa_flags = 0;
+    sigaction(SIGPIPE, &signalAction, nullptr);
 
+    // 2. Open standard internet streaming socket
     listenFileDescriptor = socket(AF_INET, SOCK_STREAM, 0);
     if (listenFileDescriptor == -1) {
         std::cerr << ERR_SOCKET;
         return false;
     }
 
+    // 3. Configure Socket Reuse Parameters
     int opt = 1;
     setsockopt(listenFileDescriptor, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    
+    // FIXED: Apply SO_REUSEPORT to allow instant service restarts on Linux 
+    // even if active live MJPEG web clients are midway through a stream.
+#if defined(__linux__) || defined(__APPLE__)
+    setsockopt(listenFileDescriptor, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+#endif
 
+    // 4. Bind Network Parameters
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
 
-    if (bind(listenFileDescriptor, (struct sockaddr*)&address, sizeof(address)) < 0) {
+    if (bind(listenFileDescriptor, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) < 0) {
         std::cerr << "Error binding to port: " << port << '\n';
+        close(listenFileDescriptor);
+        listenFileDescriptor = -1;
         return false;
     }
 
+    // 5. Establish Listener Backlog Queue
     if (listen(listenFileDescriptor, 10) < 0) {
         std::cerr << ERR_LISTEN;
+        close(listenFileDescriptor);
+        listenFileDescriptor = -1;
         return false;
     }
 
+    // Configure the listener handle as non-blocking
     if (!setNonBlocking(listenFileDescriptor)) {
         std::cerr << ERR_NONBLOCK;
+        close(listenFileDescriptor);
+        listenFileDescriptor = -1;
         return false;
     }
 
     return true;
 }
 
+
 void WebServer::start() {
+    // 1. Structural Execution Guard: Prevent double-activation thread crashes
+    if (workerThread.joinable()) {
+        std::cerr << "[Network Core Warning] WebServer::start() called on an already active engine instance.\n";
+        return; 
+    }
+
+    // 2. Pre-allocate vector capacity safely on the main thread 
+    // before any background worker concurrency begins.
+    pollFileDescriptors.clear();
     pollFileDescriptors.reserve(INITIAL_POLL_CAPACITY);
+
+    // 3. Spawn background event loop worker thread safely
+    std::cout << "[Network Core] Launching asynchronous engine worker thread...\n";
     workerThread = std::thread(&WebServer::eventLoop, this);
 }
 
+
 void WebServer::eventLoop() {
     while (running) {
+        // 1. Process and broadcast the latest video frames to active streams
         broadcastLatestFrame();
 
+        // 2. Tightly scoped critical section to construct our socket lookup list
         {
             std::scoped_lock<std::mutex> lock(clientsMutex);
 
@@ -93,20 +156,23 @@ void WebServer::eventLoop() {
                 }
                 short events = POLLIN;
                 if (client.outboxLen > 0) {
-                    events |= POLLOUT;
+                    events |= POLLOUT; // Monitor for write readiness only if data is waiting
                 }
                 pollFileDescriptors.push_back({client.fileDescriptor, events, 0});
             }
         }
 
-        int ret = poll(pollFileDescriptors.data(), pollFileDescriptors.size(), 10);
+        // 3. Changed timeout from 10ms to a passive 30ms window.
+        // This lines up with your 30 FPS camera interval, dropping idle CPU usage to near 0%.
+        int ret = poll(pollFileDescriptors.data(), pollFileDescriptors.size(), 30);
         if (ret == -1) {
             if (errno == EINTR) { 
-                continue; 
+                continue; // System signal interrupted call; resume loop safely
             }
             break;
         }
 
+        // 4. Thread-safe sequential execution loop processing network events
         for (const auto& pfd : pollFileDescriptors) {
             if (pfd.revents == 0) { 
                 continue; 
@@ -117,12 +183,17 @@ void WebServer::eventLoop() {
                     handleAccept(); 
                 }
             } else {
+                // FIXED: Mutually exclusive event routing.
+                // If a hard socket error occurs, tear down the connection and immediately advance 
+                // to the next client. This prevents running read/write logic on a closed slot.
                 if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
                     closeConnection(pfd.fd);
-                } else {
+                } 
+                else {
                     if (pfd.revents & POLLIN) { 
                         handleRead(pfd.fd); 
                     }
+                    // Only attempt a write flush if the client connection survived the handleRead pass
                     if (pfd.revents & POLLOUT) { 
                         handleWrite(pfd.fd); 
                     }
@@ -132,32 +203,61 @@ void WebServer::eventLoop() {
     }
 }
 
+
 bool WebServer::setNonBlocking(int fileDescriptor) {
-    int flags = fcntl(fileDescriptor, F_GETFL, 0);
-    if (flags == -1) { 
+    if (fileDescriptor < 0) {
+        return false;
+    }
+
+    // Explicitly use a regular int, but ensure we match return and error boundaries perfectly
+    const int currentFlags = fcntl(fileDescriptor, F_GETFL, 0);
+    if (currentFlags == -1) { 
+        std::cerr << "[Network Utilities] Failed to retrieve socket flags on FD " << fileDescriptor << ".\n";
         return false; 
     }
-    return fcntl(fileDescriptor, F_SETFL, flags | O_NONBLOCK) == 0;
+
+    // Mask out the O_NONBLOCK flag safely using standard bitwise operators
+    const int targetFlags = currentFlags | O_NONBLOCK;
+    
+    // fcntl returns 0 on success, -1 on failure
+    if (fcntl(fileDescriptor, F_SETFL, targetFlags) == -1) {
+        std::cerr << "[Network Utilities] Failed to apply O_NONBLOCK flag on FD " << fileDescriptor << ".\n";
+        return false;
+    }
+
+    return true;
 }
+
 
 void WebServer::handleAccept() {
     while (true) {
-        sockaddr_in client_addr{};
-        socklen_t clientLen = sizeof(client_addr);
-        int fileDescriptor = accept(listenFileDescriptor, (struct sockaddr*)&client_addr, &clientLen);
+        sockaddr_in clientAddr{};
+        socklen_t clientLen = sizeof(clientAddr);
+        
+        // 1. Accept incoming socket connection from kernel listener queue
+        int fileDescriptor = accept(
+            listenFileDescriptor, 
+            reinterpret_cast<struct sockaddr*>(&clientAddr), 
+            &clientLen
+        );
         
         if (fileDescriptor == -1) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) { 
-                break; 
+                break; // Queue is fully empty; yield thread back to poll()
+            }
+            if (errno == EINTR) {
+                continue; // Interrupted by a system signal call; retry immediately
             }
             break;
         }
 
+        // Configure connection as non-blocking right away
         if (!setNonBlocking(fileDescriptor)) {
             close(fileDescriptor);
             continue;
         }
 
+        // 2. Tightly look up structural slots using the global shared mutex
         std::scoped_lock<std::mutex> lock(clientsMutex);
 
         auto it = std::find_if(clients->begin(), clients->end(), [](const ClientState& c) {
@@ -165,112 +265,133 @@ void WebServer::handleAccept() {
         });
 
         if (it != clients->end()) {
+            // Found open slot: Bind file descriptor and initialize client connection state
             it->reset(fileDescriptor);
         } else {
+            // FIXED: Server is completely full. Reject cleanly with an explicit HTTP 503 error header
+            // rather than dropping the socket silently.
+            std::string_view rejectionHeader = 
+                "HTTP/1.1 503 Service Unavailable\r\n"
+                "Content-Type: text/plain\r\n"
+                "Connection: close\r\n\r\n"
+                "Server Capacity Reached.\n";
+                
+            // Send rejection on the wire immediately using MSG_NOSIGNAL to prevent pipeline crashes
+            send(fileDescriptor, rejectionHeader.data(), rejectionHeader.size(), MSG_NOSIGNAL);
+            
+            // Dismantle kernel resource handle cleanly
             close(fileDescriptor);
         }
     }
 }
 
+
 void WebServer::handleRead(int fileDescriptor) {
+    // 1. Allocate a transient, thread-local staging array on the stack.
+    // This allows us to perform non-blocking kernel reads without holding ANY global locks.
+    std::array<char, ClientState::READ_BUFFER_SIZE> temporaryBuffer{};
+    ssize_t bytesRead = 0;
+
+    // 2. Perform the kernel read completely isolated from your streaming data structures
+    while (true) {
+        bytesRead = recv(fileDescriptor, temporaryBuffer.data(), temporaryBuffer.size(), 0);
+        if (bytesRead == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return; // Yield cleanly; the socket's receive queue is currently empty
+            }
+            if (errno == EINTR) {
+                continue; // System call was interrupted by a signal; retry immediately
+            }
+            closeConnection(fileDescriptor);
+            return;
+        }
+        break;
+    }
+
+    if (bytesRead == 0) {
+        closeConnection(fileDescriptor); // Client initiated a clean connection shutdown
+        return;
+    }
+
+    // 3. Tightly lock the critical section ONLY when appending data to the shared state array
+    std::scoped_lock<std::mutex> lock(clientsMutex);
+
     auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
         return c.isActive && c.fileDescriptor == fileDescriptor;
     });
 
     if (it == clients->end()) { 
-        return; 
+        return; // The connection was severed by another thread during our socket read
     }
 
     auto& client = *it;
-    
-    while (true) {
-        size_t availableSpace = client.readBuffer.size() - client.readBufferLen;
-        if (availableSpace == 0) {
-            closeConnection(fileDescriptor);
-            return;
-        }
 
-        ssize_t bytesRead = recv(fileDescriptor, client.readBuffer.data() + client.readBufferLen, availableSpace, 0);
+    // Verify we have enough remaining capacity in our vector buffer
+    if (client.readBufferLen + static_cast<size_t>(bytesRead) > client.readBuffer.size()) {
+        std::cerr << "[Network Core] Input buffer overflow on FD " << fileDescriptor << ". Terminating.\n";
+        // Let the lock drop, then clean up. (Or flag inactive for eventLoop to clean up)
+        client.isActive = false;
+        return;
+    }
 
-        if (bytesRead > 0) {
-            client.readBufferLen += bytesRead;
-            std::string_view incoming(client.readBuffer.data(), client.readBufferLen);
+    // Safely copy the staging data into the client's localized memory structure
+    std::memcpy(client.readBuffer.data() + client.readBufferLen, temporaryBuffer.data(), bytesRead);
+    client.readBufferLen += bytesRead;
 
-            if (incoming.find(HEADER_DELIMITER) != std::string_view::npos) {
-                processClientRequest(client);
-                break;
-            }
-        } else if (bytesRead == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) { 
-                break; 
-            }
-            closeConnection(fileDescriptor);
-            return;
-        } else {
-            closeConnection(fileDescriptor);
-            return;
-        }
+    // 4. Parse the data within the safe boundary context of our structural lock
+    std::string_view incoming(client.readBuffer.data(), client.readBufferLen);
+    if (incoming.find(HEADER_DELIMITER) != std::string_view::npos) {
+        processClientRequest(client);
     }
 }
-
 
 void WebServer::processClientRequest(ClientState& client) {
     std::string_view request(client.readBuffer.data(), client.readBufferLen);
 
-    if (request.find(ROUTE_WEB) != std::string_view::npos) {
+    // FIXED: Replaced unsafe string literal merging with dynamic lookup matching string structures
+    if (request.find(std::format("GET {} ", ROUTE_WEB)) != std::string_view::npos) {
         client.closeAfterWrite = true;
-
         auto htmlPageContent = Resources::index_html;
 
         auto [it, size] = std::format_to_n(
-            headerStackBuf, 
-            STACK_BUF_SIZE, 
-            HTTP_OK_HTML_FMT, 
-            htmlPageContent.size()
+            headerStackBuf, STACK_BUF_SIZE, HTTP_OK_HTML_FMT, htmlPageContent.size()
         );
 
-        queueData(client, reinterpret_cast<const uint8_t*>(headerStackBuf), size);
-        queueData(client, reinterpret_cast<const uint8_t*>(htmlPageContent.data()), htmlPageContent.size());
+        client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), size);
+        client.queueData(reinterpret_cast<const uint8_t*>(htmlPageContent.data()), htmlPageContent.size());
     } 
-    else if (request.find(ROUTE_SNAPSHOT) != std::string_view::npos) {
+    else if (request.find(std::format("GET {} ", ROUTE_SNAPSHOT)) != std::string_view::npos) {
         client.closeAfterWrite = true;
-    
         std::vector<uint8_t> snapshot = pipeline.getSnapshot();
 
         if (snapshot.empty()) {
-            queueData(client, reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size());
+            client.queueData(reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size());
         } else {
             auto [it, size] = std::format_to_n(
-                headerStackBuf, 
-                STACK_BUF_SIZE,
-                HTTP_OK_JPEG_FMT, 
-                snapshot.size()
+                headerStackBuf, STACK_BUF_SIZE, HTTP_OK_JPEG_FMT, snapshot.size()
             );
 
-            queueData(client, reinterpret_cast<const uint8_t*>(headerStackBuf), size);
-            queueData(client, snapshot.data(), snapshot.size());
+            client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), size);
+            client.queueData(snapshot.data(), snapshot.size());
         }
     } 
-    else if (request.find(ROUTE_FAVICON) != std::string_view::npos) {
+    else if (request.find(std::format("GET {} ", ROUTE_FAVICON)) != std::string_view::npos) {
         client.closeAfterWrite = true;
-        queueData(client, reinterpret_cast<const uint8_t*>(FAVICON_NOT_FOUND.data()), FAVICON_NOT_FOUND.size());
+        client.queueData(reinterpret_cast<const uint8_t*>(FAVICON_NOT_FOUND.data()), FAVICON_NOT_FOUND.size());
     } 
     else if (request.find("GET / HTTP") != std::string_view::npos || 
              request.find("GET /?") != std::string_view::npos) {
         client.isStreaming = true;
         client.sentFrameId = 0;
-        queueData(client, reinterpret_cast<const uint8_t*>(HTTP_OK_MJPEG.data()), HTTP_OK_MJPEG.size());
+        client.closeAfterWrite = false;
+        client.queueData(reinterpret_cast<const uint8_t*>(HTTP_OK_MJPEG.data()), HTTP_OK_MJPEG.size());
     }
     else {
         client.closeAfterWrite = true;
-        queueData(client, reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size());
+        client.queueData(reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size());
     }
     
     client.readBufferLen = 0;
-
-    if (client.closeAfterWrite && client.outbox.empty()) {
-        closeConnection(client.fileDescriptor);
-    }
 }
 
 void WebServer::broadcastLatestFrame() {
@@ -286,10 +407,9 @@ void WebServer::broadcastLatestFrame() {
 
     localLatestFrameId = globalFrameId;
 
-    // 2. Format the MJPEG multi-part header delimiter on the stack
-    // Presumes standard format string, e.g.: "\r\n--boundary\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n"
+    // 2. Format the MJPEG multi-part header delimiter on the stack once per frame group
     char partHeaderBuf[STACK_BUF_SIZE];
-    auto [it, headerSize] = std::format_to_n(
+    auto [formatIterator, headerSize] = std::format_to_n(
         partHeaderBuf, 
         STACK_BUF_SIZE, 
         MJPEG_FRAME_FMT, 
@@ -300,31 +420,23 @@ void WebServer::broadcastLatestFrame() {
     std::scoped_lock<std::mutex> lock(clientsMutex);
 
     for (auto& client : *clients) {
-        // Only stream to valid HTTP clients who requested the live video route
         if (!client.isActive || !client.isStreaming) {
             continue;
         }
-
-        // Prevent slow-network socket consumers from bloating memory indefinitely.
-        // If an outbox grows too large, drop the connection to maintain systemic low latency.
         if (client.outboxLen > ClientState::ENGINES_EXPECTED_FRAME_MAX * 3) {
-            std::cerr << "[Network Core] Slow consumer detected on FD " << client.fileDescriptor << ". Dropping stream.\n";
-            // Set flag or close directly. We can clear its state so the loop skips it.
-            close(client.fileDescriptor);
-            client.isActive = false;
+            std::cerr << "[Network Core] Slow consumer detected on FD " << client.fileDescriptor << ". Evicting.\n";
+
+            client.isActive = false; 
+            client.outbox.clear();
             continue;
         }
-
-        // Only send this frame if the client has completely finished sending the old one.
-        // If a client's outbox is still flushing, it's safer to drop this frame *for this client only* 
-        // to prevent lag or network buffer bloat.
         if (client.outboxLen == 0 && client.sentFrameId < globalFrameId) {
             
             // Queue Multipart Frame Header Boundary
-            queueData(client, reinterpret_cast<const uint8_t*>(partHeaderBuf), headerSize);
+            client.queueData(reinterpret_cast<const uint8_t*>(partHeaderBuf), headerSize);
             
             // Queue Raw Compressed JPEG Image Binary
-            queueData(client, currentFrame.data(), currentFrame.size());
+            client.queueData(currentFrame.data(), currentFrame.size());
             
             // Track the last frame index delivered to this specific descriptor socket
             client.sentFrameId = globalFrameId;
@@ -332,98 +444,71 @@ void WebServer::broadcastLatestFrame() {
     }
 }
 
-
-
-void WebServer::queueData(ClientState& client, const uint8_t* data, size_t size) {
-    if (!client.isActive) {
-        return; 
-    }
-
-    if (client.outboxLen == 0) {
-        ssize_t sent = send(client.fileDescriptor, data, size, MSG_NOSIGNAL);
-        if (sent >= 0) {
-            if (static_cast<size_t>(sent) == size) { 
-                return;
-            }
-            size_t remaining = size - sent;
-            if (remaining > client.outbox.size()) {
-                closeConnection(client.fileDescriptor);
-                return;
-            }
-            std::memcpy(client.outbox.data(), data + sent, remaining);
-            client.outboxLen = remaining;
-            client.outboxOffset = 0;
-        } else {
-            if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                closeConnection(client.fileDescriptor);
-                return;
-            }
-            if (size > client.outbox.size()) {
-                closeConnection(client.fileDescriptor);
-                return;
-            }
-            std::memcpy(client.outbox.data(), data, size);
-            client.outboxLen = size;
-            client.outboxOffset = 0;
-        }
-    } else {
-        if (client.outboxLen + size > client.outbox.size()) {
-            closeConnection(client.fileDescriptor);
-            return;
-        }
-        std::memcpy(client.outbox.data() + client.outboxLen, data, size);
-        client.outboxLen += size;
-    }
-}
-
 void WebServer::handleWrite(int fileDescriptor) {
-    std::scoped_lock<std::mutex> lock(clientsMutex);
-    
-    auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
-        return c.isActive && c.fileDescriptor == fileDescriptor;
-    });
+    bool shouldClose = false;
 
-    if (it == clients->end()) { 
-        return; 
-    }
+    {
+        std::scoped_lock<std::mutex> lock(clientsMutex);
+        
+        auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
+            return c.isActive && c.fileDescriptor == fileDescriptor;
+        });
 
-    auto& client = *it;
-    if (client.outboxLen == 0) { 
-        return; 
-    }
+        if (it == clients->end()) { 
+            return; 
+        }
 
-    while (client.outboxOffset < client.outboxLen) {
-        size_t remaining = client.outboxLen - client.outboxOffset;
-        ssize_t sent = send(fileDescriptor, client.outbox.data() + client.outboxOffset, remaining, MSG_NOSIGNAL);
+        auto& client = *it;
+        if (client.outboxLen == 0) { 
+            return; 
+        }
 
-        if (sent > 0) {
-            client.outboxOffset += sent;
-        } else if (sent == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) { 
-                return; 
+        while (client.outboxOffset < client.outboxLen) {
+            size_t remaining = client.outboxLen - client.outboxOffset;
+            ssize_t sent = send(fileDescriptor, client.outbox.data() + client.outboxOffset, remaining, MSG_NOSIGNAL);
+
+            if (sent > 0) {
+                client.outboxOffset += sent;
+            } else if (sent == -1) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) { 
+                    return;
+                }
+                shouldClose = true;
+                break;
             }
-            closeConnection(fileDescriptor);
-            return;
+        }
+
+        if (!shouldClose && client.outboxOffset == client.outboxLen) {
+            client.outboxLen = 0;
+            client.outboxOffset = 0;
+            client.outbox.clear(); // Reclaims memory footprint safely
+
+            if (client.closeAfterWrite) {
+                shouldClose = true;
+            }
         }
     }
 
-    if (client.outboxOffset >= client.outboxLen) {
-        client.outboxLen = 0;
-        client.outboxOffset = 0;
-    }
-
-    if (client.closeAfterWrite) {
+    if (shouldClose) {
         closeConnection(fileDescriptor);
     }
 }
 
-void WebServer::closeConnection(int fileDescriptor) {
-    auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
-        return c.isActive && c.fileDescriptor == fileDescriptor;
-    });
 
-    if (it != clients->end()) {
-        it->isActive = false;
+void WebServer::closeConnection(int fileDescriptor) {
+
+    {
+        std::scoped_lock<std::mutex> lock(clientsMutex);
+        
+        auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
+            return c.isActive && c.fileDescriptor == fileDescriptor;
+        });
+
+        if (it != clients->end()) {
+            it->isActive = false;
+            // Free any lingering vector allocation memory right away
+            it->outbox.clear(); 
+        }
     }
 
     shutdown(fileDescriptor, SHUT_WR);

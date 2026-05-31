@@ -41,9 +41,9 @@ private:
     static constexpr std::string_view MJPEG_CHUNK_SUFFIX = "\r\n\r\n";
 
     static constexpr std::string_view HEADER_DELIMITER  = "\r\n\r\n";
-    static constexpr std::string_view ROUTE_WEB          = "GET /web";
-    static constexpr std::string_view ROUTE_SNAPSHOT     = "GET /snapshot";
-    static constexpr std::string_view ROUTE_FAVICON      = "GET /favicon.ico";
+    static constexpr std::string_view ROUTE_WEB          = "/web";
+    static constexpr std::string_view ROUTE_SNAPSHOT     = "/snapshot";
+    static constexpr std::string_view ROUTE_FAVICON      = "/favicon.ico";
 
     static constexpr std::string_view HTTP_OK_HTML_FMT   = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n";
     static constexpr std::string_view HTTP_OK_JPEG_FMT   = "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n";

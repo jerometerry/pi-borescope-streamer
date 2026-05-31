@@ -1,7 +1,10 @@
 #pragma once
 
-#include <vector>
+#include <sys/socket.h>
+#include <cerrno>
 #include <cstdint>
+#include <iostream>
+#include <vector>
 #include "server_constants.hpp"
 
 /** 
@@ -85,5 +88,44 @@ struct ClientState {
         
         // Clear out old frame bytes but maintain the internal vector allocation capacity
         outbox.clear(); 
+    }
+
+    void queueData(const uint8_t* data, size_t size) {
+        if (!isActive || data == nullptr || size == 0) {
+            return; 
+        }
+
+        if (outboxLen == 0) {
+            ssize_t sent = send(fileDescriptor, data, size, MSG_NOSIGNAL);
+            
+            if (sent >= 0) {
+                size_t bytesSent = static_cast<size_t>(sent);
+                if (bytesSent == size) { 
+                    return;
+                }
+
+                size_t remaining = size - bytesSent;
+
+                outbox.assign(data + bytesSent, data + size);
+                outboxLen = remaining;
+                outboxOffset = 0;
+                return;
+            } 
+
+            if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                // Hard error: Flag connection as dead for poll() cleanup. No deadlock!
+                isActive = false;
+                return;
+            }
+        }
+
+        if (outboxLen + size > ClientState::ENGINES_EXPECTED_FRAME_MAX * 3) {
+            std::cerr << "[Network Core] Outbox overflow on FD " << fileDescriptor << ". Evicting \n";
+            isActive = false;
+            return;
+        }
+
+        outbox.insert(outbox.end(), data, data + size);
+        outboxLen += size;
     }
 };

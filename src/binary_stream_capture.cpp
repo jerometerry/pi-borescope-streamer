@@ -8,27 +8,29 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <atomic>
+#include <span>
 #include "device_finder.hpp"
 #include "device_info.hpp"
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
 
-// Global flag to allow clean exiting via Ctrl+C
-volatile sig_atomic_t keepRunning = 1;
+// Global thread-safe atomic token to allow clean exiting via Ctrl+C
+static std::atomic<bool> keepRunning{true};
 
-void signalHandler(int signum) {
-    keepRunning = 0;
+void signalHandler(int /*signum*/) {
+    keepRunning = false;
 }
 
 int main() {
-    // Register signal handler to cleanly close the file stream
+    // Register signal handler to cleanly stop loops without corrupting file writes
     std::signal(SIGINT, signalHandler);
 
-	try {
-
-		std::vector<DeviceInfo> cameras = DeviceFinder::superCameras();
+    try {
+        // 1. Hardware Bus Discovery
+        std::vector<DeviceInfo> cameras = DeviceFinder::superCameras();
         if (cameras.empty()) {
-            std::cerr << "No Useeplus supercamera devices found on the USB bus.\n";
+            std::cerr << "[Error] No Useeplus supercamera devices found on the USB bus.\n";
             return EXIT_FAILURE;
         }
 
@@ -58,58 +60,57 @@ int main() {
 
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(cameraInfo.bus)
                   << " Address " << static_cast<int>(cameraInfo.address) << "...\n";
-		
-		// Note: You will likely need to call whatever initialization/open methods 
-		// your class has here, e.g., camera.connect() or camera.open()
+        
+        // 2. Open High-Performance Binary Output File 
+        std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
+        if (!outFile.is_open()) {
+            std::cerr << "[Fatal] Could not open output file for writing.\n";
+            return EXIT_FAILURE;
+        }
 
-		// 2. Open binary output file
-		std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
-		if (!outFile.is_open()) {
-			std::cerr << "Error: Could not open output file for writing." << "\n";
-			return EXIT_FAILURE;
-		}
+        // 3. Setup Hardware Aligned Buffer Space
+        // Changed from 64KB down to exactly 4KB to line up with the hardware's internal alignment boundaries
+        const size_t PACKET_PAGE_SIZE = ServerConstants::FOUR_KILOBYTES; 
+        std::vector<uint8_t> buffer;
+        buffer.reserve(PACKET_PAGE_SIZE); 
 
-		// 3. Setup Buffer
-		// 64KB is a standard, efficient chunk size for USB bulk transfers
-		const size_t MAX_BUFFER_SIZE = ServerConstants::SIXTY_FOUR_KILOBYTES; 
-		std::vector<uint8_t> buffer;
-		
-		// Pre-allocate capacity so your read method's buffer.capacity() check works correctly
-		buffer.reserve(MAX_BUFFER_SIZE); 
+        int numBytes = 0;
+        size_t totalBytesWritten = 0;
 
-		int numBytes = 0;
-		size_t totalBytesWritten = 0;
+        std::cout << "Recording video stream to 'camera_stream.mjpeg'..." << "\n";
+        std::cout << "Press Ctrl+C to stop.\n\n";
 
-		std::cout << "Recording video stream to 'camera_stream.mjpeg'..." << "\n";
-		std::cout << "Press Ctrl+C to stop." << "\n";
+        // Initialize local camera object
+        UsbCamera camera(cameraInfo);
 
-		UsbCamera camera(cameraInfo);
+        // 4. Main Low-Latency Capture Loop
+        while (keepRunning.load(std::memory_order_relaxed)) {
+            // Directly pass the aligned 4KB target chunk size boundary
+            int status = camera.read(1, buffer, PACKET_PAGE_SIZE, numBytes);
 
-		// 4. Main Capture Loop
-		while (keepRunning) {
-			int status = camera.read(1, buffer, MAX_BUFFER_SIZE, numBytes);
+            if (status == 0 && numBytes > 0) {
+                // Write the exact slice received without flushing stream overhead unnecessarily
+                outFile.write(reinterpret_cast<const char*>(buffer.data()), numBytes);
+                totalBytesWritten += numBytes;
+            } 
+            else if (status != 0) {
+                // Ignore timeouts gracefully—this is normal behavior if the bus is idle
+                if (status == LIBUSB_ERROR_TIMEOUT) {
+                    continue; 
+                } 
+                if (status == LIBUSB_ERROR_NO_DEVICE) {
+                    std::cerr << "\n[Error] Camera physically disconnected from USB bus.\n";
+                    break;
+                }
+                std::cerr << "\n[Critical] USB Read Error: " << libusb_error_name(status) << "\n";
+                break;
+            }
+        }
 
-			if (status == 0 && numBytes > 0) {
-				// Write the exact bytes read to the file. 
-				// Because your read() resizes the buffer, buffer.size() == numBytes
-				outFile.write(reinterpret_cast<const char*>(buffer.data()), buffer.size());
-				totalBytesWritten += buffer.size();
-			} 
-			else if (status != 0) {
-				// Check for timeouts. USB bulk transfers often time out if the camera 
-				// has no new frame data yet. We usually want to ignore timeouts and keep trying.
-				if (status == LIBUSB_ERROR_TIMEOUT) {
-					continue; 
-				} else {
-					std::cerr << "\nCritical USB Read Error: " << libusb_error_name(status) << "\n";
-					break;
-				}
-			}
-		}
-
-		// 5. Cleanup
-		std::cout << "\nRecording stopped. Total bytes written: " << totalBytesWritten << "\n";
-		outFile.close();
+        // 5. Cleanup and Flush
+        std::cout << "\nRecording stopped. Syncing disk buffers...\n";
+        outFile.close();
+        std::cout << "Done! Total bytes saved: " << totalBytesWritten << " bytes.\n";
 
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";

@@ -1,4 +1,3 @@
-#pragma once
 #include <libusb.h>
 #include <atomic>
 #include <memory>

@@ -1,4 +1,3 @@
-#pragma once
 #include <chrono>
 #include <mutex>
 #include "server_time.hpp"
@@ -32,7 +31,7 @@ bool HardwareButtonManager::checkAndResetQuickPressTrigger() {
 			buttonIsDepressed_ = false;
 
 			if (durationMs < ServerConstants::QUICK_PRESS_MAX_MS) {
-				return true; // Valid snapshot trigger detected
+				return true;
 			}
 		}
 	}
