@@ -226,3 +226,25 @@ flowchart LR
     style G fill:#ef4444,stroke:#7f1d1d,stroke-width:2px,stroke-dasharray: 5 5,color:#fff
 
 ```
+
+## Binary Stream Frame Extractor
+
+To verify my understand of the Useeplus protocol, I used the binary stream capture to extract individual frames to 
+disk. 
+
+Run the `frame_extractor` command, passing it the path to the binary file, and the index of the frame from the file
+you want to extract (indexed from 1).
+
+```bash
+pi-borescope-streamer % ./out/build/debug/frame_extractor ./raw_camera_dump.bin 1
+[Scanner] Reconstructing libusb hardware blocks...
+[Success] Extracted flawless frame 1 (22209 bytes) to: extracted_frame_1.jpg
+pi-borescope-streamer % ./out/build/debug/frame_extractor ./raw_camera_dump.bin 2
+[Scanner] Reconstructing libusb hardware blocks...
+[Success] Extracted flawless frame 2 (22294 bytes) to: extracted_frame_2.jpg
+pi-borescope-streamer % ./out/build/debug/frame_extractor ./raw_camera_dump.bin 100
+[Scanner] Reconstructing libusb hardware blocks...
+[Error] Frame assembled, but missing valid JPEG delimiters.
+[Info] Dumped raw payload to corrupt_frame_debug.jpg
+pi-borescope-streamer % 
+```
