@@ -9,6 +9,7 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+#include "shared_frame_pipeline.hpp"
 
 struct ClientState;
 
@@ -16,11 +17,7 @@ class WebServer {
 public:
     explicit WebServer(const int port,
                        const std::atomic<bool>& running,               
-                       const uint32_t& latestFrameId,                
-                       const std::vector<uint8_t>& frameBuffer,
-                       std::mutex& frameMutex,
-                       const std::vector<uint8_t>& snapshotBuffer,
-                       std::mutex& snapshotMutex);
+                       SharedFramePipeline& pipeline);
     ~WebServer();
 
     WebServer(const WebServer&) = delete;
@@ -39,10 +36,6 @@ private:
     static bool setNonBlocking(int fileDescriptor);
     void processClientRequest(ClientState& client);
     void queueData(ClientState& client, const uint8_t* data, size_t size);
-
-    static constexpr size_t MAX_CLIENTS = 8;
-    static constexpr size_t INITIAL_POLL_CAPACITY = 16;
-    static constexpr size_t STACK_BUF_SIZE = 128;
 
     static constexpr std::string_view MJPEG_CHUNK_PREFIX = "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: ";
     static constexpr std::string_view MJPEG_CHUNK_SUFFIX = "\r\n\r\n";
@@ -66,6 +59,10 @@ private:
     static constexpr std::string_view ERR_LISTEN         = "[Web Server Error] Backlog listener setup failed.\n";
     static constexpr std::string_view ERR_NONBLOCK       = "[Web Server Error] Failed to set non-blocking on listener.\n";
 
+    static constexpr size_t MAX_CLIENTS = 8;
+    static constexpr size_t INITIAL_POLL_CAPACITY = 16;
+    static constexpr size_t STACK_BUF_SIZE = 128;
+
     int listenFileDescriptor = -1;
     char headerStackBuf[STACK_BUF_SIZE]{};
 
@@ -76,9 +73,6 @@ private:
 
     const int port;
     const std::atomic<bool>& running;
-    const uint32_t& latestFrameId;
-    const std::vector<uint8_t>& frameBuffer;
-    std::mutex& frameMutex;
-    const std::vector<uint8_t>& snapshotBuffer;
-    std::mutex& snapshotMutex;
+    SharedFramePipeline& pipeline;
+    uint32_t localLatestFrameId{0};
 };

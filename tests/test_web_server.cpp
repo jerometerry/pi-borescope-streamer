@@ -24,20 +24,15 @@ namespace {
 class WebServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
-    uint32_t latestFrameId_{0};
-    std::vector<uint8_t> frameBuffer_;
-    std::mutex frameMutex_;
-    std::vector<uint8_t> snapshotBuffer_;
-    std::mutex snapshotMutex_;
-
+    SharedFramePipeline pipeline_;
     std::unique_ptr<WebServer> server_;
 
 protected:
     void SetUp() override {
         server_ = std::make_unique<WebServer>(
-            TEST_PORT, running_, latestFrameId_, 
-            frameBuffer_, frameMutex_, 
-            snapshotBuffer_, snapshotMutex_
+            TEST_PORT, 
+            running_, 
+            pipeline_
         );
 
         ASSERT_TRUE(server_->initialize()) << "Failed to bind to test port. Is it already in use?";
@@ -52,14 +47,12 @@ protected:
     }
 
     void injectMockSnapshot(const std::vector<uint8_t>& mockData) {
-        std::scoped_lock<std::mutex> lock(snapshotMutex_);
-        snapshotBuffer_ = mockData;
+        pipeline_.requestSnapshot();
+        pipeline_.updateFrame(mockData);
     }
 
     void injectMockVideoFrame(const std::vector<uint8_t>& mockData) {
-        std::scoped_lock<std::mutex> lock(frameMutex_);
-        frameBuffer_ = mockData;
-        latestFrameId_++;
+        pipeline_.updateFrame(mockData);
     }
 
     std::string fetchFromLocalhost(const std::string& requestPayload) {

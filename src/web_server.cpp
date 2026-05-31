@@ -20,19 +20,11 @@
 
 WebServer::WebServer(const int port,
                      const std::atomic<bool>& running,                 
-                     const uint32_t& latestFrameId,
-                     const std::vector<uint8_t>& frameBuffer,
-                     std::mutex& frameMutex,
-                     const std::vector<uint8_t>& snapshotBuffer,
-                     std::mutex& snapshotMutex)
+                     SharedFramePipeline& pipeline)
     : clients(std::make_unique<std::array<ClientState, MAX_CLIENTS>>()),
       port(port),
       running(running),
-      latestFrameId(latestFrameId),
-      frameBuffer(frameBuffer),
-      frameMutex(frameMutex),
-      snapshotBuffer(snapshotBuffer),
-      snapshotMutex(snapshotMutex) {}
+      pipeline(pipeline) {}
 
 WebServer::~WebServer() {
     if (workerThread.joinable()) {
@@ -242,25 +234,21 @@ void WebServer::processClientRequest(ClientState& client) {
     } 
     else if (request.find(ROUTE_SNAPSHOT) != std::string_view::npos) {
         client.closeAfterWrite = true;
-        {
-            std::scoped_lock<std::mutex> snapshotLock(snapshotMutex);
+    
+        std::vector<uint8_t> snapshot = pipeline.getSnapshot();
 
-            if (snapshotBuffer.empty()) {
-                queueData(
-                    client, 
-                    reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size()
-                );
-            } else {
-                auto [it, size] = std::format_to_n(
-                    headerStackBuf, 
-                    STACK_BUF_SIZE,
-                    HTTP_OK_JPEG_FMT, 
-                    snapshotBuffer.size()
-                );
+        if (snapshot.empty()) {
+            queueData(client, reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size());
+        } else {
+            auto [it, size] = std::format_to_n(
+                headerStackBuf, 
+                STACK_BUF_SIZE,
+                HTTP_OK_JPEG_FMT, 
+                snapshot.size()
+            );
 
-                queueData(client, reinterpret_cast<const uint8_t*>(headerStackBuf), size);
-                queueData(client, snapshotBuffer.data(), snapshotBuffer.size());
-            }
+            queueData(client, reinterpret_cast<const uint8_t*>(headerStackBuf), size);
+            queueData(client, snapshot.data(), snapshot.size());
         }
     } 
     else if (request.find(ROUTE_FAVICON) != std::string_view::npos) {
@@ -286,57 +274,65 @@ void WebServer::processClientRequest(ClientState& client) {
 }
 
 void WebServer::broadcastLatestFrame() {
-    std::scoped_lock<std::mutex> lock(clientsMutex);
-    uint32_t localLatestFrameId = latestFrameId;
+    uint32_t globalFrameId = 0;
     
+    // 1. Thread-safe pull of the raw JPEG from the pipeline
+    std::vector<uint8_t> currentFrame = pipeline.getCurrentFrame(globalFrameId);
+
+    // If no new frames have arrived from the camera loop, yield instantly
+    if (globalFrameId == localLatestFrameId || currentFrame.empty()) {
+        return; 
+    }
+
+    localLatestFrameId = globalFrameId;
+
+    // 2. Format the MJPEG multi-part header delimiter on the stack
+    // Presumes standard format string, e.g.: "\r\n--boundary\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n"
+    char partHeaderBuf[STACK_BUF_SIZE];
+    auto [it, headerSize] = std::format_to_n(
+        partHeaderBuf, 
+        STACK_BUF_SIZE, 
+        MJPEG_FRAME_FMT, 
+        currentFrame.size()
+    );
+
+    // 3. Thread-safe broad-distribution loop to all active connections
+    std::scoped_lock<std::mutex> lock(clientsMutex);
+
     for (auto& client : *clients) {
-        if (!client.isActive) {
-            continue; 
+        // Only stream to valid HTTP clients who requested the live video route
+        if (!client.isActive || !client.isStreaming) {
+            continue;
         }
 
-        if (client.isStreaming && client.sentFrameId != localLatestFrameId) {
-            if (client.outboxLen > ServerConstants::TWO_MEGABYTES) { 
-                continue; 
-            }
+        // Prevent slow-network socket consumers from bloating memory indefinitely.
+        // If an outbox grows too large, drop the connection to maintain systemic low latency.
+        if (client.outboxLen > ClientState::ENGINES_EXPECTED_FRAME_MAX * 3) {
+            std::cerr << "[Network Core] Slow consumer detected on FD " << client.fileDescriptor << ". Dropping stream.\n";
+            // Set flag or close directly. We can clear its state so the loop skips it.
+            close(client.fileDescriptor);
+            client.isActive = false;
+            continue;
+        }
 
-            {
-                std::scoped_lock<std::mutex> frameLock(frameMutex);
-                if (frameBuffer.empty()) { 
-                    continue; 
-                }
-
-                queueData(
-                    client, 
-                    reinterpret_cast<const uint8_t*>(MJPEG_CHUNK_PREFIX.data()), 
-                    MJPEG_CHUNK_PREFIX.size()
-                );
-                
-                char num_buf[16];
-                auto [ptr, ec] = std::to_chars(num_buf, num_buf + sizeof(num_buf), frameBuffer.size());
-                if (ec == std::errc()) {
-                    size_t num_len = ptr - num_buf;
-                    queueData(client, reinterpret_cast<const uint8_t*>(num_buf), num_len);
-                }
-
-                queueData(
-                    client, 
-                    reinterpret_cast<const uint8_t*>(MJPEG_CHUNK_SUFFIX.data()), 
-                    MJPEG_CHUNK_SUFFIX.size()
-                );
-
-                queueData(client, frameBuffer.data(), frameBuffer.size());
-
-                queueData(
-                    client, 
-                    reinterpret_cast<const uint8_t*>(MJPEG_FOOTER.data()), 
-                    MJPEG_FOOTER.size()
-                );
-            }
-
-            client.sentFrameId = localLatestFrameId;
+        // Only send this frame if the client has completely finished sending the old one.
+        // If a client's outbox is still flushing, it's safer to drop this frame *for this client only* 
+        // to prevent lag or network buffer bloat.
+        if (client.outboxLen == 0 && client.sentFrameId < globalFrameId) {
+            
+            // Queue Multipart Frame Header Boundary
+            queueData(client, reinterpret_cast<const uint8_t*>(partHeaderBuf), headerSize);
+            
+            // Queue Raw Compressed JPEG Image Binary
+            queueData(client, currentFrame.data(), currentFrame.size());
+            
+            // Track the last frame index delivered to this specific descriptor socket
+            client.sentFrameId = globalFrameId;
         }
     }
 }
+
+
 
 void WebServer::queueData(ClientState& client, const uint8_t* data, size_t size) {
     if (!client.isActive) {

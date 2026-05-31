@@ -1,6 +1,6 @@
 #pragma once
 
-#include <array>
+#include <vector>
 #include <cstdint>
 #include "server_constants.hpp"
 
@@ -9,8 +9,7 @@
  */
 struct ClientState {
     static constexpr size_t READ_BUFFER_SIZE = ServerConstants::FOUR_KILOBYTES;
-    static constexpr size_t FRAME_HEADER_SAFETY_MARGIN = ServerConstants::FOUR_KILOBYTES;
-    static constexpr size_t OUTBOX_BUFFER_SIZE = ServerConstants::TWO_MEGABYTES + FRAME_HEADER_SAFETY_MARGIN;
+    static constexpr size_t ENGINES_EXPECTED_FRAME_MAX = ServerConstants::FORTY_KILOBYTES; 
 
     /** 
      * @brief The file descriptor for the client connection
@@ -25,7 +24,7 @@ struct ClientState {
     /** 
      * @brief The buffer for reading data from the client
      */
-    std::array<char, READ_BUFFER_SIZE> readBuffer{};
+    std::vector<char> readBuffer;
 
     /** 
      * @brief The length of the data in the read buffer
@@ -35,7 +34,7 @@ struct ClientState {
     /** 
      * @brief The buffer for writing data to the client
      */
-    std::array<uint8_t, OUTBOX_BUFFER_SIZE> outbox{};
+    std::vector<uint8_t> outbox;
 
     /** 
      * @brief The length of the data in the outbox
@@ -62,6 +61,14 @@ struct ClientState {
      */
     bool closeAfterWrite = false;
 
+    /**
+     * @brief Default constructor allocating lean heap buffers
+     */
+    ClientState() {
+        readBuffer.resize(READ_BUFFER_SIZE);
+        outbox.reserve(ENGINES_EXPECTED_FRAME_MAX);
+    }
+
     /** 
      * @brief Reset the client state with a new file descriptor
      * @param descriptor The file descriptor for the client connection
@@ -75,5 +82,8 @@ struct ClientState {
         sentFrameId = 0;
         isStreaming = false;
         closeAfterWrite = false;
+        
+        // Clear out old frame bytes but maintain the internal vector allocation capacity
+        outbox.clear(); 
     }
 };

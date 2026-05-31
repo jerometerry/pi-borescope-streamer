@@ -82,6 +82,9 @@ add_library(mjpeg_streamer STATIC
     src/mjpeg_stream.cpp
     src/web_server.cpp
     src/server_time.cpp
+    src/shared_frame_pipeline.cpp
+    src/hardware_button_manager.cpp
+    src/usb_capture_engine.cpp
     ${GENERATED_HPP}
 )
 target_include_directories(mjpeg_streamer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")

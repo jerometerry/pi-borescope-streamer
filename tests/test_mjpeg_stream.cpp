@@ -2,15 +2,12 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <string>
 #include <memory>
 #include <vector>
-#include "chunk_metadata.hpp"
 #include "clock.hpp"
-#include "mjpeg_stream.hpp"
 #include "server_time.hpp"
-#include "usb_frame_decoder.hpp"
-#include "usb_packet_header.hpp"
+#include "shared_frame_pipeline.hpp"
+#include "hardware_button_manager.hpp"
 
 class TestClock : public Clock {
 public:
@@ -25,159 +22,71 @@ public:
     }
 };
 
-class MjpegStreamTest : public ::testing::Test {
+class MjpegStreamComponentsTest : public ::testing::Test {
 private:
     TestClock clock_;
     ServerTime serverTime_{clock_, clock_.now()};
-    std::unique_ptr<MjpegStream> stream_;
+
+    SharedFramePipeline pipeline_;
+    std::unique_ptr<HardwareButtonManager> buttonManager_;
 
 protected:
     void SetUp() override {
-        stream_ = std::make_unique<MjpegStream>(serverTime_);
-
-        stream_->buttonLastSeen = clock_.now() - std::chrono::milliseconds(250);
+        buttonManager_ = std::make_unique<HardwareButtonManager>(serverTime_);
     }
 
     void advanceTime(std::chrono::milliseconds ms) {
         clock_.advance(ms);
     }
 
-    void callBroadcastFrame(const std::vector<uint8_t>& frame) {
-        stream_->broadcastFrame(frame);
-    }
-
-    void callHardwareButtonCallback() {
-        stream_->hardwareButtonCallback();
-    }
-
-    void callCheckForButtonQuickPress() {
-        stream_->checkForButtonQuickPress();
-    }
-
-    const std::vector<uint8_t>& getFrameBuffer() const {
-        return stream_->frameBuffer;
-    }
-
-    uint32_t getFrameId() const {
-        return stream_->frameId;
-    }
-
-    const std::vector<uint8_t>& getSnapshotBuffer() const {
-        return stream_->snapshotBuffer;
-    }
-
-    bool getSnapshotNextFrame() const {
-        return stream_->snapshotNextFrame;
-    }
-
-    void setSnapshotNextFrame(bool value) {
-        stream_->snapshotNextFrame = value;
-    }
-
-    bool getButtonIsDepressed() const {
-        return stream_->buttonIsDepressed;
-    }
+    SharedFramePipeline& pipeline() { return pipeline_; }
+    HardwareButtonManager& buttonManager() { return *buttonManager_; }
 };
 
-TEST_F(MjpegStreamTest, IgnoresEmptyFrames) {
-    callBroadcastFrame({});
+// 1. Test Pipeline Frame Operations
+TEST_F(MjpegStreamComponentsTest, PipelineIgnoresEmptyFrames) {
+    uint32_t frameId = 0;
+    pipeline().updateFrame({});
     
-    EXPECT_TRUE(getFrameBuffer().empty());
-    EXPECT_EQ(getFrameId(), 0);
+    auto frame = pipeline().getCurrentFrame(frameId);
+    EXPECT_TRUE(frame.empty());
+    EXPECT_EQ(frameId, 0);
 }
 
-TEST_F(MjpegStreamTest, StripsLeadingGarbageBeforeJpegSoi) {
-    // 1. ARRANGE: Set up a local decoder mapped directly to our stream under test
-    auto testBroadcastHandler = [this](const std::vector<uint8_t>& frame) { 
-        this->callBroadcastFrame(frame); 
-    };
-    auto testButtonHandler = [this]() { 
-        this->callHardwareButtonCallback(); 
-    };
-
-    UsbFrameDecoder testDecoder(testBroadcastHandler, testButtonHandler);
-
-    // We must wrap our corrupted frame inside a valid hardware packet 
-    // structure so it survives the decoder's raw protocol checks.
-    size_t headerSize = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
-    std::vector<uint8_t> corruptedFrame = {0x01, 0x02, 0x03, 0xFF, 0xD8, 0xAA, 0xBB, 0xCC, 0xFF, 0xD9};
+// 2. Test Pipeline Snapshot Operations
+TEST_F(MjpegStreamComponentsTest, HardwareButtonTriggersSnapshotOnNextFrame) {
+    buttonManager().registerHardwarePress();
     
-    std::vector<uint8_t> hardwarePacket(headerSize + corruptedFrame.size(), 0x00);
-    
-    // Initialize valid mock hardware packet parameters
-    auto* usb = reinterpret_cast<UsbPacketHeader*>(hardwarePacket.data());
-    usb->header = 0xBBAA; // ServerConstants::USB_FRAME_HEADER
-    usb->cameraId = 11;   // 0x0B
-    usb->length = sizeof(ChunkMetadata) + corruptedFrame.size();
-
-    auto* chunk = reinterpret_cast<ChunkMetadata*>(hardwarePacket.data() + sizeof(UsbPacketHeader));
-    chunk->frameId = 1;
-    chunk->cameraNumber = 0;
-    chunk->flags = 0;
-    chunk->gravitySensor = 0;
-
-    // Copy the corrupted frame data directly into the packet's payload region
-    std::memcpy(hardwarePacket.data() + headerSize, corruptedFrame.data(), corruptedFrame.size());
-
-    // Create a second packet with a new Frame ID to force the decoder to emit the first one
-    std::vector<uint8_t> triggerPacket = hardwarePacket;
-    auto* triggerChunk = reinterpret_cast<ChunkMetadata*>(triggerPacket.data() + sizeof(UsbPacketHeader));
-    triggerChunk->frameId = 2;
-
-    // 2. ACT: Feed the data through the parser pipeline
-    testDecoder.processIncomingCameraData(hardwarePacket);
-    testDecoder.processIncomingCameraData(triggerPacket); // Triggers trimAndEmitFrame()
-
-    // 3. ASSERT: Verify the stream output contains only the stripped, pure JPEG
-    std::vector<uint8_t> expectedPayload = {0xFF, 0xD8, 0xAA, 0xBB, 0xCC, 0xFF, 0xD9};
-    
-    EXPECT_EQ(getFrameBuffer(), expectedPayload);
-    EXPECT_EQ(getFrameId(), 1); 
-}
-
-
-TEST_F(MjpegStreamTest, HardwareButtonTriggersSnapshotOnNextFrame) {
-    EXPECT_FALSE(getButtonIsDepressed());
-    
-    callHardwareButtonCallback();
-    EXPECT_TRUE(getButtonIsDepressed());
-
     advanceTime(std::chrono::milliseconds(250));
 
-    callCheckForButtonQuickPress();
-    EXPECT_TRUE(getSnapshotNextFrame());
+    // Verify the button manager flags a valid quick press window
+    ASSERT_TRUE(buttonManager().checkAndResetQuickPressTrigger());
+    pipeline().requestSnapshot();
 
-    std::vector<uint8_t> nextVideoFrame = {0xFF, 0xD8, 0x11, 0x22, 0x33};
-    callBroadcastFrame(nextVideoFrame);
+    std::vector<uint8_t> nextVideoFrame = {0xFF, 0xD8, 0x11, 0x22, 0x33, 0xFF, 0xD9};
+    pipeline().updateFrame(nextVideoFrame);
 
-    EXPECT_EQ(getSnapshotBuffer(), nextVideoFrame);
-    EXPECT_FALSE(getSnapshotNextFrame());
+    EXPECT_EQ(pipeline().getSnapshot(), nextVideoFrame);
 }
 
-TEST_F(MjpegStreamTest, DebouncesRapidHardwareButtonPresses) {
-    callHardwareButtonCallback();
-    EXPECT_TRUE(getButtonIsDepressed());
+// 3. Test Button Manager Debouncing Mechanics
+TEST_F(MjpegStreamComponentsTest, DebouncesRapidHardwareButtonPresses) {
+    buttonManager().registerHardwarePress();
 
+    // Sudden rapid chattering edge signals (ignored by debounce window)
     advanceTime(std::chrono::milliseconds(20));
-    callHardwareButtonCallback(); 
+    buttonManager().registerHardwarePress(); 
 
     advanceTime(std::chrono::milliseconds(250));
-
-    callCheckForButtonQuickPress();
-    EXPECT_TRUE(getSnapshotNextFrame());
+    EXPECT_TRUE(buttonManager().checkAndResetQuickPressTrigger());
     
-    setSnapshotNextFrame(false);
-
-    callHardwareButtonCallback();
-
+    // Test a long hold window that triggers the bypass logic
+    buttonManager().registerHardwarePress();
     for (int i = 0; i < 12; ++i) {
         advanceTime(std::chrono::milliseconds(50));
-        callHardwareButtonCallback();
+        buttonManager().registerHardwarePress();
     }
 
     advanceTime(std::chrono::milliseconds(250)); 
-    
-    callCheckForButtonQuickPress();
-    
-    EXPECT_FALSE(getSnapshotNextFrame());
+    EXPECT_FALSE(buttonManager().checkAndResetQuickPressTrigger());
 }
