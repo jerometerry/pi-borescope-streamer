@@ -49,9 +49,8 @@ TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     auto* chunk = reinterpret_cast<ChunkMetadata*>(hardwarePacket.data() + sizeof(UsbPacketHeader));
     chunk->frameId = 2;
     chunk->cameraNumber = 0;
-    chunk->hasGravitySensor = 0;
-    chunk->gravitySensor = 0;
-    chunk->otherFlags = 0;
+    chunk->flags = 0;
+    chunk->gravitySensor = 0;    
 
     // Place the JPEG SOI markers immediately after the headers
     hardwarePacket[headerSize] = 0xFF;
@@ -61,9 +60,8 @@ TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     auto* triggerChunk = reinterpret_cast<ChunkMetadata*>(triggerFrame.data() + sizeof(UsbPacketHeader));
     triggerChunk->frameId = 3;
     triggerChunk->cameraNumber = 0;
-    triggerChunk->hasGravitySensor = 0;
+    triggerChunk->flags = 0;
     triggerChunk->gravitySensor = 0;
-    triggerChunk->otherFlags = 0;
 
     std::vector<uint8_t> expectedPayload(
         hardwarePacket.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata),
@@ -85,9 +83,8 @@ TEST_F(UsbFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
     auto* chunk = reinterpret_cast<ChunkMetadata*>(validHeader.data() + sizeof(UsbPacketHeader));
     chunk->frameId = 1;
     chunk->cameraNumber = 0;
-    chunk->hasGravitySensor = 0;
-    chunk->gravitySensor = 0;
-    chunk->otherFlags = 0;
+    chunk->flags = 0;
+    chunk->gravitySensor = 0;    
 
     std::vector<uint8_t> shortPacketTail(80, 0xFF);
 
@@ -95,9 +92,8 @@ TEST_F(UsbFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
     auto* triggerChunk = reinterpret_cast<ChunkMetadata*>(triggerFrame.data() + sizeof(UsbPacketHeader));
     triggerChunk->frameId = 2;
     triggerChunk->cameraNumber = 0;
-    triggerChunk->hasGravitySensor = 0;
-    triggerChunk->gravitySensor = 0;
-    triggerChunk->otherFlags = 0;
+    triggerChunk->flags = 0;
+    triggerChunk->gravitySensor = 0;    
 
     std::vector<uint8_t> expectedPayload(1024 - sizeof(UsbPacketHeader) - sizeof(ChunkMetadata), 0x00);
     EXPECT_CALL(GetMock(), OnBroadcast(expectedPayload)).Times(1);
@@ -121,9 +117,8 @@ TEST_F(UsbFrameDecoderTest, ReassemblesMultiChunkMjpegStream) {
         auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
         chunk->frameId = frameId;
         chunk->cameraNumber = 0;
-        chunk->hasGravitySensor = 0;
+        chunk->flags = 0;
         chunk->gravitySensor = 0;
-        chunk->otherFlags = 0;
         
         std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata));
         
@@ -159,10 +154,9 @@ TEST_F(UsbFrameDecoderTest, TriggersButtonHandlerOnHardwareFlag) {
         auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
         chunk->frameId = frameId;
         chunk->cameraNumber = 0;
-        chunk->hasGravitySensor = 0;
+        chunk->flags = 0;
         chunk->gravitySensor = 0;
-        chunk->otherFlags = 0;
-        chunk->buttonPress = isButtonPressed ? 1 : 0;
+        chunk->setButtonPressed(isButtonPressed);
         
         std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata));
         
@@ -203,11 +197,10 @@ TEST_F(UsbFrameDecoderTest, TriggersButtonHandlerOnFlag) {
 
     auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
     chunk->frameId = 101;
-    chunk->buttonPress = 1;
     chunk->cameraNumber = 0;
-    chunk->hasGravitySensor = 0;
+    chunk->flags = 0;
     chunk->gravitySensor = 0;
-    chunk->otherFlags = 0;
+    chunk->setButtonPressed(true);
 
     EXPECT_CALL(GetMock(), OnButtonPress()).Times(1);
     GetDecoder().processIncomingCameraData(packet);
@@ -223,9 +216,7 @@ TEST_F(UsbFrameDecoderTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     auto* chunk1 = reinterpret_cast<ChunkMetadata*>(packet1.data() + sizeof(UsbPacketHeader));
     chunk1->frameId = 1;
     chunk1->cameraNumber = 0;
-    chunk1->hasGravitySensor = 0;
     chunk1->gravitySensor = 0;
-    chunk1->otherFlags = 0;
 
     size_t const payload_offset = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
     std::fill(packet1.begin() + payload_offset, packet1.begin() + usb1->length, 0xDE);
@@ -239,9 +230,7 @@ TEST_F(UsbFrameDecoderTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     auto* chunk2 = reinterpret_cast<ChunkMetadata*>(packet2.data() + sizeof(UsbPacketHeader));
     chunk2->frameId = 2; 
     chunk2->cameraNumber = 0;
-    chunk2->hasGravitySensor = 0;
     chunk2->gravitySensor = 0;
-    chunk2->otherFlags = 0;
     
     std::fill(packet2.begin() + payload_offset, packet2.begin() + usb2->length, 0xAA);
 
@@ -298,9 +287,8 @@ TEST_F(UsbFrameDecoderTest, IgnoresUnsupportedCameraConfiguration) {
     auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
     chunk->frameId = 1;
     chunk->cameraNumber = 5;
-    chunk->hasGravitySensor = 0;
+    chunk->flags = 0;
     chunk->gravitySensor = 0;
-    chunk->otherFlags = 0;
 
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     GetDecoder().processIncomingCameraData(packet);
@@ -315,9 +303,7 @@ TEST_F(UsbFrameDecoderTest, AbortsOnMidFrameCameraShift) {
     auto* chunk1 = reinterpret_cast<ChunkMetadata*>(packet1.data() + sizeof(UsbPacketHeader));
     chunk1->frameId = 1;
     chunk1->cameraNumber = 0;
-    chunk1->hasGravitySensor = 0;
     chunk1->gravitySensor = 0;
-    chunk1->otherFlags = 0;
     
     GetDecoder().processIncomingCameraData(packet1);
 
@@ -329,9 +315,7 @@ TEST_F(UsbFrameDecoderTest, AbortsOnMidFrameCameraShift) {
     auto* chunk2 = reinterpret_cast<ChunkMetadata*>(packet2.data() + sizeof(UsbPacketHeader));
     chunk2->frameId = 1; 
     chunk2->cameraNumber = 1;
-    chunk2->hasGravitySensor = 0;
     chunk2->gravitySensor = 0;
-    chunk2->otherFlags = 0;
 
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     GetDecoder().processIncomingCameraData(packet2);

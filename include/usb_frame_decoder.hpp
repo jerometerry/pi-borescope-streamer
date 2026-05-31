@@ -30,4 +30,12 @@ private:
     void emitFrame();
 
     bool isCameraSupported() const;
+
+     /** 
+     * @brief Check if this camera header is for the same camera as another header
+     * @param first The other camera header to compare against
+     * @param second The other camera header to compare against
+     * @return true if the headers are for the same camera, false otherwise
+     */
+    static bool areSameCameras(ChunkMetadata first, ChunkMetadata second);
 };

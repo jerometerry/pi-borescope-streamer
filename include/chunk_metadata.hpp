@@ -16,35 +16,40 @@ struct [[gnu::packed]] ChunkMetadata {
      */
     uint8_t cameraNumber;
 
-    /** 
-     * @brief Flag indicating if the gravity sensor is present
+    /**
+     * @brief 
      */
-    unsigned char hasGravitySensor:1;
-
-     /** 
-     * @brief Flag indicating if the button is pressed
-     */
-    unsigned char buttonPress:1;
-
-    /** 
-     * @brief Other flags
-     */
-    unsigned char otherFlags:6;
+    uint8_t flags;
 
     /** 
      * @brief The value of the gravity sensor
      */
     uint32_t gravitySensor;
 
-    /** 
-     * @brief Check if this camera header is for the same camera as another header
-     * @param header The other camera header to compare against
-     * @return true if the headers are for the same camera, false otherwise
-     */
-    bool isSameCamera(ChunkMetadata header) const {
-        return frameId == header.frameId && 
-               cameraNumber == header.cameraNumber && 
-               hasGravitySensor == header.hasGravitySensor && 
-               otherFlags == header.otherFlags;
+    bool hasGravitySensor() const { 
+        return (flags & 0x01) != 0; 
+    }
+
+    bool isButtonPressed() const  { 
+        return (flags & 0x02) != 0; 
+    }
+
+    void setButtonPressed(bool pressed) {
+        if (pressed) {
+            flags |= 0x02;
+        } else {
+            flags &= ~0x02;
+        }
+    }
+
+    uint8_t getOtherFlags() const { 
+        return (flags >> 2) & 0x3F; 
+    }
+
+    void setOtherFlags(uint8_t val) {
+        flags &= 0x03;
+        flags |= ((val & 0x3F) << 2); 
     }
 };
+
+static_assert(sizeof(ChunkMetadata) == 7, "ChunkMetadata size must be exactly 7 bytes!");

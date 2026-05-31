@@ -61,12 +61,12 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
             return;
         }
     } else {
-        if (!metadata_.isSameCamera(*metadata)) {
+        if (!areSameCameras(metadata_, *metadata)) {
             return;
         }
     }
 
-    if (metadata->buttonPress && buttonHandler) {
+    if (metadata->isButtonPressed() && buttonHandler) {
         buttonHandler();
     }
 
@@ -76,5 +76,17 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
 }
 
 bool UsbFrameDecoder::isCameraSupported() const {
-    return metadata_.cameraNumber < 2 && metadata_.hasGravitySensor == 0 && metadata_.otherFlags == 0;
+    return metadata_.cameraNumber < 2 && !metadata_.hasGravitySensor() && metadata_.getOtherFlags() == 0;
+}
+
+ /** 
+     * @brief Check if this camera header is for the same camera as another header
+     * @param header The other camera header to compare against
+     * @return true if the headers are for the same camera, false otherwise
+     */
+bool UsbFrameDecoder::areSameCameras(ChunkMetadata first, ChunkMetadata second) {
+    return first.frameId == second.frameId && 
+            first.cameraNumber == second.cameraNumber && 
+            first.hasGravitySensor() == second.hasGravitySensor() && 
+            first.getOtherFlags() == second.getOtherFlags();
 }
