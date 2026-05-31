@@ -125,6 +125,14 @@ Our C++ `UsbFrameDecoder` bypasses this flaw by operating on fixed, linear 4KB r
 | 07 | Packed Bitfield Flags | 00 | Bit 0: hasGravitySensor, Bit 1: buttonPress, Bits 2-7: Unused |
 | 08 - 11 | Gravity Sensor Matrix | 60 33 30 24 | 32-bit internal IMU accelerometer telemetry payload |
 | 12 - 13 | JPEG SOI Marker | ff d8 | Universal JPEG Start of Image Boundary |
-| 14 - 31 | JPEG APP0 Segment | ff e0 ... 00 | Injected JFIF-compliant metadata header container |
+| 14 - 15 | JPEG APP0 Header Marker | ff e0 | JFIF |
+| 16 - 17 | APP0 Segment Length | 00 10 | 16 bytes |
+| 18 - 22 | Identifier | 4a 46 49 46 00 | ASCII "JFIF\0" |
+| 23 - 24 | Version | 01 02 | JFIF 1.02 |
+| 25 | Density Units | 01 | 1 DPI |
+| 26 - 27 | X Density | 00 48 | Big-Endian 0x0048 = 72 DPI |
+| 28 - 29 | Y Density | 00 48 | Big-Endian 0x0048 = 72 DPI |
+| 30 | Thumbnail Width | 00 | 0 pixels |
+| 31 | Thumbnail Height | 00 | 0 pixels |
 | 32 - 941 | Huffman Stream Data | Variable | Raw quantization entropy blocks (910 Bytes per packet) |
 | 942 - 943 | JPEG EOI Marker | ff d9 | Universal JPEG End of Image Terminal Line Boundary |
