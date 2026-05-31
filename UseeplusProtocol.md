@@ -115,114 +115,16 @@ Our C++ `UsbFrameDecoder` bypasses this flaw by operating on fixed, linear 4KB r
 
 ## USB Packet Structure
 
-### I. UsbPacketHeader Section (5 Bytes Total)
-
-* [00 - 01] (2 bytes): Packet Magic Delimiter — aa bb (0xBBAA in Little-Endian code).
-* [02] (1 byte): Camera Identifier — 0x0B (Video stream).
-* [03 - 04] (2 bytes): Payload Length — ab 03 (0x03AB = 939 bytes in Little-Endian). This defines the total remaining bytes left in this hardware transaction.
-
-### II. ChunkMetadata Section (7 Bytes Total)
-
-* [05] (1 byte): Frame ID Sequence Counter — 08.
-* [06] (1 byte): Camera Sub-System Number — 00.
-* [07] (1 byte): Bitfield Flags Layout — Combining hasGravitySensor (bit 0), buttonPress (bit 1), and otherFlags (bits 2–7).
-* [08 - 11] (4 bytes): Gravity Sensor Data Matrix — 60 33 30 24.
-
-### III. Raw JPEG Container Layer (Begins at Byte 12)
-
-* [12 - 13] (2 bytes): JPEG Start of Image (SOI) Anchor — ff d8.
-* [14 - 15] (2 bytes): JPEG APP0 Header Marker — ff e0.
-* [16 - 17] (2 bytes): APP0 Segment Struct Length — 00 10 (Big-Endian 0x0010 = 16 bytes tracking to the end of the thumbnail data).
-* [18 - 22] (5 bytes): Magic String Identifier — 4a 46 49 46 00 (Decodes exactly to ASCII "JFIF\0").
-* [23 - 24] (2 bytes): Container Revision Version — 01 02 (Major 1, Minor 2 $\rightarrow$ JFIF v1.02).
-* [25] (1 byte): Pixel Density Format Units — 01 (Indicates Dots Per Inch / DPI).
-* [26 - 27] (2 bytes): Horizontal Image Resolution Density — 00 48 (Big-Endian 0x0048 = 72 DPI).
-* [28 - 29] (2 bytes): Vertical Image Resolution Density — 00 48 (Big-Endian 0x0048 = 72 DPI).
-* [30] (1 byte): Embedded Thumbnail Width Axis — 00 (0 pixels).
-* [31] (1 byte): Embedded Thumbnail Height Axis — 00 (0 pixels).
-
-### IV. Continuous Payload Stream & Frame Termination
-
-* [32 to N-3] (Variable Bytes): Core Quantization and Huffman Coded JPEG Image Streams.
-* Mathematical Boundary Definition: $N$ represents the Total Packet Size ($5 \text{ bytes Header} + 939 \text{ bytes Length} = 944$). Therefore, this region runs from index 32 up to 941.
-* [N-2 to N-1] (2 bytes): JPEG End of Image (EOI) Line Cap — ff d9. Located strictly at indices 942 and 943 of a complete, unfragmented physical chunk.
-
-## USB Packet Visualization
-
-```mermaid
-grid-beta
-  title Useeplus Protocol Overhead Structure (Bytes 0 - 11)
-  
-  %% Row 1: UsbPacketHeader (5 Bytes)
-  00_Byte: "Magic High<br>0xAA"
-  01_Byte: "Magic Low<br>0xBB"
-  02_Byte: "Camera ID<br>0x0B / 0x07"
-  03_Byte: "Length High<br>0x03"
-  04_Byte: "Length Low<br>0xAB"
-  
-  %% Row 2: ChunkMetadata (First 3 Bytes)
-  05_Byte: "Frame ID<br>Counter"
-  06_Byte: "Camera Sub<br>System No."
-  07_Byte: "Packed Bitfield<br>Flags"
-  blank_1: " "
-  blank_2: " "
-  
-  %% Row 3: ChunkMetadata Gravity Telemetry Matrix (Final 4 Bytes)
-  08_Byte: "Gravity Accel<br>Byte 1"
-  09_Byte: "Gravity Accel<br>Byte 2"
-  10_Byte: "Gravity Accel<br>Byte 3"
-  11_Byte: "Gravity Accel<br>Byte 4"
-  blank_3: " "
-```
-
-
-```mermaid
-graph TD
-    title Useeplus Total 944-Byte Block Allocations
-
-    subgraph Headers [Protocol Envelopes (Bytes 0 - 11)]
-        A[UsbPacketHeader: Bytes 0-4] -->|5 Bytes| B[ChunkMetadata: Bytes 5-11]
-    end
-
-    subgraph JPEG [Standard JFIF Image Data (Bytes 12 - 943)]
-        B -->|Starts at Byte 12| C[JPEG SOI Marker: Bytes 12-13]
-        C --> D[APP0 JFIF Header Segment: Bytes 14-31]
-        D --> E[Compressed Image Payload: Bytes 32-941]
-        E --> F[JPEG EOI Termination Tail: Bytes 942-943]
-    end
-
-    style Headers fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px
-    style JPEG fill:#f1f8e9,stroke:#8bc34a,stroke-width:2px
-```
-
-
-```mermaid
-packet-beta
-title Useeplus Custom USB Protocol - Packet Byte Layout (944 Bytes Total)
-  0-1: "Magic Magic Delimiter (0xBBAA)"
-  2: "Camera ID (0x0B / 0x07)"
-  3-4: "Declared Length (0x03AB = 939B)"
-  5: "Frame ID Sequence"
-  6: "Camera Sub-System No."
-  7: "Bitfield Flags"
-  8-11: "Gravity Sensor Data"
-  12-13: "JPEG SOI Anchor (0xFFD8)"
-  14-15: "JPEG APP0 Marker (0xFFE0)"
-  16-17: "APP0 Segment Length (16B)"
-  18-22: "ASCII Identifier ('JFIF\0')"
-  23-24: "JFIF Version (v1.02)"
-  25: "Density Units (DPI)"
-  26-27: "Horizontal Density (72)"
-  28-29: "Vertical Density (72)"
-  30: "Thumbnail Width (0)"
-  31: "Thumbnail Height (0)"
-  32-941: "Core Huffman & Quantization JPEG Data Stream"
-  942-943: "JPEG EOI Line Cap (0xFFD9)"
-```
-
-## Visual Sections Key
-
-* Bytes 0–4 (Blue/Top): UsbPacketHeader structural wrapper used by libusb for memory bounding.
-* Bytes 5–11 (Green): The 7-byte packed ChunkMetadata block that controls button events and frame updates.
-* Bytes 12–31 (Yellow): Standard JPEG/JFIF file header overhead injected by the camera sensor.
-* Bytes 32–943 (Purple/Bottom): The compressed pixel entropy payload, cleanly terminated by the End of Image (EOI) marker at the final two byte addresses.
+| Byte Address | Field Name | Hex Value Example | Description / C++ Field mapping |
+|---|---|---|---|
+| 00 - 01 | Packet Delimiter | aa bb | 0xBBAA (Little-Endian) Magic Frame Header Anchor |
+| 02 | Camera Stream ID | 0b | 0x0B = Video Feed, 0x07 = Gravity Telemetry |
+| 03 - 04 | Payload Length | ab 03 | Total remaining bytes in packet payload (0x03AB = 939B) |
+| 05 | Frame Sequence ID | 08 | Increments when a complete MJPEG frame finish transmitting |
+| 06 | Camera Sub-System | 00 | Secondary internal lens index routing |
+| 07 | Packed Bitfield Flags | 00 | Bit 0: hasGravitySensor, Bit 1: buttonPress, Bits 2-7: Unused |
+| 08 - 11 | Gravity Sensor Matrix | 60 33 30 24 | 32-bit internal IMU accelerometer telemetry payload |
+| 12 - 13 | JPEG SOI Marker | ff d8 | Universal JPEG Start of Image Boundary |
+| 14 - 31 | JPEG APP0 Segment | ff e0 ... 00 | Injected JFIF-compliant metadata header container |
+| 32 - 941 | Huffman Stream Data | Variable | Raw quantization entropy blocks (910 Bytes per packet) |
+| 942 - 943 | JPEG EOI Marker | ff d9 | Universal JPEG End of Image Terminal Line Boundary |
