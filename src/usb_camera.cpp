@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
@@ -47,8 +48,9 @@ UsbCamera::UsbCamera(const DeviceInfo& target) {
 
     libusb_clear_halt(deviceHandle, ENDPOINT_1);
 
-    write(ENDPOINT_2, INITIALIZATION_TOKENS, sizeof(INITIALIZATION_TOKENS));
-    write(ENDPOINT_1, START_STREAM_TOKENS, sizeof(START_STREAM_TOKENS));
+    int numBytes = 0;
+    write(ENDPOINT_2, INITIALIZATION_TOKENS, sizeof(INITIALIZATION_TOKENS), numBytes);
+    write(ENDPOINT_1, START_STREAM_TOKENS, sizeof(START_STREAM_TOKENS), numBytes);
 }
 
 UsbCamera::~UsbCamera() {
@@ -58,6 +60,28 @@ UsbCamera::~UsbCamera() {
     if (context) {
         libusb_exit(context);
     }
+}
+
+libusb_device_handle* UsbCamera::open(libusb_context *context, const DeviceInfo& target) {
+    libusb_device** devices = nullptr;
+    ssize_t count = libusb_get_device_list(context, &devices);
+    if (count < 0) return nullptr;
+
+    libusb_device_handle* handle = nullptr;
+
+    for (ssize_t i = 0; i < count; ++i) {
+        libusb_device* device = devices[i];
+        if (libusb_get_bus_number(device) == target.bus && 
+            libusb_get_device_address(device) == target.address) {
+            
+            if (libusb_open(device, &handle) == 0) {
+                break;
+            }
+        }
+    }
+
+    libusb_free_device_list(devices, 1);
+    return handle;
 }
 
 std::vector<DeviceInfo> UsbCamera::listCameras() {
@@ -123,36 +147,27 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
 }
 
 int UsbCamera::read(std::vector<uint8_t> &buffer) {
-    return read(ENDPOINT_1, buffer, ServerConstants::ONE_KILOBYTE);
-}
-
-libusb_device_handle* UsbCamera::open(libusb_context *context, const DeviceInfo& target) {
-    libusb_device** devices = nullptr;
-    ssize_t count = libusb_get_device_list(context, &devices);
-    if (count < 0) return nullptr;
-
-    libusb_device_handle* handle = nullptr;
-
-    for (ssize_t i = 0; i < count; ++i) {
-        libusb_device* device = devices[i];
-        if (libusb_get_bus_number(device) == target.bus && 
-            libusb_get_device_address(device) == target.address) {
-            
-            if (libusb_open(device, &handle) == 0) {
-                break;
-            }
-        }
-    }
-
-    libusb_free_device_list(devices, 1);
-    return handle;
-}
-
-int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize) {
     int numBytes = 0;
+    return read(ENDPOINT_1, buffer, ServerConstants::ONE_KILOBYTE, numBytes);
+}
 
+int UsbCamera::read(uint8_t* buffer, size_t maxSize, int& numBytes) {
+    return read(ENDPOINT_1, buffer, maxSize, numBytes);
+}
+
+int UsbCamera::read(unsigned char endpoint, uint8_t* buffer, size_t maxSize, int& numBytes) {
+    return libusb_bulk_transfer(
+        deviceHandle, 
+        LIBUSB_ENDPOINT_IN | endpoint, 
+        buffer, 
+        maxSize, 
+        &numBytes, 
+        USB_TIMEOUT
+    );
+}
+
+int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize, int& numBytes) {
     size_t readSize = std::min(maxSize, buffer.capacity());
-
     buffer.resize(readSize);
 
     int error = libusb_bulk_transfer(
@@ -165,7 +180,6 @@ int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t
     );
 
     if (error != 0) {
-        buffer.resize(0);
         return error;
     }
 
@@ -173,8 +187,7 @@ int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t
     return 0;
 }
 
-int UsbCamera::write(unsigned char endpoint, const uint8_t* buffer, size_t length) {
-    int numBytes = 0;
+int UsbCamera::write(unsigned char endpoint, const uint8_t* buffer, size_t length, int& numBytes) {
     return libusb_bulk_transfer(
         deviceHandle, 
         LIBUSB_ENDPOINT_OUT | endpoint, 

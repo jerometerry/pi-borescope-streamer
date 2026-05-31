@@ -50,12 +50,6 @@ public:
      */
     static libusb_device_handle *open(libusb_context *context, const DeviceInfo& target);
 
-    /** 
-     * @brief Close the USB camera
-     * @return True if the camera was closed successfully, false otherwise
-     */
-    bool close();
-
     static std::vector<DeviceInfo> listCameras();
 
     /** 
@@ -64,6 +58,45 @@ public:
      * @return The number of bytes read, or a negative value on error
      */
     int read(std::vector<uint8_t> &buffer);
+
+    /** 
+     * @brief Read data from the USB camera
+     * @param buffer The buffer to store the data
+     * @param maxSize
+     * @param numBytes
+     * @return The number of bytes read, or a negative value on error
+     */
+    int read(uint8_t* buffer, size_t maxSize, int& numBytes);
+
+    /** 
+     * @brief Read data from the USB camera
+     * @param endpoint The endpoint to read from
+     * @param buffer The buffer to store the data
+     * @param length The number of bytes to read
+     * @param numBytes
+     * @return The number of bytes read, or a negative value on error
+     */
+    int read(unsigned char endpoint, uint8_t* buffer, size_t maxSize, int& numBytes);
+
+    /** 
+     * @brief Read data from the USB camera
+     * @param endpoint The endpoint to read from
+     * @param buffer The buffer to store the data
+     * @param length The number of bytes to read
+     * @param numBytes
+     * @return The number of bytes read, or a negative value on error
+     */
+    int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize, int& numBytes);
+
+    /** 
+     * @brief Write data to the USB camera
+     * @param endpoint The endpoint to write to
+     * @param buffer The buffer containing the data to write
+     * @param length The length of the data to write
+     * @param numBytes
+     * @return The number of bytes written, or a negative value on error
+     */
+    int write(unsigned char endpoint, const uint8_t* buffer, size_t length, int& numBytes);
 
 private:
     /** 
@@ -105,22 +138,4 @@ private:
      * @brief The USB device handle
      */
     libusb_device_handle *deviceHandle{nullptr};
-
-    /** 
-     * @brief Read data from the USB camera
-     * @param endpoint The endpoint to read from
-     * @param buffer The buffer to store the data
-     * @param length The number of bytes to read
-     * @return The number of bytes read, or a negative value on error
-     */
-    int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize);
-
-    /** 
-     * @brief Write data to the USB camera
-     * @param endpoint The endpoint to write to
-     * @param buffer The buffer containing the data to write
-     * @param length The length of the data to write
-     * @return The number of bytes written, or a negative value on error
-     */
-    int write(unsigned char endpoint, const uint8_t* buffer, size_t length);
 };
