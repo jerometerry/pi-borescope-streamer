@@ -1,6 +1,6 @@
 #pragma once
 
-struct libusb_context;
+#include <libusb.h>
 
 /** 
  * @brief Class representing a USB context

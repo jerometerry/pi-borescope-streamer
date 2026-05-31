@@ -1,25 +1,22 @@
-#include "usb_camera.hpp"
-#include "device_info.hpp"
-#include "device_finder.hpp"
-#include "usb_frame_decoder.hpp"
-#include "server_constants.hpp"
-
-#include <chrono>
+#include <libusb.h>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <mutex>
 #include <span>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <vector>
-
-#include <libusb.h>
+#include "device_finder.hpp"
+#include "device_info.hpp"
+#include "server_constants.hpp"
+#include "usb_camera.hpp"
+#include "usb_frame_decoder.hpp"
 
 static bool running = true;
 static std::mutex frameMutex;

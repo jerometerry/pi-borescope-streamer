@@ -1,16 +1,14 @@
-#include "usb_frame_decoder.hpp"
-#include "usb_packet_header.hpp"
-#include "chunk_metadata.hpp"
-
+#include <cstdint>
+#include <exception>
 #include <iostream>
 #include <fstream>
+#include <functional>
 #include <vector>
 #include <string>
-#include <string_view>
 #include <span>
 #include <cstdlib>
-#include <stdexcept>
 #include <algorithm>
+#include "usb_frame_decoder.hpp"
 
 int main(int argc, const char* argv[]) {
     try {
