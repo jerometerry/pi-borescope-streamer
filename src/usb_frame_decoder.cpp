@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <bit>
+#include <cstdint>
+#include <cstdlib>
 #include <iterator>
 #include <utility>
 #include "chunk_metadata.hpp"
@@ -7,84 +9,126 @@
 #include "usb_frame_decoder.hpp"
 #include "usb_packet_header.hpp"
 
-// Ensure that the code is compiled on a little-endian platform, since the protocol relies on little-endian byte order for the USB frame and camera header. This check is important to prevent issues with byte order when interpreting the raw byte data from the USB frames, and to ensure that the code behaves correctly on platforms with different endianness.
 static_assert(std::endian::native == std::endian::little);
 
 UsbFrameDecoder::UsbFrameDecoder(
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler, std::function<void()> buttonHandler) 
     : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {
         frameBuffer.reserve(ServerConstants::ONE_MEGABYTE);
+        streamBuffer.reserve(ServerConstants::ONE_MEGABYTE); // Prevent reallocations
+}
+
+void UsbFrameDecoder::trimAndEmitFrame() {
+    if (frameBuffer.empty()) {
+        return;
     }
 
-void UsbFrameDecoder::emitFrame() {
-    if (broadcastHandler) {
-        broadcastHandler(frameBuffer);
+    size_t soiOffset = std::string::npos;
+    size_t eoiOffset = std::string::npos;
+
+    // Scan forward for Start of Image (FF D8)
+    for (size_t j = 0; j + 1 < std::min<size_t>(256, frameBuffer.size()); ++j) {
+        if (frameBuffer[j] == 0xFF && frameBuffer[j+1] == 0xD8) {
+            soiOffset = j;
+            break;
+        }
     }
+
+    // Scan backwards for End of Image (FF D9)
+    for (size_t j = frameBuffer.size(); j >= 2; --j) {
+        if (frameBuffer[j - 2] == 0xFF && frameBuffer[j - 1] == 0xD9) {
+            eoiOffset = j;
+            break;
+        }
+    }
+
+    // If we have valid boundaries, slice the pure JPEG and broadcast
+    if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
+        std::vector<uint8_t> cleanJpeg(frameBuffer.begin() + soiOffset, frameBuffer.begin() + eoiOffset);
+        if (broadcastHandler) {
+            broadcastHandler(cleanJpeg);
+        }
+    }
+    
     frameBuffer.clear();
 }
 
 void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
-    if (data.size() < USB_PACKET_HEADER_LENGTH) {
-        return;
-    }
+    // 1. Append the new hardware burst to our sliding window
+    streamBuffer.insert(streamBuffer.end(), data.begin(), data.end());
 
-    const UsbPacketHeader *header = reinterpret_cast<const UsbPacketHeader *>(data.data());
+    size_t i = 0;
+    const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
 
-    if (header->header != ServerConstants::USB_FRAME_HEADER) {
-        return;
-    }
-
-    auto it = std::find(std::begin(ServerConstants::VALID_CAMERA_IDS), std::end(ServerConstants::VALID_CAMERA_IDS), header->cameraId);
-    if (it == std::end(ServerConstants::VALID_CAMERA_IDS)) {
-        return;
-    }
-
-    if (USB_PACKET_HEADER_LENGTH + header->length > data.size()) {
-        return;
-    }
-
-    if (data.size() - USB_PACKET_HEADER_LENGTH < CHUNK_METADATA_LENGTH) {
-        return;
-    }
-
-    const ChunkMetadata *metadata = reinterpret_cast<const ChunkMetadata *>(data.data() + USB_PACKET_HEADER_LENGTH);
-
-    if (!frameBuffer.empty()) {
-        if (metadata_.frameId != metadata->frameId) {
-            emitFrame();
+    // 2. Loop through the stream buffer to extract all available packets
+    while (i + TOTAL_HEADER_SIZE <= streamBuffer.size()) {
+        
+        // Safety lock: Ensure we have enough lookahead buffer to safely run the 300-byte 
+        // Ghost Filter. If not, break and wait for the next USB read to fill the window.
+        if (i + 300 > streamBuffer.size()) {
+            break; 
         }
-    }    
 
-    if (frameBuffer.empty()) {
-        metadata_ = *metadata;
-        if (!fromVideoFeed(metadata_)) {
-            return;
+        const UsbPacketHeader* header = reinterpret_cast<const UsbPacketHeader*>(&streamBuffer[i]);
+
+        if (header->header != ServerConstants::USB_FRAME_HEADER || 
+           (header->cameraId != 0x0B && header->cameraId != 0x07)) {
+            i++;
+            continue;
         }
-    } else {
-        if (!forSameCameraAndFrame(metadata_, *metadata)) {
-            return;
+
+        // --- THE PROXIMITY GHOST FILTER ---
+        bool isGhost = false;
+        size_t nextHeaderOffset = 0;
+        
+        for (size_t d = 5; d <= 300; ++d) {
+            if (streamBuffer[i+d] == 0xAA && streamBuffer[i+d+1] == 0xBB && 
+               (streamBuffer[i+d+2] == 0x0B || streamBuffer[i+d+2] == 0x07)) {
+                isGhost = true;
+                nextHeaderOffset = d;
+                break;
+            }
         }
+
+        if (isGhost) {
+            i += nextHeaderOffset;
+            continue;
+        }
+
+        // Calculate total packet size
+        size_t chunkTotalSize = sizeof(UsbPacketHeader) + header->length;
+
+        // If the packet was cut in half by the 64KB USB boundary, wait for the rest!
+        if (i + chunkTotalSize > streamBuffer.size()) {
+            break;
+        }
+
+        const ChunkMetadata* meta = reinterpret_cast<const ChunkMetadata*>(&streamBuffer[i + sizeof(UsbPacketHeader)]);
+
+        // Frame Assembly Logic
+        if (!frameBuffer.empty() && metadata_.frameId != meta->frameId) {
+            trimAndEmitFrame();
+        }
+        metadata_ = *meta;
+
+        // Button Event Routing
+        if (meta->isButtonPressed() && buttonHandler) {
+            buttonHandler();
+        }
+
+        // Video Routing (Ignore Telemetry Packets)
+        if (!meta->hasGravitySensor() && meta->getOtherFlags() == 0 && meta->cameraNumber < 2) {
+            size_t payloadStart = i + TOTAL_HEADER_SIZE;
+            size_t payloadSize = chunkTotalSize - TOTAL_HEADER_SIZE;
+            frameBuffer.insert(frameBuffer.end(), 
+                               streamBuffer.begin() + payloadStart, 
+                               streamBuffer.begin() + payloadStart + payloadSize);
+        }
+
+        // Leapfrog over the fully processed packet
+        i += chunkTotalSize;
     }
 
-    if (metadata->isButtonPressed() && buttonHandler) {
-        buttonHandler();
-    }
-
-    auto cameraDataStart = data.begin() + USB_PACKET_HEADER_LENGTH + CHUNK_METADATA_LENGTH;
-    auto cameraDataEnd = data.begin() + USB_PACKET_HEADER_LENGTH + header->length;
-    frameBuffer.insert(frameBuffer.end(), cameraDataStart, cameraDataEnd);
-}
-
-bool UsbFrameDecoder::fromVideoFeed(ChunkMetadata metadata) {
-    return metadata.cameraNumber < 2 && !metadata.hasGravitySensor() && metadata.getOtherFlags() == 0;
-}
-
-bool UsbFrameDecoder::forSameCamera(ChunkMetadata first, ChunkMetadata second) {
-    return first.cameraNumber == second.cameraNumber && 
-           first.hasGravitySensor() == second.hasGravitySensor() && 
-           first.getOtherFlags() == second.getOtherFlags();
-}
-
-bool UsbFrameDecoder::forSameCameraAndFrame(ChunkMetadata first, ChunkMetadata second) {
-    return forSameCamera(first, second) && first.frameId == second.frameId;
+    // 3. Clear processed bytes from the sliding window, keeping any incomplete packets
+    streamBuffer.erase(streamBuffer.begin(), streamBuffer.begin() + i);
 }

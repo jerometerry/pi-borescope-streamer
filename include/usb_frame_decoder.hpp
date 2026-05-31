@@ -21,6 +21,7 @@ private:
     static constexpr size_t USB_PACKET_HEADER_LENGTH = sizeof(UsbPacketHeader);
     static constexpr size_t CHUNK_METADATA_LENGTH = sizeof(ChunkMetadata);
 
+    std::vector<uint8_t> streamBuffer;
     std::vector<uint8_t> frameBuffer;
     ChunkMetadata metadata_{};
     
@@ -28,6 +29,8 @@ private:
     std::function<void()> buttonHandler;
 
     void emitFrame();
+
+    void trimAndEmitFrame();
 
     static bool fromVideoFeed(ChunkMetadata metadata);
 

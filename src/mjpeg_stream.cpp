@@ -55,34 +55,16 @@ void MjpegStream::stop() {
 }
 
 void MjpegStream::broadcastFrame(const std::vector<uint8_t>& frame) {
-    // If the frame is empty, there's nothing to broadcast, so just return early. This can happen if the camera produces an empty frame for any reason, and we want to avoid broadcasting invalid data to clients.
     if (frame.empty()) {
         return;
     }
 
     {
         std::scoped_lock<std::mutex> lock(frameMutex);
-
-        // Attempt to find the JPEG SOI markers within the first 32 bytes of the frame data.
-        size_t offset = std::string::npos;
-        for (size_t index = 0; index + 1 < frame.size() && index < ServerConstants::JPEG_SOI_MARKERS_MAX_POSITION; ++index) {
-            if (frame[index] == ServerConstants::JPEG_SOI_MARKERS[0] && frame[index + 1] == ServerConstants::JPEG_SOI_MARKERS[1]) {
-                offset = index;
-                break;
-            }
-        }
-
-        // If the markers were found, discard any leading bytes before the SOI. This can help mitigate issues with certain cameras that prepend extraneous data before the JPEG frame. If the markers aren't found, just use the entire frame as-is.
-        if (offset != std::string::npos) {
-            frameBuffer.assign(frame.begin() + offset, frame.end());
-        } else {
-            frameBuffer = frame;
-        }
-
-        // Increment the frame ID to signal to any connected clients that a new frame is available. This happens after the frame buffer is updated to ensure clients can safely read the new frame data when they see the ID change.
+        
+        frameBuffer = frame;
         frameId++;
 
-        // If a snapshot capture was requested by the hardware button, copy the latest frame to the snapshot buffer for serving to snapshot clients. This happens after the main frame buffer and ID are updated to ensure the snapshot captures the most recent frame.
         if (snapshotNextFrame) {
             std::scoped_lock<std::mutex> snapshotLock(snapshotMutex);
             snapshotBuffer = frameBuffer;
