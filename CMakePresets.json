@@ -18,7 +18,7 @@
 			"binaryDir": "${sourceDir}/out/build/${presetName}",
 			"generator": "Ninja",
 			"cacheVariables": {
-				"CMAKE_BUILD_TYPE": "Release",
+				"CMAKE_BUILD_TYPE": "RelWithDebInfo",
 				"CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON"
 			}
 		}
