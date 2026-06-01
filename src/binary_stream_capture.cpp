@@ -14,7 +14,6 @@
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
 
-// Global thread-safe atomic token to allow clean exiting via Ctrl+C
 static std::atomic<bool> keepRunning{true};
 
 void signalHandler(int /*signum*/) {
@@ -22,11 +21,9 @@ void signalHandler(int /*signum*/) {
 }
 
 int main() {
-    // Register signal handler to cleanly stop loops without corrupting file writes
     std::signal(SIGINT, signalHandler);
 
     try {
-        // 1. Hardware Bus Discovery
         std::vector<DeviceInfo> cameras = DeviceFinder::superCameras();
         if (cameras.empty()) {
             std::cerr << "[Error] No Useeplus supercamera devices found on the USB bus.\n";
@@ -59,16 +56,13 @@ int main() {
 
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(cameraInfo.bus)
                   << " Address " << static_cast<int>(cameraInfo.address) << "...\n";
-        
-        // 2. Open High-Performance Binary Output File 
+
         std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
         if (!outFile.is_open()) {
             std::cerr << "[Fatal] Could not open output file for writing.\n";
             return EXIT_FAILURE;
         }
 
-        // 3. Setup Hardware Aligned Buffer Space
-        // Changed from 64KB down to exactly 4KB to line up with the hardware's internal alignment boundaries
         const size_t PACKET_PAGE_SIZE = ServerConstants::FOUR_KILOBYTES; 
         std::vector<uint8_t> buffer;
         buffer.reserve(PACKET_PAGE_SIZE); 
@@ -79,21 +73,16 @@ int main() {
         std::cout << "Recording video stream to 'camera_stream.mjpeg'..." << "\n";
         std::cout << "Press Ctrl+C to stop.\n\n";
 
-        // Initialize local camera object
         UsbCamera camera(cameraInfo);
 
-        // 4. Main Low-Latency Capture Loop
         while (keepRunning.load(std::memory_order_relaxed)) {
-            // Directly pass the aligned 4KB target chunk size boundary
             int status = camera.read(1, buffer, PACKET_PAGE_SIZE, numBytes);
 
             if (status == 0 && numBytes > 0) {
-                // Write the exact slice received without flushing stream overhead unnecessarily
                 outFile.write(reinterpret_cast<const char*>(buffer.data()), numBytes);
                 totalBytesWritten += numBytes;
             } 
             else if (status != 0) {
-                // Ignore timeouts gracefully—this is normal behavior if the bus is idle
                 if (status == LIBUSB_ERROR_TIMEOUT) {
                     continue; 
                 } 
@@ -106,7 +95,6 @@ int main() {
             }
         }
 
-        // 5. Cleanup and Flush
         std::cout << "\nRecording stopped. Syncing disk buffers...\n";
         outFile.close();
         std::cout << "Done! Total bytes saved: " << totalBytesWritten << " bytes.\n";

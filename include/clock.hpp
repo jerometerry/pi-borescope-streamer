@@ -2,6 +2,9 @@
 
 #include <chrono>
 
+/**
+ * @brief Abstraction to break hard dependency on system clock, to testing time based code. 
+ */
 class Clock {
 public:
     virtual ~Clock() = default;

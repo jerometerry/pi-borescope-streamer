@@ -97,28 +97,23 @@ int main(int argc, const char* argv[]) {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-        // 1. Initialize Thread-Safe Core Atomic Token
         std::atomic<bool> running{true};
 
-        // 2. Structural Layer Allocations
         WallClock systemClock;
         const ServerTime serverTime(systemClock, std::chrono::steady_clock::now());
         
         SharedFramePipeline pipeline;
         HardwareButtonManager buttonManager(serverTime);
 
-        // 3. Initialize Web Server and Verify Port Bindings
         WebServer server(port, running, pipeline);
         if (!server.initialize()) {
             std::cerr << "[Fatal Exception] Failed to initialize web server socket bindings.\n";
             return EXIT_FAILURE;
         }
 
-        // 4. Inject Dependencies into the Execution Runner Context
         MjpegStream stream(pipeline, buttonManager, server, running);
         globalStream = &stream;
 
-        // 5. Fire Engine Up
         stream.run(camera);
         
     } catch (const std::exception& e) {

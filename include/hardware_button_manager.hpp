@@ -3,6 +3,10 @@
 #include <mutex>
 class ServerTime;
 
+/**
+ * @brief Maintains an internal state of the hardware button based on the hardware flags embedded in USB packets.
+ * 
+ */
 class HardwareButtonManager {
 public:
     explicit HardwareButtonManager(const ServerTime& serverTime);

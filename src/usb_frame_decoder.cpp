@@ -7,8 +7,6 @@
 #include "usb_frame_decoder.hpp"
 #include "server_constants.hpp"
 
-// Upstream architectural optimization: Change 1MB down to 40KB maximum.
-// A 640x480 MJPEG frame physically cannot exceed 40-50KB.
 UsbFrameDecoder::UsbFrameDecoder(
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler, std::function<void()> buttonHandler) 
     : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {
@@ -18,16 +16,12 @@ UsbFrameDecoder::UsbFrameDecoder(
 }
 
 void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
-    // 1. Accumulate incoming 4KB chunks into our tiny stream window
     streamBuffer.insert(streamBuffer.end(), data.begin(), data.end());
 
     size_t i = 0;
     const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
 
-    // 2. Linear single-pass execution parsing
     while (i + TOTAL_HEADER_SIZE <= streamBuffer.size()) {
-        
-        // Safe Extraction utilizing std::memcpy (Safe from strict aliasing rules)
         UsbPacketHeader header{};
         std::memcpy(&header, &streamBuffer[i], sizeof(UsbPacketHeader));
 
@@ -37,12 +31,10 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
             continue;
         }
 
-        // --- SAFE FIXED LOOKAHEAD FILTER ---
         // Verify if a ghost header lives down the pipe *before* checking data boundaries
         bool isGhost = false;
         size_t nextHeaderOffset = 0;
-        
-        // Cap scanning dynamically to the current size limits to protect against memory leaks
+
         size_t maxScan = std::min<size_t>(300, streamBuffer.size() - i - 3); 
         for (size_t d = 5; d <= maxScan; ++d) {
             if (streamBuffer[i+d] == 0xAA && streamBuffer[i+d+1] == 0xBB && 
@@ -54,14 +46,12 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
         }
 
         if (isGhost) {
-            i += nextHeaderOffset; // Drop ghost frame fragment safely
+            i += nextHeaderOffset;
             continue;
         }
 
-        // Calculate size of actual expected hardware chunk
         size_t chunkTotalSize = sizeof(UsbPacketHeader) + header.length;
 
-        // If the real packet cross-cuts our 4KB block, yield and wait for next USB transfer
         if (i + chunkTotalSize > streamBuffer.size()) {
             break;
         }
@@ -69,18 +59,15 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
         ChunkMetadata meta{};
         std::memcpy(&meta, &streamBuffer[i + sizeof(UsbPacketHeader)], sizeof(ChunkMetadata));
 
-        // Frame Boundary Assembly Tracking
         if (!frameBuffer.empty() && metadata_.frameId != meta.frameId) {
             trimAndEmitFrame();
         }
         metadata_ = meta;
 
-        // Asynchronous Hardware Trigger Check
         if (meta.isButtonPressed() && buttonHandler) {
             buttonHandler();
         }
 
-        // Payload Validation and Stripping
         if (!meta.hasGravitySensor() && meta.getOtherFlags() == 0 && meta.cameraNumber < 2) {
             size_t payloadStart = i + TOTAL_HEADER_SIZE;
             size_t payloadSize = chunkTotalSize - TOTAL_HEADER_SIZE;
@@ -93,8 +80,6 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
         i += chunkTotalSize;
     }
 
-    // 3. Clear processed data efficiently. 
-    // Since streamBuffer is now small (~4KB-8KB), this memory shift is virtually free.
     if (i > 0) {
         streamBuffer.erase(streamBuffer.begin(), streamBuffer.begin() + i);
     }

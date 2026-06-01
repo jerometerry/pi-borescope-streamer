@@ -43,7 +43,6 @@ protected:
     HardwareButtonManager& buttonManager() { return *buttonManager_; }
 };
 
-// 1. Test Pipeline Frame Operations
 TEST_F(MjpegStreamComponentsTest, PipelineIgnoresEmptyFrames) {
     uint32_t frameId = 0;
     pipeline().updateFrame({});
@@ -53,7 +52,6 @@ TEST_F(MjpegStreamComponentsTest, PipelineIgnoresEmptyFrames) {
     EXPECT_EQ(frameId, 0);
 }
 
-// 2. Test Pipeline Snapshot Operations
 TEST_F(MjpegStreamComponentsTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     buttonManager().registerHardwarePress();
     
@@ -69,18 +67,15 @@ TEST_F(MjpegStreamComponentsTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     EXPECT_EQ(pipeline().getSnapshot(), nextVideoFrame);
 }
 
-// 3. Test Button Manager Debouncing Mechanics
 TEST_F(MjpegStreamComponentsTest, DebouncesRapidHardwareButtonPresses) {
     buttonManager().registerHardwarePress();
 
-    // Sudden rapid chattering edge signals (ignored by debounce window)
     advanceTime(std::chrono::milliseconds(20));
     buttonManager().registerHardwarePress(); 
 
     advanceTime(std::chrono::milliseconds(250));
     EXPECT_TRUE(buttonManager().checkAndResetQuickPressTrigger());
     
-    // Test a long hold window that triggers the bypass logic
     buttonManager().registerHardwarePress();
     for (int i = 0; i < 12; ++i) {
         advanceTime(std::chrono::milliseconds(50));

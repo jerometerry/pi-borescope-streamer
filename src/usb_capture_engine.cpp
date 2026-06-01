@@ -1,8 +1,8 @@
 #include <libusb.h>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <span>
-#include <cstdlib>
 #include <thread>
 #include <vector> 
 #include "hardware_button_manager.hpp"

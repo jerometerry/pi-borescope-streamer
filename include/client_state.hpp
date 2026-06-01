@@ -85,8 +85,6 @@ struct ClientState {
         sentFrameId = 0;
         isStreaming = false;
         closeAfterWrite = false;
-        
-        // Clear out old frame bytes but maintain the internal vector allocation capacity
         outbox.clear(); 
     }
 
@@ -95,37 +93,32 @@ struct ClientState {
             return; 
         }
 
-        // 1. Fast-Path: If nothing is currently waiting in the queue, try a direct kernel socket push
         if (outbox.empty()) {
             ssize_t sent = send(fileDescriptor, data, size, MSG_NOSIGNAL);
             
             if (sent >= 0) {
                 size_t bytesSent = static_cast<size_t>(sent);
                 if (bytesSent == size) { 
-                    return; // 100% data delivered cleanly with zero heap memory copying!
+                    return;
                 }
-                
-                // Handle partial socket writes safely using standard vector initialization
+
                 outbox.assign(data + bytesSent, data + size);
                 outboxOffset = 0;
                 return;
             } 
 
-            // Handle temporary blocking signals or hard network socket drops
             if (errno != EAGAIN && errno != EWOULDBLOCK) {
                 isActive = false; // Mark client for immediate loop eviction
                 return;
             }
         }
 
-        // 2. Slow-Path: Protect the host from memory exhaustion by slow network clients
         if (outbox.size() + size > ClientState::ENGINES_EXPECTED_FRAME_MAX * 3) {
             std::cerr << "[Network Core] Outbox memory capacity overflow on FD " << fileDescriptor << ". Evicting client.\n";
             isActive = false;
             return;
         }
 
-        // Append raw data to our heap-allocated queue cleanly using standard vector mechanics
         outbox.insert(outbox.end(), data, data + size);
     }
 

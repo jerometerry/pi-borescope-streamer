@@ -46,10 +46,9 @@ TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     auto* chunk = reinterpret_cast<ChunkMetadata*>(hardwarePacket.data() + sizeof(UsbPacketHeader));
     chunk->frameId = 2; chunk->cameraNumber = 0; chunk->flags = 0; chunk->gravitySensor = 0;    
 
-    // Setup clear JPEG boundary conditions
-    hardwarePacket[headerSize] = 0xFF;               // SOI
+    hardwarePacket[headerSize] = 0xFF;
     hardwarePacket[headerSize + 1] = 0xD8;
-    hardwarePacket[sizeof(UsbPacketHeader) + usb->length - 2] = 0xFF; // EOI
+    hardwarePacket[sizeof(UsbPacketHeader) + usb->length - 2] = 0xFF;
     hardwarePacket[sizeof(UsbPacketHeader) + usb->length - 1] = 0xD9;
 
     std::vector<uint8_t> triggerFrame = hardwarePacket; 
@@ -74,14 +73,13 @@ TEST_F(UsbFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
     auto* chunk = reinterpret_cast<ChunkMetadata*>(validHeader.data() + sizeof(UsbPacketHeader));
     chunk->frameId = 1; chunk->cameraNumber = 0; chunk->flags = 0; chunk->gravitySensor = 0;    
 
-    // Inject legal JPEG boundaries into dummy array
     size_t payloadOffset = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
     validHeader[payloadOffset] = 0xFF;
     validHeader[payloadOffset + 1] = 0xD8;
     validHeader[validHeader.size() - 2] = 0xFF;
     validHeader[validHeader.size() - 1] = 0xD9;
 
-    std::vector<uint8_t> shortPacketTail(80, 0xFF); // Hardware trailing junk chunk
+    std::vector<uint8_t> shortPacketTail(80, 0xFF);
 
     std::vector<uint8_t> triggerFrame = validHeader;
     auto* triggerChunk = reinterpret_cast<ChunkMetadata*>(triggerFrame.data() + sizeof(UsbPacketHeader));

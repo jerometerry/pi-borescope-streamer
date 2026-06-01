@@ -21,7 +21,6 @@ struct Padding {
     size_t length;
 };
 
-// Helper to print hex dump
 void printPaddingDump(const std::vector<uint8_t>& data, Padding padding) {
     size_t start = padding.start;
     size_t length = padding.length;
@@ -49,16 +48,12 @@ void inspectPadding(const std::vector<uint8_t>& fileData) {
 
     std::cout << "Scanning for padding robustly...\n\n";
 
-    // Scan byte-by-byte to ensure we never lose sync
     while (i < fileData.size() - 1) {
-        
-        // 1. Look for the JPEG End of Image (FF D9)
         if (fileData[i] == 0xff && fileData[i+1] == 0xd9) {
             size_t eoiPos = i;
             size_t paddingStart = eoiPos + 2;
             size_t nextHeaderPos = 0;
 
-            // 2. Scan forward to find the VERY NEXT frame header (AA BB)
             for (size_t j = paddingStart; j < fileData.size() - 1; ++j) {
                 if (fileData[j] == 0xaa && fileData[j+1] == 0xbb) {
                     nextHeaderPos = j;
@@ -66,7 +61,6 @@ void inspectPadding(const std::vector<uint8_t>& fileData) {
                 }
             }
 
-            // 3. Report the gap between them
             if (nextHeaderPos > 0) {
                 size_t paddingLength = nextHeaderPos - paddingStart;
                 
@@ -79,8 +73,7 @@ void inspectPadding(const std::vector<uint8_t>& fileData) {
                 std::cout << "\n";
                 
                 framesAnalyzed++;
-                
-                // Fast-forward our main loop to the next header
+
                 i = nextHeaderPos; 
             } else {
                 std::cout << "Found EOI at " << eoiPos << " but no subsequent header found (End of file?).\n";
@@ -91,15 +84,12 @@ void inspectPadding(const std::vector<uint8_t>& fileData) {
                 break;
             }
         } else {
-            // Move forward one byte
             i++;
         }
     }
 }
 
-// Update the signature
 void printHexDump(const std::vector<uint8_t>& data, DumpRange range) {
-    // Ensure we don't go out of bounds
     size_t endPos = std::min(range.end, data.size());
     
     for (size_t i = range.start; i < endPos; i += 16) {
@@ -127,19 +117,15 @@ void inspectFrameBoundary(const std::vector<uint8_t>& fileData) {
     size_t nextAABB = 0;
     size_t firstFFD9 = 0;
 
-    // Start scanning at byte 2 (to skip the very first AA BB)
     for (size_t i = 2; i < fileData.size() - 1; ++i) {
-        // Find the FIRST instance of the next AA BB header
         if (nextAABB == 0 && fileData[i] == 0xaa && fileData[i+1] == 0xbb) {
             nextAABB = i;
         }
-        
-        // Find the FIRST instance of the JPEG End of Image marker
+
         if (firstFFD9 == 0 && fileData[i] == 0xff && fileData[i+1] == 0xd9) {
             firstFFD9 = i;
         }
 
-        // Stop early if we found both
         if (nextAABB > 0 && firstFFD9 > 0) {
             break;
         }
@@ -176,17 +162,15 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
     const uint16_t MAGIC_NUMBER = 0xBBAA; 
 
     while (i + TOTAL_HEADER_SIZE <= fileData.size()) {
-        
-        // --- 1. SYNC & HARDWARE VERIFICATION ---
+
         const UsbPacketHeader* header = reinterpret_cast<const UsbPacketHeader*>(&fileData[i]);
 
-        // Check for Magic Number and valid Camera IDs (0x0B or 0x07)
         if (header->header != MAGIC_NUMBER || (header->cameraId != 0x0B && header->cameraId != 0x07)) {
             i++;
             continue;
         }
 
-        // --- 2. THE PROXIMITY GHOST FILTER ---
+        // --- THE PROXIMITY GHOST FILTER ---
         // The hardware leaks memory at 4KB boundaries, creating fake headers.
         // If we see another header within 300 bytes, this one is mathematically a ghost.
         bool isGhost = false;
@@ -203,31 +187,24 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
         }
 
         if (isGhost) {
-            // Bypass the corrupted padding entirely
             i += nextHeaderOffset;
             continue;
         }
 
-        // --- 3. BOUNDS CHECKING ---
         size_t chunkTotalSize = sizeof(UsbPacketHeader) + header->length;
         if (i + chunkTotalSize > fileData.size()) {
             std::cout << "Reached incomplete hardware block at end of file. Stopping.\n";
             break; 
         }
 
-        // --- 4. MAP METADATA & ASSEMBLE BY FRAME ID ---
         const ChunkMetadata* meta = reinterpret_cast<const ChunkMetadata*>(&fileData[i + sizeof(UsbPacketHeader)]);
 
         if (lastFrameId != -1 && meta->frameId != lastFrameId) {
-            // The Frame ID changed, meaning the previous frame is fully assembled in our buffer.
             if (!currentFrame.empty()) {
-                
-                // --- 5. THE DIRTY START (AND PADDED TAIL) FILTER ---
-                // The hardware often prepends garbage before the JPEG starts, and appends padding after.
+
                 size_t soiOffset = std::string::npos;
                 size_t eoiOffset = std::string::npos;
 
-                // Scan forward for Start of Image (FF D8)
                 for (size_t j = 0; j + 1 < std::min<size_t>(256, currentFrame.size()); ++j) {
                     if (currentFrame[j] == 0xFF && currentFrame[j+1] == 0xD8) {
                         soiOffset = j;
@@ -235,7 +212,6 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
                     }
                 }
 
-                // Scan backwards for End of Image (FF D9)
                 for (size_t j = currentFrame.size(); j >= 2; --j) {
                     if (currentFrame[j - 2] == 0xFF && currentFrame[j - 1] == 0xD9) {
                         eoiOffset = j;
@@ -244,7 +220,6 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
                 }
 
                 if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
-                    // Extract ONLY the pristine, mathematically pure JPEG data
                     std::vector<uint8_t> cleanJpeg(currentFrame.begin() + soiOffset, currentFrame.begin() + eoiOffset);
                     
                     std::string filename = std::format("frame_{:04d}.jpg", frameCount++);
@@ -261,8 +236,6 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
         }
         lastFrameId = meta->frameId;
 
-        // --- 6. TELEMETRY DEMULTIPLEXING ---
-        // If this chunk contains gravity sensor or button data, we DO NOT append it to the video feed.
         if (!meta->hasGravitySensor() && meta->getOtherFlags() == 0 && meta->cameraNumber < 2) {
             size_t payloadStart = i + TOTAL_HEADER_SIZE;
             size_t payloadSize = chunkTotalSize - TOTAL_HEADER_SIZE;
@@ -272,8 +245,6 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
                                 fileData.begin() + payloadStart + payloadSize);
         }
 
-        // --- 7. LEAPFROG ---
-        // Jump completely over the parsed packet.
         i += chunkTotalSize;
     }
 
