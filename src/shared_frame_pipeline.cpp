@@ -7,7 +7,7 @@
 SharedFramePipeline::SharedFramePipeline() {
     for (int i = 0; i < 3; ++i) {
         auto buffer = std::make_shared<std::vector<uint8_t>>();
-        buffer->reserve(ServerConstants::FORTY_KILOBYTES);
+        buffer->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         freePool_.push_back(buffer);
     }
 

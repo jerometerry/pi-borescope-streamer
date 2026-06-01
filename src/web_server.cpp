@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <algorithm>
 #include <cerrno>
+#include <charconv>
 #include <csignal>
 #include <cstring>
 #include <format>
@@ -319,11 +320,19 @@ void WebServer::processClientRequest(ClientState& client) {
         client.closeAfterWrite = true;
         auto htmlPageContent = Resources::index_html;
 
-        auto [it, size] = std::format_to_n(
-            headerStackBuf, STACK_BUF_SIZE, HTTP_OK_HTML_FMT, htmlPageContent.size()
+        client.queueData(
+            reinterpret_cast<const uint8_t*>(HTTP_OK_HTML_HDR.data()), 
+            HTTP_OK_HTML_HDR.size()
         );
 
-        client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), size);
+        auto [ptr, ec] = std::to_chars(
+            headerStackBuf, 
+            headerStackBuf + STACK_BUF_SIZE, 
+            htmlPageContent.size()
+        );
+
+        client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), ptr - headerStackBuf);
+        client.queueData(reinterpret_cast<const uint8_t*>(HTTP_HDR_END.data()), HTTP_HDR_END.size());
         client.queueData(reinterpret_cast<const uint8_t*>(htmlPageContent.data()), htmlPageContent.size());
     } 
     else if (size_t snapPos = request.find(ROUTE_SNAPSHOT);
@@ -339,12 +348,20 @@ void WebServer::processClientRequest(ClientState& client) {
                 HTTP_NOT_FOUND.size()
             );
         } else {
-            auto [it, size] = std::format_to_n(
-                headerStackBuf, STACK_BUF_SIZE, HTTP_OK_JPEG_FMT, snapshot->size()
+            client.queueData(
+                reinterpret_cast<const uint8_t*>(HTTP_OK_HTML_HDR.data()), 
+                HTTP_OK_HTML_HDR.size()
             );
 
-            client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), size);
-            client.queueData(snapshot->data(), snapshot->size());
+            auto [ptr, ec] = std::to_chars(
+                headerStackBuf, 
+                headerStackBuf + STACK_BUF_SIZE, 
+                snapshot->size()
+            );
+
+            client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), ptr - headerStackBuf);
+            client.queueData(reinterpret_cast<const uint8_t*>(HTTP_HDR_END.data()), HTTP_HDR_END.size());
+            client.queueData(reinterpret_cast<const uint8_t*>(snapshot->data()), snapshot->size());
         }
     } 
     std::string targetFaviconPath = std::format("GET {}", ROUTE_FAVICON);
@@ -405,8 +422,23 @@ void WebServer::broadcastLatestFrame() {
             continue;
         }
         if (client.outboxLen == 0 && client.sentFrameId < globalFrameId) {
-            client.queueData(reinterpret_cast<const uint8_t*>(partHeaderBuf), headerSize);
-            client.queueData(currentFrame->data(), currentFrame->size());
+            client.queueData(
+                reinterpret_cast<const uint8_t*>(MJPEG_CHUNK_PREFIX.data()), 
+                MJPEG_CHUNK_PREFIX.size()
+            );
+
+            auto [ptr, ec] = std::to_chars(
+                partHeaderBuf, 
+                partHeaderBuf + STACK_BUF_SIZE, 
+                currentFrame->size()
+            );
+
+            client.queueData(reinterpret_cast<const uint8_t*>(partHeaderBuf), ptr - partHeaderBuf);
+            client.queueData(
+                reinterpret_cast<const uint8_t*>(MJPEG_CHUNK_SUFFIX.data()), 
+                MJPEG_CHUNK_SUFFIX.size()
+            );
+
             client.sentFrameId = globalFrameId;
         }
     }

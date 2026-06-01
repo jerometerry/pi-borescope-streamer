@@ -10,9 +10,9 @@
 UsbFrameDecoder::UsbFrameDecoder(
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler, std::function<void()> buttonHandler) 
     : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {
-        frameBuffer.reserve(ServerConstants::FORTY_KILOBYTES);
+        frameBuffer.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         streamBuffer.reserve(ServerConstants::EIGHT_KILOBYTES);
-        emitBuffer.reserve(ServerConstants::FORTY_KILOBYTES);
+        emitBuffer.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 }
 
 void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
