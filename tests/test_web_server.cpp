@@ -10,11 +10,11 @@
 #include <cstdint>
 #include <compare>
 #include <iterator>
-#include <mutex>
 #include <thread>
 #include <vector>
 #include <string>
 #include <memory>
+#include "shared_frame_pipeline.hpp"
 #include "web_server.hpp"
 
 namespace {

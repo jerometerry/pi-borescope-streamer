@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <span>
 #include <vector>

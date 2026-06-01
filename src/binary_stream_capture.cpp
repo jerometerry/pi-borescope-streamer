@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 #include <atomic>
-#include <span>
 #include "device_finder.hpp"
 #include "device_info.hpp"
 #include "server_constants.hpp"

@@ -1,13 +1,12 @@
 #pragma once
-#include <thread>
 #include <atomic>
 #include <memory>
-#include <span>
-#include <libusb.h>
-#include "usb_camera.hpp"
-#include "usb_frame_decoder.hpp"
-#include "shared_frame_pipeline.hpp"
-#include "hardware_button_manager.hpp"
+#include <thread>
+class HardwareButtonManager;
+class SharedFramePipeline;
+class UsbCamera;
+class UsbFrameDecoder;
+struct DeviceInfo;
 
 class UsbCaptureEngine {
 public:

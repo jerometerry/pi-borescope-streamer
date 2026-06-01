@@ -1,7 +1,7 @@
 #pragma once
 #include <chrono>
 #include <mutex>
-#include "server_time.hpp"
+class ServerTime;
 
 class HardwareButtonManager {
 public:

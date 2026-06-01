@@ -7,15 +7,14 @@
 #include <unistd.h>
 #include <algorithm>
 #include <cerrno>
-#include <charconv>
 #include <csignal>
 #include <cstring>
 #include <format>
 #include <iostream>
-#include <system_error>
+#include <string>
 #include "client_state.hpp"
 #include "index_html.hpp"
-#include "server_constants.hpp"
+#include "shared_frame_pipeline.hpp"
 #include "web_server.hpp"
 
 // Cleanly aligned to strictly match Header declaration layout rules (C++ Core Guidelines Rule C.47)

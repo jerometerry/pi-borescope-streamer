@@ -1,11 +1,12 @@
-#include "mjpeg_stream.hpp"
-#include "shared_frame_pipeline.hpp"
-#include "hardware_button_manager.hpp"
-#include "usb_capture_engine.hpp"
-#include "web_server.hpp"
-#include <thread>
+#include <cstdlib>
 #include <chrono>
 #include <iostream>
+#include <thread>
+#include "hardware_button_manager.hpp"
+#include "mjpeg_stream.hpp"
+#include "shared_frame_pipeline.hpp"
+#include "usb_capture_engine.hpp"
+#include "web_server.hpp"
 
 MjpegStream::MjpegStream(SharedFramePipeline& pipeline, 
                          HardwareButtonManager& buttonManager, 

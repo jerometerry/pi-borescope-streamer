@@ -9,8 +9,7 @@
 #include <string_view>
 #include <thread>
 #include <vector>
-#include "shared_frame_pipeline.hpp"
-
+class SharedFramePipeline;
 struct ClientState;
 
 class WebServer {
