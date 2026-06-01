@@ -348,8 +348,12 @@ void WebServer::handleRead(int fileDescriptor) {
 void WebServer::processClientRequest(ClientState& client) {
     std::string_view request(client.readBuffer.data(), client.readBufferLen);
 
-    // FIXED: Replaced unsafe string literal merging with dynamic lookup matching string structures
-    if (request.find(std::format("GET {} ", ROUTE_WEB)) != std::string_view::npos) {
+    // 1. Web Dashboard Route Matching
+    std::string targetWebPath = std::format("GET {}", ROUTE_WEB);
+    size_t webPos = request.find(targetWebPath);
+    if (webPos != std::string_view::npos && 
+       (request[webPos + targetWebPath.size()] == ' ' || request[webPos + targetWebPath.size()] == '?')) {
+        
         client.closeAfterWrite = true;
         auto htmlPageContent = Resources::index_html;
 
@@ -360,7 +364,11 @@ void WebServer::processClientRequest(ClientState& client) {
         client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), size);
         client.queueData(reinterpret_cast<const uint8_t*>(htmlPageContent.data()), htmlPageContent.size());
     } 
-    else if (request.find(std::format("GET {} ", ROUTE_SNAPSHOT)) != std::string_view::npos) {
+    // 2. FIXED: Snapshot Route Parameter Validation Matching Boundary
+    else if (size_t snapPos = request.find(std::format("GET {}", ROUTE_SNAPSHOT));
+             snapPos != std::string_view::npos && 
+             (request[snapPos + 13] == ' ' || request[snapPos + 13] == '?')) { // 13 is length of "GET /snapshot"
+        
         client.closeAfterWrite = true;
         std::vector<uint8_t> snapshot = pipeline.getSnapshot();
 
@@ -375,17 +383,24 @@ void WebServer::processClientRequest(ClientState& client) {
             client.queueData(snapshot.data(), snapshot.size());
         }
     } 
-    else if (request.find(std::format("GET {} ", ROUTE_FAVICON)) != std::string_view::npos) {
+    // 3. Favicon Route Matching
+    std::string targetFaviconPath = std::format("GET {}", ROUTE_FAVICON);
+    size_t favPos = request.find(targetFaviconPath);
+    if (favPos != std::string_view::npos && 
+       (request[favPos + targetFaviconPath.size()] == ' ' || request[favPos + targetFaviconPath.size()] == '?')) {
+        
         client.closeAfterWrite = true;
         client.queueData(reinterpret_cast<const uint8_t*>(FAVICON_NOT_FOUND.data()), FAVICON_NOT_FOUND.size());
     } 
+    // 4. Live Multi-Part Streaming Video Route
     else if (request.find("GET / HTTP") != std::string_view::npos || 
              request.find("GET /?") != std::string_view::npos) {
         client.isStreaming = true;
         client.sentFrameId = 0;
-        client.closeAfterWrite = false;
+        client.closeAfterWrite = false; 
         client.queueData(reinterpret_cast<const uint8_t*>(HTTP_OK_MJPEG.data()), HTTP_OK_MJPEG.size());
     }
+    // 5. Fallback Route Failure Catch
     else {
         client.closeAfterWrite = true;
         client.queueData(reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size());
@@ -459,41 +474,41 @@ void WebServer::handleWrite(int fileDescriptor) {
         }
 
         auto& client = *it;
-        if (client.outboxLen == 0) { 
-            return; 
+        if (client.outbox.empty()) { 
+            return; // Nothing waiting to be sent
         }
 
-        while (client.outboxOffset < client.outboxLen) {
-            size_t remaining = client.outboxLen - client.outboxOffset;
+        // Flush outbox data using native vector size boundaries
+        while (client.outboxOffset < client.outbox.size()) {
+            size_t remaining = client.outbox.size() - client.outboxOffset;
             ssize_t sent = send(fileDescriptor, client.outbox.data() + client.outboxOffset, remaining, MSG_NOSIGNAL);
 
             if (sent > 0) {
                 client.outboxOffset += sent;
             } else if (sent == -1) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) { 
-                    return;
+                    return; // Yield cleanly, socket's kernel write queue is full
                 }
-                shouldClose = true;
+                shouldClose = true; // Hard network socket error
                 break;
             }
         }
 
-        if (!shouldClose && client.outboxOffset == client.outboxLen) {
-            client.outboxLen = 0;
+        // If the entire buffer has been flushed out successfully, reset everything
+        if (!shouldClose && client.outboxOffset == client.outbox.size()) {
             client.outboxOffset = 0;
-            client.outbox.clear(); // Reclaims memory footprint safely
+            client.outbox.clear(); // Safe and zero-overhead memory reclamation!
 
             if (client.closeAfterWrite) {
                 shouldClose = true;
             }
         }
-    }
+    } 
 
     if (shouldClose) {
         closeConnection(fileDescriptor);
     }
 }
-
 
 void WebServer::closeConnection(int fileDescriptor) {
 

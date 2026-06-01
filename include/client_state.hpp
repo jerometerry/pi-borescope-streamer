@@ -95,37 +95,38 @@ struct ClientState {
             return; 
         }
 
-        if (outboxLen == 0) {
+        // 1. Fast-Path: If nothing is currently waiting in the queue, try a direct kernel socket push
+        if (outbox.empty()) {
             ssize_t sent = send(fileDescriptor, data, size, MSG_NOSIGNAL);
             
             if (sent >= 0) {
                 size_t bytesSent = static_cast<size_t>(sent);
                 if (bytesSent == size) { 
-                    return;
+                    return; // 100% data delivered cleanly with zero heap memory copying!
                 }
-
-                size_t remaining = size - bytesSent;
-
+                
+                // Handle partial socket writes safely using standard vector initialization
                 outbox.assign(data + bytesSent, data + size);
-                outboxLen = remaining;
                 outboxOffset = 0;
                 return;
             } 
 
+            // Handle temporary blocking signals or hard network socket drops
             if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                // Hard error: Flag connection as dead for poll() cleanup. No deadlock!
-                isActive = false;
+                isActive = false; // Mark client for immediate loop eviction
                 return;
             }
         }
 
-        if (outboxLen + size > ClientState::ENGINES_EXPECTED_FRAME_MAX * 3) {
-            std::cerr << "[Network Core] Outbox overflow on FD " << fileDescriptor << ". Evicting \n";
+        // 2. Slow-Path: Protect the host from memory exhaustion by slow network clients
+        if (outbox.size() + size > ClientState::ENGINES_EXPECTED_FRAME_MAX * 3) {
+            std::cerr << "[Network Core] Outbox memory capacity overflow on FD " << fileDescriptor << ". Evicting client.\n";
             isActive = false;
             return;
         }
 
+        // Append raw data to our heap-allocated queue cleanly using standard vector mechanics
         outbox.insert(outbox.end(), data, data + size);
-        outboxLen += size;
     }
+
 };

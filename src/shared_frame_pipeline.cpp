@@ -1,12 +1,12 @@
-#include <vector>
-#include <mutex>
 #include <cstdint>
-#include "shared_frame_pipeline.hpp"
+#include <mutex>
+#include <vector>
 #include "server_constants.hpp"
+#include "shared_frame_pipeline.hpp"
 
  SharedFramePipeline::SharedFramePipeline() {
-        currentFrame_.reserve(ServerConstants::FOUR_KILOBYTES);
-        snapshotFrame_.reserve(ServerConstants::FOUR_KILOBYTES);
+        currentFrame_.reserve(ServerConstants::FORTY_KILOBYTES);
+        snapshotFrame_.reserve(ServerConstants::FORTY_KILOBYTES);
     }
 
 void SharedFramePipeline::updateFrame(const std::vector<uint8_t>& frame) {
