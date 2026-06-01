@@ -318,7 +318,7 @@ void WebServer::processClientRequest(ClientState& client) {
        (request[webPos + ROUTE_WEB.size()] == ' ' || request[webPos + ROUTE_WEB.size()] == '?')) {
         
         client.closeAfterWrite = true;
-        auto htmlPageContent = Resources::index_html;
+        std::string_view htmlPageContent = Resources::index_html;
 
         client.queueData(
             reinterpret_cast<const uint8_t*>(HTTP_OK_HTML_HDR.data()), 
