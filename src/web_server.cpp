@@ -312,10 +312,9 @@ void WebServer::handleRead(int fileDescriptor) {
 void WebServer::processClientRequest(ClientState& client) {
     std::string_view request(client.readBuffer.data(), client.readBufferLen);
 
-    std::string targetWebPath = std::format("GET {}", ROUTE_WEB);
-    size_t webPos = request.find(targetWebPath);
+    size_t webPos = request.find(ROUTE_WEB);
     if (webPos != std::string_view::npos && 
-       (request[webPos + targetWebPath.size()] == ' ' || request[webPos + targetWebPath.size()] == '?')) {
+       (request[webPos + ROUTE_WEB.size()] == ' ' || request[webPos + ROUTE_WEB.size()] == '?')) {
         
         client.closeAfterWrite = true;
         auto htmlPageContent = Resources::index_html;
@@ -327,25 +326,25 @@ void WebServer::processClientRequest(ClientState& client) {
         client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), size);
         client.queueData(reinterpret_cast<const uint8_t*>(htmlPageContent.data()), htmlPageContent.size());
     } 
-    else if (size_t snapPos = request.find(std::format("GET {}", ROUTE_SNAPSHOT));
+    else if (size_t snapPos = request.find(ROUTE_SNAPSHOT);
              snapPos != std::string_view::npos && 
-             (request[snapPos + 13] == ' ' || request[snapPos + 13] == '?')) { // 13 is length of "GET /snapshot"
+             (request[snapPos + ROUTE_SNAPSHOT.size()] == ' ' || request[snapPos + ROUTE_SNAPSHOT.size()] == '?')) {
         
         client.closeAfterWrite = true;
-        std::vector<uint8_t> snapshot = pipeline.getSnapshot();
+        std::shared_ptr<const std::vector<uint8_t>> snapshot = pipeline.getSnapshot();
 
-        if (snapshot.empty()) {
+        if (!snapshot || snapshot->empty()) {
             client.queueData(
                 reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), 
                 HTTP_NOT_FOUND.size()
             );
         } else {
             auto [it, size] = std::format_to_n(
-                headerStackBuf, STACK_BUF_SIZE, HTTP_OK_JPEG_FMT, snapshot.size()
+                headerStackBuf, STACK_BUF_SIZE, HTTP_OK_JPEG_FMT, snapshot->size()
             );
 
             client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), size);
-            client.queueData(snapshot.data(), snapshot.size());
+            client.queueData(snapshot->data(), snapshot->size());
         }
     } 
     std::string targetFaviconPath = std::format("GET {}", ROUTE_FAVICON);
@@ -354,7 +353,10 @@ void WebServer::processClientRequest(ClientState& client) {
        (request[favPos + targetFaviconPath.size()] == ' ' || request[favPos + targetFaviconPath.size()] == '?')) {
         
         client.closeAfterWrite = true;
-        client.queueData(reinterpret_cast<const uint8_t*>(FAVICON_NOT_FOUND.data()), FAVICON_NOT_FOUND.size());
+        client.queueData(
+            reinterpret_cast<const uint8_t*>(FAVICON_NOT_FOUND.data()), 
+            FAVICON_NOT_FOUND.size()
+        );
     } 
     else if (request.find("GET / HTTP") != std::string_view::npos || 
              request.find("GET /?") != std::string_view::npos) {
@@ -374,10 +376,10 @@ void WebServer::processClientRequest(ClientState& client) {
 void WebServer::broadcastLatestFrame() {
     uint32_t globalFrameId = 0;
 
-    std::vector<uint8_t> currentFrame = pipeline.getCurrentFrame(globalFrameId);
+    std::shared_ptr<const std::vector<uint8_t>> currentFrame = pipeline.getCurrentFrame(globalFrameId);
 
-    if (globalFrameId == localLatestFrameId || currentFrame.empty()) {
-        return; 
+    if (!currentFrame || currentFrame->empty() || globalFrameId == localLatestFrameId) {
+        return;
     }
 
     localLatestFrameId = globalFrameId;
@@ -387,7 +389,7 @@ void WebServer::broadcastLatestFrame() {
         partHeaderBuf, 
         STACK_BUF_SIZE, 
         MJPEG_FRAME_FMT, 
-        currentFrame.size()
+        currentFrame->size()
     );
 
     std::scoped_lock<std::mutex> lock(clientsMutex);
@@ -398,14 +400,13 @@ void WebServer::broadcastLatestFrame() {
         }
         if (client.outboxLen > ClientState::ENGINES_EXPECTED_FRAME_MAX * 3) {
             std::cerr << "[Network Core] Slow consumer detected on FD " << client.fileDescriptor << ". Evicting.\n";
-
-            client.isActive = false; 
+            client.isActive = false;
             client.outbox.clear();
             continue;
         }
         if (client.outboxLen == 0 && client.sentFrameId < globalFrameId) {
             client.queueData(reinterpret_cast<const uint8_t*>(partHeaderBuf), headerSize);
-            client.queueData(currentFrame.data(), currentFrame.size());
+            client.queueData(currentFrame->data(), currentFrame->size());
             client.sentFrameId = globalFrameId;
         }
     }

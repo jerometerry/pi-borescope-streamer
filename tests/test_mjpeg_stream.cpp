@@ -48,7 +48,7 @@ TEST_F(MjpegStreamComponentsTest, PipelineIgnoresEmptyFrames) {
     pipeline().updateFrame({});
     
     auto frame = pipeline().getCurrentFrame(frameId);
-    EXPECT_TRUE(frame.empty());
+    EXPECT_TRUE(frame->empty());
     EXPECT_EQ(frameId, 0);
 }
 
@@ -57,14 +57,16 @@ TEST_F(MjpegStreamComponentsTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     
     advanceTime(std::chrono::milliseconds(250));
 
-    // Verify the button manager flags a valid quick press window
     ASSERT_TRUE(buttonManager().checkAndResetQuickPressTrigger());
     pipeline().requestSnapshot();
 
     std::vector<uint8_t> nextVideoFrame = {0xFF, 0xD8, 0x11, 0x22, 0x33, 0xFF, 0xD9};
     pipeline().updateFrame(nextVideoFrame);
 
-    EXPECT_EQ(pipeline().getSnapshot(), nextVideoFrame);
+    auto snapshotPtr = pipeline().getSnapshot();
+    ASSERT_NE(snapshotPtr, nullptr);
+
+    EXPECT_EQ(*snapshotPtr, nextVideoFrame);
 }
 
 TEST_F(MjpegStreamComponentsTest, DebouncesRapidHardwareButtonPresses) {

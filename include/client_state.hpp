@@ -69,7 +69,7 @@ struct ClientState {
      */
     ClientState() {
         readBuffer.resize(READ_BUFFER_SIZE);
-        outbox.reserve(ENGINES_EXPECTED_FRAME_MAX);
+        outbox.reserve(ENGINES_EXPECTED_FRAME_MAX * 3);
     }
 
     /** 
