@@ -1,10 +1,10 @@
 #pragma once
 #include <atomic>
 #include <functional>
-#include "device_info.hpp"
 class SharedFramePipeline;
 class HardwareButtonManager;
 class WebServer;
+struct DeviceInfo;
 
 class MjpegStream {
 public:
