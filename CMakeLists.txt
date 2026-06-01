@@ -78,8 +78,8 @@ target_include_directories(useeplus_protocol PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(useeplus_protocol PUBLIC PkgConfig::LIBUSB)
 target_link_libraries(useeplus_protocol PRIVATE project_warnings)
 
-add_library(mjpeg_streamer STATIC 
-    src/mjpeg_stream.cpp
+add_library(pi_borescope_api STATIC 
+    src/application_context.cpp
     src/web_server.cpp
     src/server_time.cpp
     src/shared_frame_pipeline.cpp
@@ -87,29 +87,29 @@ add_library(mjpeg_streamer STATIC
     src/usb_capture_engine.cpp
     ${GENERATED_HPP}
 )
-target_include_directories(mjpeg_streamer PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(mjpeg_streamer PUBLIC useeplus_protocol)
-target_link_libraries(mjpeg_streamer PRIVATE project_warnings)
+target_include_directories(pi_borescope_api PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_link_libraries(pi_borescope_api PUBLIC useeplus_protocol)
+target_link_libraries(pi_borescope_api PRIVATE project_warnings)
 
 add_executable(pi-borescope-streamer 
     src/server.cpp
 )
-target_link_libraries(pi-borescope-streamer PRIVATE mjpeg_streamer project_warnings)
+target_link_libraries(pi-borescope-streamer PRIVATE pi_borescope_api  project_warnings)
 
 add_executable(attached_usb_devices
     src/attached_usb_devices.cpp 
 )
-target_link_libraries(attached_usb_devices PRIVATE mjpeg_streamer project_warnings)
+target_link_libraries(attached_usb_devices PRIVATE pi_borescope_api  project_warnings)
 
 add_executable(binary_stream_capture
     src/binary_stream_capture.cpp 
 )
-target_link_libraries(binary_stream_capture PRIVATE mjpeg_streamer project_warnings)
+target_link_libraries(binary_stream_capture PRIVATE pi_borescope_api project_warnings)
 
 add_executable(frame_extractor
     src/frame_extractor.cpp 
 )
-target_link_libraries(frame_extractor PRIVATE mjpeg_streamer project_warnings)
+target_link_libraries(frame_extractor PRIVATE pi_borescope_api project_warnings)
 
 option(BUILD_DOC "Build documentation" ON)
 if(BUILD_DOC)
@@ -164,8 +164,7 @@ if(BUILD_TESTING)
 
     add_executable(run_project_tests 
         tests/test_usb_frame_decoder.cpp
-        tests/test_mjpeg_stream.cpp
-        tests/test_mjpeg_streamer.cpp
+        tests/test_application_context.cpp
         tests/test_web_server.cpp
     )
 
@@ -173,7 +172,7 @@ if(BUILD_TESTING)
 
     target_link_libraries(run_project_tests 
         PRIVATE 
-            mjpeg_streamer 
+            pi_borescope_api 
             project_warnings 
             GTest::gtest_main
             GTest::gmock
@@ -188,6 +187,6 @@ if(ENABLE_COVERAGE)
     target_compile_options(useeplus_protocol PUBLIC --coverage)
     target_link_options(useeplus_protocol PUBLIC --coverage)
     
-    target_compile_options(mjpeg_streamer PUBLIC --coverage)
-    target_link_options(mjpeg_streamer PUBLIC --coverage)
+    target_compile_options(pi_borescope_api PUBLIC --coverage)
+    target_link_options(pi_borescope_api PUBLIC --coverage)
 endif()

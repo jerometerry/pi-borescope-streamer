@@ -298,7 +298,7 @@ void WebServer::handleRead(int fileDescriptor) {
     }
 }
 
-void WebServer::processClientRequest(ClientConnection& client) {
+void WebServer::processClientRequest(ClientConnection& client) const {
     std::string_view request(client.readData(), client.readLen());
 
      if (size_t webPos = request.find(ROUTE_WEB); webPos != std::string_view::npos) {

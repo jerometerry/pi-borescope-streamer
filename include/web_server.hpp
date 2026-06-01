@@ -37,7 +37,7 @@ private:
     void closeConnection(int fileDescriptor);
     
     [[nodiscard]] static bool setNonBlocking(int fileDescriptor);
-    void processClientRequest(ClientConnection& client);
+    void processClientRequest(ClientConnection& client) const;
 
     static constexpr std::string_view MJPEG_CHUNK_PREFIX = "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: ";
     static constexpr std::string_view MJPEG_CHUNK_SUFFIX = "\r\n\r\n";

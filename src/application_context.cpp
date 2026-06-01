@@ -2,29 +2,27 @@
 #include <chrono>
 #include <iostream>
 #include <thread>
-#include "mjpeg_stream.hpp"
+#include "application_context.hpp"
 #include "usb_capture_engine.hpp"
 #include "web_server.hpp"
 
-MjpegStream::MjpegStream(SharedFramePipeline& pipeline, 
+ApplicationContext::ApplicationContext(SharedFramePipeline& pipeline, 
                          HardwareButtonManager& buttonManager, 
                          WebServer& server,
                          std::atomic<bool>& running)
     : pipeline_(pipeline), 
       buttonManager_(buttonManager), 
       server_(server), 
-      running_(running) {}
+      running_(running),
+      captureEngine_(pipeline, buttonManager, running) {} // 💡 Forward dependencies cleanly
 
-int MjpegStream::run(const DeviceInfo& target) {
-    auto& pipelineRef = pipeline_.get();
-    auto& buttonManagerRef = buttonManager_.get();
+int ApplicationContext::run(const DeviceInfo& target) {
     auto& serverRef = server_.get();
     auto& runningRef = running_.get();
 
-    UsbCaptureEngine captureEngine(pipelineRef, buttonManagerRef, runningRef);
-
     std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
-    captureEngine.start(target);
+
+    captureEngine_.start(target);
     serverRef.start();
 
     std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
@@ -33,11 +31,12 @@ int MjpegStream::run(const DeviceInfo& target) {
     }
 
     std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
-    captureEngine.stop();
+
+    captureEngine_.stop();
     
     return EXIT_SUCCESS;
 }
 
-void MjpegStream::stop() {
+void ApplicationContext::stop() {
     running_.get().store(false, std::memory_order_seq_cst);
 }

@@ -7,8 +7,8 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include "application_context.hpp"
 #include "device_info.hpp"
-#include "mjpeg_stream.hpp"
 #include "server_time.hpp"
 #include "usb_camera.hpp"
 #include "wall_clock.hpp"
@@ -16,14 +16,14 @@
 #include "hardware_button_manager.hpp"
 #include "web_server.hpp"
 
-static constexpr int DEFAULT_PORT = 8080;
-static MjpegStream* globalStream = nullptr;
+namespace {
+    constexpr int DEFAULT_PORT = 8080;
+    std::atomic<bool> globalRunning{true};
+}
 
 void signalHandler(int signal) {
-    std::cout << "\nSignal " << signal << " received. Initiating shutdown...\n";
-    if (globalStream) {
-        globalStream->stop();
-    }
+    std::cout << "\nSignal " << signal << " received. Initiating orderly engine shutdown...\n";
+    globalRunning.store(false, std::memory_order_release);
 }
 
 int main(int argc, const char* argv[]) {
@@ -55,7 +55,7 @@ int main(int argc, const char* argv[]) {
         std::cout << "  -> Status: Running on CUSTOM port override " << port << "\n";
     }
     
-    std::cout << "  -> Web Dashboard:  http://localhost:" << port << "/web\n";
+    std::cout << "  -> Web Dashboard:          http://localhost:" << port << "/web\n";
     std::cout << "  -> Raw Streaming (VLC):    http://localhost:" << port << "\n";
     std::cout << "==================================================================\n";
 
@@ -97,29 +97,27 @@ int main(int argc, const char* argv[]) {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-        std::atomic<bool> running{true};
-
         WallClock systemClock;
         const ServerTime serverTime(systemClock, std::chrono::steady_clock::now());
         
         SharedFramePipeline pipeline;
         HardwareButtonManager buttonManager(serverTime);
 
-        WebServer server(port, running, pipeline);
+        WebServer server(port, globalRunning, pipeline);
         if (!server.initialize()) {
             std::cerr << "[Fatal Exception] Failed to initialize web server socket bindings.\n";
             return EXIT_FAILURE;
         }
 
-        MjpegStream stream(pipeline, buttonManager, server, running);
-        globalStream = &stream;
+        ApplicationContext app(pipeline, buttonManager, server, globalRunning);
 
-        stream.run(camera);
+        app.run(camera);
         
     } catch (const std::exception& e) {
-        std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";
+        std::cerr << "[Fatal] Unhandled exception in application context: " << e.what() << "\n";
         return EXIT_FAILURE;
     }
 
+    std::cout << "[System Termination] All resources returned. Server exited cleanly.\n";
     return EXIT_SUCCESS;
 }
