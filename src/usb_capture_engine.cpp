@@ -8,7 +8,6 @@
 #include <thread>
 #include <utility>
 #include <vector> 
-#include "device_info.hpp"
 #include "hardware_button_manager.hpp"
 #include "server_constants.hpp"
 #include "shared_frame_pipeline.hpp"

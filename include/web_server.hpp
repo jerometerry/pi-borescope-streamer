@@ -1,18 +1,15 @@
 #pragma once
 
-#include <poll.h>
 #include <array>
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string_view>
 #include <thread>
 #include <vector>
-#include "client_connection.hpp"
 #include "server_constants.hpp"
-
+class ClientConnection;
 class SharedFramePipeline;
 
 class WebServer {
