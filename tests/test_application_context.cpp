@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include "clock.hpp"
 #include "server_time.hpp"
@@ -22,7 +23,7 @@ public:
     }
 };
 
-class MjpegStreamComponentsTest : public ::testing::Test {
+class ApplicationContextComponentsTest : public ::testing::Test {
 private:
     TestClock clock_;
     ServerTime serverTime_{clock_, clock_.now()};
@@ -43,7 +44,7 @@ protected:
     HardwareButtonManager& buttonManager() { return *buttonManager_; }
 };
 
-TEST_F(MjpegStreamComponentsTest, PipelineIgnoresEmptyFrames) {
+TEST_F(ApplicationContextComponentsTest, PipelineIgnoresEmptyFrames) {
     uint32_t frameId = 0;
     pipeline().updateFrame(nullptr);
     
@@ -52,7 +53,7 @@ TEST_F(MjpegStreamComponentsTest, PipelineIgnoresEmptyFrames) {
     EXPECT_EQ(frameId, 0);
 }
 
-TEST_F(MjpegStreamComponentsTest, HardwareButtonTriggersSnapshotOnNextFrame) {
+TEST_F(ApplicationContextComponentsTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     buttonManager().registerHardwarePress();
     
     advanceTime(std::chrono::milliseconds(250));
@@ -74,7 +75,7 @@ TEST_F(MjpegStreamComponentsTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     EXPECT_EQ(*snapshotPtr, nextVideoFrame);
 }
 
-TEST_F(MjpegStreamComponentsTest, DebouncesRapidHardwareButtonPresses) {
+TEST_F(ApplicationContextComponentsTest, DebouncesRapidHardwareButtonPresses) {
     buttonManager().registerHardwarePress();
 
     advanceTime(std::chrono::milliseconds(20));

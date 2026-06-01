@@ -6,14 +6,15 @@
 #include <memory>
 #include <span>
 #include <thread>
+#include <utility>
 #include <vector> 
+#include "device_info.hpp"
 #include "hardware_button_manager.hpp"
 #include "server_constants.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "usb_camera.hpp"
 #include "usb_capture_engine.hpp"
 #include "usb_frame_decoder.hpp"
-struct DeviceInfo;
 
 UsbCaptureEngine::UsbCaptureEngine(SharedFramePipeline& pipeline, HardwareButtonManager& buttonManager, std::atomic<bool>& running)
         : pipeline_(pipeline), buttonManager_(buttonManager), running_(running) {}
