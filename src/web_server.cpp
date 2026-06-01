@@ -401,15 +401,9 @@ void WebServer::broadcastLatestFrame() {
 
     localLatestFrameId = globalFrameId;
 
-    char partHeaderBuf[STACK_BUF_SIZE];
-    auto [formatIterator, headerSize] = std::format_to_n(
-        partHeaderBuf, 
-        STACK_BUF_SIZE, 
-        MJPEG_FRAME_FMT, 
-        currentFrame->size()
-    );
-
     std::scoped_lock<std::mutex> lock(clientsMutex);
+
+    char partHeaderBuf[STACK_BUF_SIZE];
 
     for (auto& client : *clients) {
         if (!client.isActive || !client.isStreaming) {
@@ -421,7 +415,7 @@ void WebServer::broadcastLatestFrame() {
             client.outbox.clear();
             continue;
         }
-        if (client.outboxLen == 0 && client.sentFrameId < globalFrameId) {
+        if (client.outbox.empty() && client.sentFrameId < globalFrameId) {
             client.queueData(
                 reinterpret_cast<const uint8_t*>(MJPEG_CHUNK_PREFIX.data()), 
                 MJPEG_CHUNK_PREFIX.size()
@@ -438,6 +432,8 @@ void WebServer::broadcastLatestFrame() {
                 reinterpret_cast<const uint8_t*>(MJPEG_CHUNK_SUFFIX.data()), 
                 MJPEG_CHUNK_SUFFIX.size()
             );
+
+            client.queueData(currentFrame->data(), currentFrame->size());
 
             client.sentFrameId = globalFrameId;
         }
