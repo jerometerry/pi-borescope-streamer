@@ -29,4 +29,5 @@ private:
     
     uint32_t frameId_{0};
     bool captureSnapshotRequested_{false};
+    mutable bool initialSnapshotCaptured_{false};
 };

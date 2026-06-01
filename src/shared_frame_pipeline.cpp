@@ -11,8 +11,10 @@ SharedFramePipeline::SharedFramePipeline() {
         buffer->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         freePool_.push_back(buffer);
     }
+
     latestFrame_ = freePool_.back();
     freePool_.pop_back();
+
     snapshotFrame_ = freePool_.back();
     freePool_.pop_back();
 }
@@ -42,30 +44,29 @@ void SharedFramePipeline::updateFrame(std::shared_ptr<std::vector<uint8_t>> newF
     }
 
     std::shared_ptr<const std::vector<uint8_t>> oldActive;
-    std::shared_ptr<const std::vector<uint8_t>> oldSnapshotFreeSlot;
 
     {
         std::scoped_lock lock(activeMutex_);
         frameId_++;
-
+        
         oldActive = std::move(latestFrame_);
         latestFrame_ = std::move(newFrame);
-        
+
         if (captureSnapshotRequested_) {
-            oldSnapshotFreeSlot = std::move(snapshotFrame_);
-            snapshotFrame_ = latestFrame_; 
+            auto& mutableSnapshot = 
+                *std::const_pointer_cast<std::vector<uint8_t>>(snapshotFrame_);
+            mutableSnapshot.assign(latestFrame_->begin(), latestFrame_->end());            
+            initialSnapshotCaptured_ = true;
             captureSnapshotRequested_ = false;
         }
     }
 
-    std::scoped_lock lock(poolMutex_);
     if (oldActive) {
+        std::scoped_lock lock(poolMutex_);
         freePool_.push_back(std::const_pointer_cast<std::vector<uint8_t>>(std::move(oldActive)));
     }
-    if (oldSnapshotFreeSlot) {
-        freePool_.push_back(std::const_pointer_cast<std::vector<uint8_t>>(std::move(oldSnapshotFreeSlot)));
-    }
 }
+
 
 void SharedFramePipeline::requestSnapshot() {
     std::scoped_lock lock(activeMutex_);
@@ -80,5 +81,13 @@ std::shared_ptr<const std::vector<uint8_t>> SharedFramePipeline::getCurrentFrame
 
 std::shared_ptr<const std::vector<uint8_t>> SharedFramePipeline::getSnapshot() const {
     std::scoped_lock lock(activeMutex_);
+
+    if (!initialSnapshotCaptured_ && latestFrame_ && !latestFrame_->empty()) {
+        auto& mutableSnapshot = 
+            *std::const_pointer_cast<std::vector<uint8_t>>(snapshotFrame_);
+        mutableSnapshot.assign(latestFrame_->begin(), latestFrame_->end());
+        initialSnapshotCaptured_ = true;
+    }
+
     return snapshotFrame_;
 }
