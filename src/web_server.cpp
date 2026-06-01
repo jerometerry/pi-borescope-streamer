@@ -9,7 +9,6 @@
 #include <cerrno>
 #include <charconv>
 #include <csignal>
-#include <cstring>
 #include <iostream>
 #include "client_connection.hpp"
 #include "index_html.hpp"
