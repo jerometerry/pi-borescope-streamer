@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 #include <utility>
 
 /** 
@@ -58,6 +59,28 @@ namespace ServerConstants {
      * @brief The USB timeout in milliseconds
      */
     inline constexpr unsigned int USB_TIMEOUT = 1000;
+
+    inline constexpr size_t MAX_CLIENTS = 16;
+
+    inline constexpr size_t STACK_BUF_SIZE = 128;
+
+    inline constexpr std::string_view HTTP_OK_HTML_HDR =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
+
+    inline constexpr std::string_view HTTP_OK_JPEG_HDR =
+        "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: ";
+
+    inline constexpr std::string_view HTTP_HDR_END =
+        "\r\nConnection: close\r\n\r\n";
+
+    inline constexpr std::string_view HTTP_OK_MJPEG =
+        "HTTP/1.1 200 OK\r\nConnection: close\r\nCache-Control: no-cache, private\r\nPragma: no-cache\r\nContent-Type: multipart/x-mixed-replace; boundary=mjpegstream\r\n\r\n";
+    
+    inline constexpr std::string_view HTTP_NOT_FOUND = 
+        "HTTP/1.1 404 Not Found\r\nCache-Control: no-cache\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
+    inline static constexpr std::string_view FAVICON_NOT_FOUND = 
+        "HTTP/1.1 404 Not Found\r\nCache-Control: public, max-age=31536000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 
     /** 
      * @brief The button debounce time in milliseconds

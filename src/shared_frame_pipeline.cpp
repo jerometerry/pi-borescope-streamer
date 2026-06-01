@@ -5,52 +5,64 @@
 #include "shared_frame_pipeline.hpp"
 
 SharedFramePipeline::SharedFramePipeline() {
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         auto buffer = std::make_shared<std::vector<uint8_t>>();
         buffer->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         freePool_.push_back(buffer);
     }
-
     latestFrame_ = freePool_.back();
     freePool_.pop_back();
-    
-    snapshotFrame_ = std::make_shared<std::vector<uint8_t>>();
-    std::const_pointer_cast<std::vector<uint8_t>>(snapshotFrame_)->reserve(ServerConstants::FORTY_KILOBYTES);
+    snapshotFrame_ = freePool_.back();
+    freePool_.pop_back();
 }
 
-void SharedFramePipeline::updateFrame(const std::vector<uint8_t>& frame) {
-    if (frame.empty()) return;
+std::shared_ptr<std::vector<uint8_t>> SharedFramePipeline::checkoutBuffer() {
+    std::scoped_lock lock(poolMutex_);
+    if (freePool_.empty()) {
+        return nullptr;
+    }    
+    auto buf = freePool_.back();
+    freePool_.pop_back();
+    return buf;
+}
 
-    std::shared_ptr<std::vector<uint8_t>> writeBuffer;
-    
-    {
-        std::scoped_lock lock(poolMutex_);
-        if (freePool_.empty()) {
-            return;
-        }
-        writeBuffer = freePool_.back();
-        freePool_.pop_back();
+void SharedFramePipeline::returnBuffer(std::shared_ptr<std::vector<uint8_t>> buffer) {
+    if (!buffer) {
+        return;
+    }
+    std::scoped_lock lock(poolMutex_);
+    freePool_.push_back(std::move(buffer));
+}
+
+void SharedFramePipeline::updateFrame(std::shared_ptr<std::vector<uint8_t>> newFrame) {
+    if (!newFrame || newFrame->empty()) {
+        returnBuffer(std::move(newFrame));
+        return;
     }
 
-    *writeBuffer = frame;
-    
     std::shared_ptr<const std::vector<uint8_t>> oldActive;
-    
+    std::shared_ptr<const std::vector<uint8_t>> oldSnapshotFreeSlot;
+
     {
         std::scoped_lock lock(activeMutex_);
         frameId_++;
-        oldActive = latestFrame_;
-        latestFrame_ = writeBuffer;
+
+        oldActive = std::move(latestFrame_);
+        latestFrame_ = std::move(newFrame);
         
         if (captureSnapshotRequested_) {
-            *std::const_pointer_cast<std::vector<uint8_t>>(snapshotFrame_) = *writeBuffer;;
+            oldSnapshotFreeSlot = std::move(snapshotFrame_);
+            snapshotFrame_ = latestFrame_; 
             captureSnapshotRequested_ = false;
         }
     }
 
-    {
-        std::scoped_lock lock(poolMutex_);
-        freePool_.push_back(std::const_pointer_cast<std::vector<uint8_t>>(oldActive));
+    std::scoped_lock lock(poolMutex_);
+    if (oldActive) {
+        freePool_.push_back(std::const_pointer_cast<std::vector<uint8_t>>(std::move(oldActive)));
+    }
+    if (oldSnapshotFreeSlot) {
+        freePool_.push_back(std::const_pointer_cast<std::vector<uint8_t>>(std::move(oldSnapshotFreeSlot)));
     }
 }
 

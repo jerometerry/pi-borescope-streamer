@@ -13,7 +13,7 @@
 #include <format>
 #include <iostream>
 #include <string>
-#include "client_state.hpp"
+#include "client_connection.hpp"
 #include "index_html.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "web_server.hpp"
@@ -21,39 +21,37 @@
 WebServer::WebServer(const int port,
                      const std::atomic<bool>& running,
                      SharedFramePipeline& pipeline)
-    : clients(std::make_unique<std::array<ClientState, MAX_CLIENTS>>()),
+    : clients(std::make_unique<std::array<ClientConnection, ServerConstants::MAX_CLIENTS>>()),
       port(port),
       running(running),
       pipeline(pipeline) {
-    std::cout << "[Network Core] WebServer subsystem successfully provisioned on port " << port << ".\n";
 }
 
 WebServer::~WebServer() {
-    std::cout << "[Network Core] Initiating application engine teardown procedure...\n";
-
     if (listenFileDescriptor != -1) {
         close(listenFileDescriptor);
         listenFileDescriptor = -1;
     }
 
-    if (workerThread.joinable()) {
-        workerThread.join();
-    }
-
-    std::scoped_lock<std::mutex> lock(clientsMutex);
     size_t activeConnectionsClosed = 0;
-    
-    for (auto& client : *clients) {
-        if (client.isActive && client.fileDescriptor != -1) {
-            close(client.fileDescriptor);
-            client.isActive = false;
-            client.outbox.clear(); // Reclaims systemic heap allocations immediately
-            activeConnectionsClosed++;
+    {
+        std::scoped_lock<std::mutex> lock(clientsMutex);
+        
+        for (auto& client : *clients) {
+            if (client.isActive() && client.fd() != -1) {
+                close(client.fd());
+                client.evict();
+                activeConnectionsClosed++;
+            }
         }
     }
     
     if (activeConnectionsClosed > 0) {
         std::cout << "[Network Core] Evicted " << activeConnectionsClosed << " active sockets during lifecycle teardown.\n";
+    }
+
+    if (workerThread.joinable()) {
+        workerThread.join();
     }
 }
 
@@ -73,8 +71,6 @@ bool WebServer::initialize() {
     int opt = 1;
     setsockopt(listenFileDescriptor, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
     
-    // Apply SO_REUSEPORT to allow instant service restarts on Linux 
-    // even if active live MJPEG web clients are midway through a stream.
 #if defined(__linux__) || defined(__APPLE__)
     setsockopt(listenFileDescriptor, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 #endif
@@ -105,9 +101,10 @@ bool WebServer::initialize() {
         return false;
     }
 
+    pollFileDescriptors.reserve(ServerConstants::MAX_CLIENTS + 1);
+
     return true;
 }
-
 
 void WebServer::start() {
     if (workerThread.joinable()) {
@@ -116,12 +113,11 @@ void WebServer::start() {
     }
 
     pollFileDescriptors.clear();
-    pollFileDescriptors.reserve(INITIAL_POLL_CAPACITY);
+    pollFileDescriptors.reserve(ServerConstants::MAX_CLIENTS + 1);
 
     std::cout << "[Network Core] Launching asynchronous engine worker thread...\n";
     workerThread = std::thread(&WebServer::eventLoop, this);
 }
-
 
 void WebServer::eventLoop() {
     while (running) {
@@ -134,14 +130,14 @@ void WebServer::eventLoop() {
             pollFileDescriptors.push_back({listenFileDescriptor, POLLIN, 0});
             
             for (const auto& client : *clients) {
-                if (!client.isActive) {
+                if (!client.isActive()) {
                     continue;
                 }
                 short events = POLLIN;
-                if (client.outboxLen > 0) {
+                if (!client.isOutboxEmpty()) {
                     events |= POLLOUT;
                 }
-                pollFileDescriptors.push_back({client.fileDescriptor, events, 0});
+                pollFileDescriptors.push_back({client.fd(), events, 0});
             }
         }
 
@@ -163,8 +159,6 @@ void WebServer::eventLoop() {
                     handleAccept(); 
                 }
             } else {
-                // If a hard socket error occurs, tear down the connection and immediately advance 
-                // to the next client. This prevents running read/write logic on a closed slot.
                 if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
                     closeConnection(pfd.fd);
                 } 
@@ -172,7 +166,6 @@ void WebServer::eventLoop() {
                     if (pfd.revents & POLLIN) { 
                         handleRead(pfd.fd); 
                     }
-                    // Only attempt a write flush if the client connection survived the handleRead pass
                     if (pfd.revents & POLLOUT) { 
                         handleWrite(pfd.fd); 
                     }
@@ -181,7 +174,6 @@ void WebServer::eventLoop() {
         }
     }
 }
-
 
 bool WebServer::setNonBlocking(int fileDescriptor) {
     if (fileDescriptor < 0) {
@@ -232,15 +224,16 @@ void WebServer::handleAccept() {
 
         std::scoped_lock<std::mutex> lock(clientsMutex);
 
-        auto it = std::find_if(clients->begin(), clients->end(), [](const ClientState& c) {
-            return !c.isActive;
-        });
+        auto it = std::find_if(
+            clients->begin(), 
+            clients->end(), 
+            [](const ClientConnection& c) {
+                return !c.isActive();
+            });
 
         if (it != clients->end()) {
-            it->reset(fileDescriptor);
+            it->activate(fileDescriptor);
         } else {
-            // Server is completely full. Reject cleanly with an explicit HTTP 503 error header
-            // rather than dropping the socket silently.
             std::string_view rejectionHeader = 
                 "HTTP/1.1 503 Service Unavailable\r\n"
                 "Content-Type: text/plain\r\n"
@@ -248,16 +241,14 @@ void WebServer::handleAccept() {
                 "Server Capacity Reached.\n";
 
             send(fileDescriptor, rejectionHeader.data(), rejectionHeader.size(), MSG_NOSIGNAL);
+            shutdown(fileDescriptor, SHUT_WR);
             close(fileDescriptor);
         }
     }
 }
 
-
 void WebServer::handleRead(int fileDescriptor) {
-    // Allocate a transient, thread-local staging array on the stack.
-    // This allows us to perform non-blocking kernel reads without holding ANY global locks.
-    std::array<char, ClientState::READ_BUFFER_SIZE> temporaryBuffer{};
+    std::array<char, ClientConnection::READ_BUFFER_SIZE> temporaryBuffer{};
     ssize_t bytesRead = 0;
 
     while (true) {
@@ -285,8 +276,8 @@ void WebServer::handleRead(int fileDescriptor) {
     auto it = std::find_if(
         clients->begin(), 
         clients->end(), 
-        [fileDescriptor](const ClientState& c) {
-            return c.isActive && c.fileDescriptor == fileDescriptor;
+        [fileDescriptor](const ClientConnection& c) {
+            return c.isActive() && c.fd() == fileDescriptor;
         });
 
     if (it == clients->end()) { 
@@ -295,104 +286,76 @@ void WebServer::handleRead(int fileDescriptor) {
 
     auto& client = *it;
 
-    if (client.readBufferLen + static_cast<size_t>(bytesRead) > client.readBuffer.size()) {
+    if (!client.appendToReadBuffer(temporaryBuffer.data(), static_cast<size_t>(bytesRead))) {
         std::cerr << "[Network Core] Input buffer overflow on FD " << fileDescriptor << ". Terminating.\n";
-        client.isActive = false;
+        client.evict();
         return;
     }
 
-    std::memcpy(client.readBuffer.data() + client.readBufferLen, temporaryBuffer.data(), bytesRead);
-    client.readBufferLen += bytesRead;
-
-    std::string_view incoming(client.readBuffer.data(), client.readBufferLen);
+    std::string_view incoming(client.readData(), client.readLen());
     if (incoming.find(HEADER_DELIMITER) != std::string_view::npos) {
         processClientRequest(client);
     }
 }
 
-void WebServer::processClientRequest(ClientState& client) {
-    std::string_view request(client.readBuffer.data(), client.readBufferLen);
+void WebServer::processClientRequest(ClientConnection& client) {
+    std::string_view request(client.readData(), client.readLen());
 
-    size_t webPos = request.find(ROUTE_WEB);
-    if (webPos != std::string_view::npos && 
-       (request[webPos + ROUTE_WEB.size()] == ' ' || request[webPos + ROUTE_WEB.size()] == '?')) {
-        
-        client.closeAfterWrite = true;
-        std::string_view htmlPageContent = Resources::index_html;
+     if (size_t webPos = request.find(ROUTE_WEB); webPos != std::string_view::npos) {
+        size_t nextCharIdx = webPos + ROUTE_WEB.size();
+        if (nextCharIdx < request.size() && (request[nextCharIdx] == ' ' || request[nextCharIdx] == '?')) {
+            client.setCloseAfterWrite(true);
+            std::string_view htmlPageContent = Resources::index_html;
 
-        client.queueData(
-            reinterpret_cast<const uint8_t*>(HTTP_OK_HTML_HDR.data()), 
-            HTTP_OK_HTML_HDR.size()
-        );
-
-        auto [ptr, ec] = std::to_chars(
-            headerStackBuf, 
-            headerStackBuf + STACK_BUF_SIZE, 
-            htmlPageContent.size()
-        );
-
-        client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), ptr - headerStackBuf);
-        client.queueData(reinterpret_cast<const uint8_t*>(HTTP_HDR_END.data()), HTTP_HDR_END.size());
-        client.queueData(reinterpret_cast<const uint8_t*>(htmlPageContent.data()), htmlPageContent.size());
-    } 
-    else if (size_t snapPos = request.find(ROUTE_SNAPSHOT);
-             snapPos != std::string_view::npos && 
-             (request[snapPos + ROUTE_SNAPSHOT.size()] == ' ' || request[snapPos + ROUTE_SNAPSHOT.size()] == '?')) {
-        
-        client.closeAfterWrite = true;
-        std::shared_ptr<const std::vector<uint8_t>> snapshot = pipeline.getSnapshot();
-
-        if (!snapshot || snapshot->empty()) {
-            client.queueData(
-                reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), 
-                HTTP_NOT_FOUND.size()
-            );
-        } else {
-            client.queueData(
-                reinterpret_cast<const uint8_t*>(HTTP_OK_HTML_HDR.data()), 
-                HTTP_OK_HTML_HDR.size()
-            );
-
-            auto [ptr, ec] = std::to_chars(
-                headerStackBuf, 
-                headerStackBuf + STACK_BUF_SIZE, 
-                snapshot->size()
-            );
-
-            client.queueData(reinterpret_cast<const uint8_t*>(headerStackBuf), ptr - headerStackBuf);
-            client.queueData(reinterpret_cast<const uint8_t*>(HTTP_HDR_END.data()), HTTP_HDR_END.size());
-            client.queueData(reinterpret_cast<const uint8_t*>(snapshot->data()), snapshot->size());
+            client.queueHttpOkResponse(htmlPageContent);
+            client.resetReadBuffer();
+            return; 
         }
     } 
-    std::string targetFaviconPath = std::format("GET {}", ROUTE_FAVICON);
-    size_t favPos = request.find(targetFaviconPath);
-    if (favPos != std::string_view::npos && 
-       (request[favPos + targetFaviconPath.size()] == ' ' || request[favPos + targetFaviconPath.size()] == '?')) {
-        
-        client.closeAfterWrite = true;
-        client.queueData(
-            reinterpret_cast<const uint8_t*>(FAVICON_NOT_FOUND.data()), 
-            FAVICON_NOT_FOUND.size()
-        );
+    
+    if (size_t snapPos = request.find(ROUTE_SNAPSHOT); snapPos != std::string_view::npos) {
+        size_t nextCharIdx = snapPos + ROUTE_SNAPSHOT.size();
+        if (nextCharIdx < request.size() && (request[nextCharIdx] == ' ' || request[nextCharIdx] == '?')) {
+            client.setCloseAfterWrite(true);
+            std::shared_ptr<const std::vector<uint8_t>> snapshot = pipeline.getSnapshot();
+
+            if (!snapshot || snapshot->empty()) {
+                client.queueData(ServerConstants::HTTP_NOT_FOUND);
+            } else {
+                client.queueJpegOkResponse(*snapshot);
+            }
+            client.resetReadBuffer();
+            return;
+        }
+    }
+
+    if (size_t favPos = request.find(ROUTE_FAVICON); favPos != std::string_view::npos) {
+        size_t nextCharIdx = favPos + ROUTE_FAVICON.size();
+        if (nextCharIdx < request.size() && (request[nextCharIdx] == ' ' || request[nextCharIdx] == '?')) {
+            client.setCloseAfterWrite(true);
+            client.queueData(ServerConstants::FAVICON_NOT_FOUND);
+            client.resetReadBuffer();
+            return;
+        }
     } 
-    else if (request.find("GET / HTTP") != std::string_view::npos || 
-             request.find("GET /?") != std::string_view::npos) {
-        client.isStreaming = true;
-        client.sentFrameId = 0;
-        client.closeAfterWrite = false; 
-        client.queueData(reinterpret_cast<const uint8_t*>(HTTP_OK_MJPEG.data()), HTTP_OK_MJPEG.size());
+    
+    if (request.find("GET / HTTP") != std::string_view::npos || 
+        request.find("GET /?") != std::string_view::npos) {
+        client.setStreaming(true);
+        client.setSentFrameId(0);
+        client.setCloseAfterWrite(false); 
+        client.queueData(ServerConstants::HTTP_OK_MJPEG);
     }
     else {
-        client.closeAfterWrite = true;
-        client.queueData(reinterpret_cast<const uint8_t*>(HTTP_NOT_FOUND.data()), HTTP_NOT_FOUND.size());
+        client.setCloseAfterWrite(true);
+        client.queueData(ServerConstants::HTTP_NOT_FOUND);
     }
     
-    client.readBufferLen = 0;
+    client.resetReadBuffer();
 }
 
 void WebServer::broadcastLatestFrame() {
     uint32_t globalFrameId = 0;
-
     std::shared_ptr<const std::vector<uint8_t>> currentFrame = pipeline.getCurrentFrame(globalFrameId);
 
     if (!currentFrame || currentFrame->empty() || globalFrameId == localLatestFrameId) {
@@ -400,110 +363,89 @@ void WebServer::broadcastLatestFrame() {
     }
 
     localLatestFrameId = globalFrameId;
-
     std::scoped_lock<std::mutex> lock(clientsMutex);
-
-    char partHeaderBuf[STACK_BUF_SIZE];
+    char partHeaderBuf[ServerConstants::STACK_BUF_SIZE];
 
     for (auto& client : *clients) {
-        if (!client.isActive || !client.isStreaming) {
+        if (!client.isActive() || !client.isStreaming()) {
             continue;
         }
-        if (client.outboxLen > ClientState::ENGINES_EXPECTED_FRAME_MAX * 3) {
-            std::cerr << "[Network Core] Slow consumer detected on FD " << client.fileDescriptor << ". Evicting.\n";
-            client.isActive = false;
-            client.outbox.clear();
+        
+        if (client.outboxSize() > ClientConnection::MAX_OUTBOX_CAPACITY) {
+            std::cerr << "[Network Core] Slow consumer detected on FD " << client.fd() << ". Evicting.\n";
+            client.evict();
             continue;
         }
-        if (client.outbox.empty() && client.sentFrameId < globalFrameId) {
-            client.queueData(
-                reinterpret_cast<const uint8_t*>(MJPEG_CHUNK_PREFIX.data()), 
-                MJPEG_CHUNK_PREFIX.size()
-            );
 
-            auto [ptr, ec] = std::to_chars(
+        if (client.isOutboxEmpty() && client.sentFrameId() < globalFrameId) {
+            client.queueData(MJPEG_CHUNK_PREFIX);
+
+            std::to_chars_result result = std::to_chars(
                 partHeaderBuf, 
-                partHeaderBuf + STACK_BUF_SIZE, 
+                partHeaderBuf + ServerConstants::STACK_BUF_SIZE, 
                 currentFrame->size()
             );
 
-            client.queueData(reinterpret_cast<const uint8_t*>(partHeaderBuf), ptr - partHeaderBuf);
-            client.queueData(
-                reinterpret_cast<const uint8_t*>(MJPEG_CHUNK_SUFFIX.data()), 
-                MJPEG_CHUNK_SUFFIX.size()
-            );
+            client.queueData(partHeaderBuf, result);
+            client.queueData(MJPEG_CHUNK_SUFFIX);
+            client.queueData(*currentFrame);
 
-            client.queueData(currentFrame->data(), currentFrame->size());
-
-            client.sentFrameId = globalFrameId;
+            client.setSentFrameId(globalFrameId);
         }
     }
 }
 
 void WebServer::handleWrite(int fileDescriptor) {
-    bool shouldClose = false;
+    bool shouldDisconnectSocket = false;
+    ClientConnection* clientToDisconnect = nullptr;
 
     {
         std::scoped_lock<std::mutex> lock(clientsMutex);
         
-        auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientState& c) {
-            return c.isActive && c.fileDescriptor == fileDescriptor;
+        auto it = std::find_if(clients->begin(), clients->end(), [fileDescriptor](const ClientConnection& c) {
+            return c.isActive() && c.fd() == fileDescriptor;
         });
 
         if (it == clients->end()) { 
             return; 
         }
 
-        auto& client = *it;
-        if (client.outbox.empty()) { 
-            return;
+        ClientConnection::WriteStatus status = it->flushOutbox();
+        
+        if (status == ClientConnection::WriteStatus::ClosedOrError) {
+            shouldDisconnectSocket = true;
+            clientToDisconnect = &(*it); // Capture the pointer to clear the FD tracking later
         }
+    }
 
-        while (client.outboxOffset < client.outbox.size()) {
-            size_t remaining = client.outbox.size() - client.outboxOffset;
-            ssize_t sent = send(fileDescriptor, client.outbox.data() + client.outboxOffset, remaining, MSG_NOSIGNAL);
+    if (shouldDisconnectSocket) {
+        shutdown(fileDescriptor, SHUT_WR);
+        close(fileDescriptor);
 
-            if (sent > 0) {
-                client.outboxOffset += sent;
-            } else if (sent == -1) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) { 
-                    return; 
-                }
-                shouldClose = true;
-                break;
+        std::scoped_lock<std::mutex> lock(clientsMutex);
+        if (clientToDisconnect) {
+            if (!clientToDisconnect->isActive() && clientToDisconnect->fd() == fileDescriptor) {
+                clientToDisconnect->activate(-1);
+                clientToDisconnect->evict();
             }
         }
-
-        if (!shouldClose && client.outboxOffset == client.outbox.size()) {
-            client.outboxOffset = 0;
-            client.outbox.clear();
-
-            if (client.closeAfterWrite) {
-                shouldClose = true;
-            }
-        }
-    } 
-
-    if (shouldClose) {
-        closeConnection(fileDescriptor);
     }
 }
 
-void WebServer::closeConnection(int fileDescriptor) {
 
+void WebServer::closeConnection(int fileDescriptor) {
     {
         std::scoped_lock<std::mutex> lock(clientsMutex);
         
         auto it = std::find_if(
             clients->begin(), 
             clients->end(), 
-            [fileDescriptor](const ClientState& c) {
-                return c.isActive && c.fileDescriptor == fileDescriptor;
+            [fileDescriptor](const ClientConnection& c) {
+                return c.isActive() && c.fd() == fileDescriptor;
             });
 
         if (it != clients->end()) {
-            it->isActive = false;
-            it->outbox.clear(); 
+            it->evict(); 
         }
     }
 

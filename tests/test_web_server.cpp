@@ -46,13 +46,21 @@ protected:
         server_.reset(); 
     }
 
-    void injectMockSnapshot(const std::vector<uint8_t>& mockData) {
+      void injectMockSnapshot(const std::vector<uint8_t>& mockData) {
         pipeline_.requestSnapshot();
-        pipeline_.updateFrame(mockData);
+        auto buffer = pipeline_.checkoutBuffer();
+        if (buffer) {
+            buffer->assign(mockData.begin(), mockData.end());
+            pipeline_.updateFrame(std::move(buffer));
+        }
     }
 
     void injectMockVideoFrame(const std::vector<uint8_t>& mockData) {
-        pipeline_.updateFrame(mockData);
+        auto buffer = pipeline_.checkoutBuffer();
+        if (buffer) {
+            buffer->assign(mockData.begin(), mockData.end());
+            pipeline_.updateFrame(std::move(buffer));
+        }
     }
 
     std::string fetchFromLocalhost(const std::string& requestPayload) {

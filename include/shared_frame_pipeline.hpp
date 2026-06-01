@@ -9,7 +9,11 @@ class SharedFramePipeline {
 public:
     SharedFramePipeline();
 
-    void updateFrame(const std::vector<uint8_t>& frame);
+    void updateFrame(std::shared_ptr<std::vector<uint8_t>> newFrame);
+
+    std::shared_ptr<std::vector<uint8_t>> checkoutBuffer();
+    void returnBuffer(std::shared_ptr<std::vector<uint8_t>> buffer);
+
     void requestSnapshot();
 
     std::shared_ptr<const std::vector<uint8_t>> getCurrentFrame(uint32_t& outFrameId) const;
@@ -18,7 +22,7 @@ public:
 private:
     mutable std::mutex poolMutex_;
     mutable std::mutex activeMutex_;
-    
+
     std::vector<std::shared_ptr<std::vector<uint8_t>>> freePool_;
     std::shared_ptr<const std::vector<uint8_t>> latestFrame_;
     std::shared_ptr<const std::vector<uint8_t>> snapshotFrame_;

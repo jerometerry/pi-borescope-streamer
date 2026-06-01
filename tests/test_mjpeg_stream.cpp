@@ -45,7 +45,7 @@ protected:
 
 TEST_F(MjpegStreamComponentsTest, PipelineIgnoresEmptyFrames) {
     uint32_t frameId = 0;
-    pipeline().updateFrame({});
+    pipeline().updateFrame(nullptr);
     
     auto frame = pipeline().getCurrentFrame(frameId);
     EXPECT_TRUE(frame->empty());
@@ -61,7 +61,12 @@ TEST_F(MjpegStreamComponentsTest, HardwareButtonTriggersSnapshotOnNextFrame) {
     pipeline().requestSnapshot();
 
     std::vector<uint8_t> nextVideoFrame = {0xFF, 0xD8, 0x11, 0x22, 0x33, 0xFF, 0xD9};
-    pipeline().updateFrame(nextVideoFrame);
+    auto buffer = pipeline().checkoutBuffer();
+    ASSERT_NE(buffer, nullptr);
+    
+    buffer->assign(nextVideoFrame.begin(), nextVideoFrame.end());
+
+    pipeline().updateFrame(std::move(buffer));
 
     auto snapshotPtr = pipeline().getSnapshot();
     ASSERT_NE(snapshotPtr, nullptr);

@@ -33,10 +33,18 @@ void UsbCaptureEngine::stop() {
 void UsbCaptureEngine::loop(const DeviceInfo& target) {
     try {
         camera_ = std::make_unique<UsbCamera>(target);
-        
         decoder_ = std::make_unique<UsbFrameDecoder>(
-            [this](const std::vector<uint8_t>& frame) { pipeline_.updateFrame(frame); },
-            [this]() { buttonManager_.registerHardwarePress(); }
+            [this](const std::vector<uint8_t>& frame) { 
+                auto buffer = pipeline_.checkoutBuffer();
+                if (buffer) {
+                    buffer->assign(frame.begin(), frame.end());
+                    pipeline_.updateFrame(std::move(buffer)); 
+                }
+            },
+            [this]() { 
+                buttonManager_.registerHardwarePress(); 
+                pipeline_.requestSnapshot();
+            }
         );
 
         std::array<uint8_t, ServerConstants::FOUR_KILOBYTES> readBuffer{};
@@ -54,14 +62,8 @@ void UsbCaptureEngine::loop(const DeviceInfo& target) {
             } else if (error == LIBUSB_ERROR_NO_DEVICE) {
                 running_ = false;
             }
-            
-            if (buttonManager_.checkAndResetQuickPressTrigger()) {
-                pipeline_.requestSnapshot();
-            }
         }
     } catch (...) {
         running_ = false;
     }
 }
-
-    
