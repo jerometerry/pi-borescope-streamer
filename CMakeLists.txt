@@ -40,6 +40,7 @@ if(CPPCHECK_EXE)
         "--suppress=unusedFunction"
         "--suppress=unmatchedSuppression"
         "--suppress=style" 
+        "--check-level=exhaustive"
     )
 else()
     message(WARNING "cppcheck not found")
@@ -74,11 +75,13 @@ add_library(useeplus_protocol STATIC
     src/usb_camera.cpp 
     src/usb_frame_decoder.cpp
 )
+add_library(Borescope::Protocol ALIAS useeplus_protocol)
+
 target_include_directories(useeplus_protocol PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(useeplus_protocol PUBLIC PkgConfig::LIBUSB)
 target_link_libraries(useeplus_protocol PRIVATE project_warnings)
 
-add_library(pi_borescope_api STATIC 
+add_library(borescope_core STATIC 
     src/application_context.cpp
     src/web_server.cpp
     src/server_time.cpp
@@ -87,29 +90,31 @@ add_library(pi_borescope_api STATIC
     src/usb_capture_engine.cpp
     ${GENERATED_HPP}
 )
-target_include_directories(pi_borescope_api PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(pi_borescope_api PUBLIC useeplus_protocol)
-target_link_libraries(pi_borescope_api PRIVATE project_warnings)
+add_library(Borescope::Core ALIAS borescope_core)
+
+target_include_directories(borescope_core PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_link_libraries(borescope_core PUBLIC Borescope::Protocol)
+target_link_libraries(borescope_core PRIVATE project_warnings)
 
 add_executable(pi-borescope-streamer 
     src/server.cpp
 )
-target_link_libraries(pi-borescope-streamer PRIVATE pi_borescope_api  project_warnings)
+target_link_libraries(pi-borescope-streamer PRIVATE Borescope::Core project_warnings)
 
 add_executable(attached_usb_devices
     src/attached_usb_devices.cpp 
 )
-target_link_libraries(attached_usb_devices PRIVATE pi_borescope_api  project_warnings)
+target_link_libraries(attached_usb_devices PRIVATE Borescope::Core project_warnings)
 
 add_executable(binary_stream_capture
     src/binary_stream_capture.cpp 
 )
-target_link_libraries(binary_stream_capture PRIVATE pi_borescope_api project_warnings)
+target_link_libraries(binary_stream_capture PRIVATE Borescope::Core project_warnings)
 
 add_executable(frame_extractor
     src/frame_extractor.cpp 
 )
-target_link_libraries(frame_extractor PRIVATE pi_borescope_api project_warnings)
+target_link_libraries(frame_extractor PRIVATE Borescope::Core project_warnings)
 
 option(BUILD_DOC "Build documentation" ON)
 if(BUILD_DOC)
@@ -125,6 +130,8 @@ if(BUILD_DOC)
         set(DOXYGEN_ENABLE_PREPROCESSING YES)
         set(DOXYGEN_MACRO_EXPANSION YES)
         set(DOXYGEN_PREDEFINED "[[gnu::packed]]=")
+        set(DOXYGEN_HAVE_DOT YES)
+        set(DOXYGEN_DOT_NUM_THREADS 0)
 
         doxygen_add_docs(docs 
             ${PROJECT_SOURCE_DIR}/src
@@ -143,8 +150,8 @@ if(BUILD_TESTING)
     include(FetchContent)
     FetchContent_Declare(
         googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG        v1.17.0
+        URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
+        DOWNLOAD_EXTRACT_TIMESTAMP true
         SYSTEM
     )
 
@@ -172,7 +179,7 @@ if(BUILD_TESTING)
 
     target_link_libraries(run_project_tests 
         PRIVATE 
-            pi_borescope_api 
+            borescope_core 
             project_warnings 
             GTest::gtest_main
             GTest::gmock
@@ -187,6 +194,6 @@ if(ENABLE_COVERAGE)
     target_compile_options(useeplus_protocol PUBLIC --coverage)
     target_link_options(useeplus_protocol PUBLIC --coverage)
     
-    target_compile_options(pi_borescope_api PUBLIC --coverage)
-    target_link_options(pi_borescope_api PUBLIC --coverage)
+    target_compile_options(borescope_core PUBLIC --coverage)
+    target_link_options(borescope_core PUBLIC --coverage)
 endif()
