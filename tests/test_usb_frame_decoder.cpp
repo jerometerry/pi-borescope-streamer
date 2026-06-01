@@ -9,9 +9,8 @@
 #include <span>
 #include <string>
 #include <vector>
-#include "chunk_metadata.hpp"
+#include "data_structures.hpp"
 #include "usb_frame_decoder.hpp"
-#include "usb_packet_header.hpp"
 
 class MockHandlers {
 public:
@@ -41,15 +40,15 @@ TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     std::vector<uint8_t> hardwarePacket(1024, 0xDD); 
     
     auto* usb = reinterpret_cast<UsbPacketHeader*>(hardwarePacket.data());
-    usb->header = 0xBBAA; usb->cameraId = 11; usb->length = 939;
+    usb->setHeader(0xBBAA); usb->cameraId = 11; usb->setLength( 939);
 
     auto* chunk = reinterpret_cast<ChunkMetadata*>(hardwarePacket.data() + sizeof(UsbPacketHeader));
-    chunk->frameId = 2; chunk->cameraNumber = 0; chunk->flags = 0; chunk->gravitySensor = 0;    
+    chunk->frameId = 2; chunk->cameraNumber = 0; chunk->flags = 0; chunk->setGravitySensor(0);    
 
     hardwarePacket[headerSize] = 0xFF;
     hardwarePacket[headerSize + 1] = 0xD8;
-    hardwarePacket[sizeof(UsbPacketHeader) + usb->length - 2] = 0xFF;
-    hardwarePacket[sizeof(UsbPacketHeader) + usb->length - 1] = 0xD9;
+    hardwarePacket[sizeof(UsbPacketHeader) + usb->getLength() - 2] = 0xFF;
+    hardwarePacket[sizeof(UsbPacketHeader) + usb->getLength() - 1] = 0xD9;
 
     std::vector<uint8_t> triggerFrame = hardwarePacket; 
     auto* triggerChunk = reinterpret_cast<ChunkMetadata*>(triggerFrame.data() + sizeof(UsbPacketHeader));
@@ -57,7 +56,7 @@ TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
 
     std::vector<uint8_t> expectedPayload(
         hardwarePacket.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata),
-        hardwarePacket.begin() + sizeof(UsbPacketHeader) + usb->length
+        hardwarePacket.begin() + sizeof(UsbPacketHeader) + usb->getLength()
     );
     EXPECT_CALL(GetMock(), OnBroadcast(expectedPayload)).Times(1);
 
@@ -68,10 +67,10 @@ TEST_F(UsbFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
 TEST_F(UsbFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
     std::vector<uint8_t> validHeader(1024, 0x00);
     auto* usb = reinterpret_cast<UsbPacketHeader*>(validHeader.data());
-    usb->header = 0xBBAA; usb->cameraId = 11; usb->length = 1024 - sizeof(UsbPacketHeader);
+    usb->setHeader(0xBBAA); usb->cameraId = 11; usb->setLength(1024 - sizeof(UsbPacketHeader));
 
     auto* chunk = reinterpret_cast<ChunkMetadata*>(validHeader.data() + sizeof(UsbPacketHeader));
-    chunk->frameId = 1; chunk->cameraNumber = 0; chunk->flags = 0; chunk->gravitySensor = 0;    
+    chunk->frameId = 1; chunk->cameraNumber = 0; chunk->flags = 0; chunk->setGravitySensor(0);    
 
     size_t payloadOffset = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
     validHeader[payloadOffset] = 0xFF;
@@ -104,15 +103,15 @@ TEST_F(UsbFrameDecoderTest, ReassemblesMultiChunkMjpegStream) {
         std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(ChunkMetadata) + payload.size(), 0x00);
         
         auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-        usb->header = 0xBBAA;
+        usb->setHeader(0xBBAA);
         usb->cameraId = 11;
-        usb->length = sizeof(ChunkMetadata) + payload.size();
+        usb->setLength(sizeof(ChunkMetadata) + payload.size());
 
         auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
         chunk->frameId = frameId;
         chunk->cameraNumber = 0;
         chunk->flags = 0;
-        chunk->gravitySensor = 0;
+        chunk->setGravitySensor(0);
         
         std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata));
         
@@ -141,15 +140,15 @@ TEST_F(UsbFrameDecoderTest, TriggersButtonHandlerOnHardwareFlag) {
         std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(ChunkMetadata) + payload.size(), 0x00);
         
         auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-        usb->header = 0xBBAA;
+        usb->setHeader(0xBBAA);
         usb->cameraId = 11;
-        usb->length = sizeof(ChunkMetadata) + payload.size();
+        usb->setLength(sizeof(ChunkMetadata) + payload.size());
 
         auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
         chunk->frameId = frameId;
         chunk->cameraNumber = 0;
         chunk->flags = 0;
-        chunk->gravitySensor = 0;
+        chunk->setGravitySensor(0);
         chunk->setButtonPressed(isButtonPressed);
         
         std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(ChunkMetadata));
@@ -185,15 +184,15 @@ TEST_F(UsbFrameDecoderTest, TriggersButtonHandlerOnFlag) {
     std::vector<uint8_t> packet(128, 0x00);
 
     auto* usb_hdr = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb_hdr->header = 0xBBAA;
+    usb_hdr->setHeader(0xBBAA);
     usb_hdr->cameraId = 7;
-    usb_hdr->length = 64;
+    usb_hdr->setLength(64);
 
     auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
     chunk->frameId = 101;
     chunk->cameraNumber = 0;
     chunk->flags = 0;
-    chunk->gravitySensor = 0;
+    chunk->setGravitySensor(0);
     chunk->setButtonPressed(true);
 
     EXPECT_CALL(GetMock(), OnButtonPress()).Times(1);
@@ -203,25 +202,25 @@ TEST_F(UsbFrameDecoderTest, TriggersButtonHandlerOnFlag) {
 TEST_F(UsbFrameDecoderTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     std::vector<uint8_t> packet1(100, 0x00);
     auto* usb1 = reinterpret_cast<UsbPacketHeader*>(packet1.data());
-    usb1->header = 0xBBAA; usb1->cameraId = 11; usb1->length = 50; 
+    usb1->setHeader(0xBBAA); usb1->cameraId = 11; usb1->setLength(50); 
 
     auto* chunk1 = reinterpret_cast<ChunkMetadata*>(packet1.data() + sizeof(UsbPacketHeader));
-    chunk1->frameId = 1; chunk1->cameraNumber = 0; chunk1->gravitySensor = 0;
+    chunk1->frameId = 1; chunk1->cameraNumber = 0; chunk1->setGravitySensor(0);
 
     size_t const payload_offset = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
-    std::fill(packet1.begin() + payload_offset, packet1.begin() + usb1->length, 0xDE);
+    std::fill(packet1.begin() + payload_offset, packet1.begin() + usb1->getLength(), 0xDE);
     packet1[payload_offset] = 0xFF;      // SOI
     packet1[payload_offset + 1] = 0xD8;
-    packet1[sizeof(UsbPacketHeader) + usb1->length - 2] = 0xFF; // EOI
-    packet1[sizeof(UsbPacketHeader) + usb1->length - 1] = 0xD9;
+    packet1[sizeof(UsbPacketHeader) + usb1->getLength() - 2] = 0xFF; // EOI
+    packet1[sizeof(UsbPacketHeader) + usb1->getLength() - 1] = 0xD9;
 
     std::vector<uint8_t> packet2(100, 0x00);
     auto* usb2 = reinterpret_cast<UsbPacketHeader*>(packet2.data());
-    usb2->header = 0xBBAA; usb2->cameraId = 11; usb2->length = 50;
+    usb2->setHeader(0xBBAA); usb2->cameraId = 11; usb2->setLength(50);
 
     auto* chunk2 = reinterpret_cast<ChunkMetadata*>(packet2.data() + sizeof(UsbPacketHeader));
-    chunk2->frameId = 2; chunk2->cameraNumber = 0; chunk2->gravitySensor = 0;
-    std::fill(packet2.begin() + payload_offset, packet2.begin() + usb2->length, 0xAA);
+    chunk2->frameId = 2; chunk2->cameraNumber = 0; chunk2->setGravitySensor(0);
+    std::fill(packet2.begin() + payload_offset, packet2.begin() + usb2->getLength(), 0xAA);
 
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::Property(&std::vector<uint8_t>::empty, false)))
         .WillOnce(::testing::Invoke([](const std::vector<uint8_t>& frameBuffer) {
@@ -236,9 +235,9 @@ TEST_F(UsbFrameDecoderTest, AccumulatesDataAndEmitsOnFrameIdChange) {
 TEST_F(UsbFrameDecoderTest, IgnoresInvalidCameraId) {
     std::vector<uint8_t> packet(20, 0x00);
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb->header = 0xBBAA;
+    usb->setHeader(0xBBAA);
     usb->cameraId = 99;
-    usb->length = 15;
+    usb->setLength(15);
 
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     GetDecoder().processIncomingCameraData(packet);
@@ -247,9 +246,9 @@ TEST_F(UsbFrameDecoderTest, IgnoresInvalidCameraId) {
 TEST_F(UsbFrameDecoderTest, IgnoresPayloadExceedingBufferSize) {
     std::vector<uint8_t> packet(10, 0x00); 
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb->header = 0xBBAA;
+    usb->setHeader(0xBBAA);
     usb->cameraId = 11;
-    usb->length = 50; 
+    usb->setLength(50); 
 
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     GetDecoder().processIncomingCameraData(packet);
@@ -258,9 +257,9 @@ TEST_F(UsbFrameDecoderTest, IgnoresPayloadExceedingBufferSize) {
 TEST_F(UsbFrameDecoderTest, IgnoresTruncatedMetadata) {
     std::vector<uint8_t> packet(10, 0x00); 
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb->header = 0xBBAA;
+    usb->setHeader(0xBBAA);
     usb->cameraId = 11;
-    usb->length = 5; 
+    usb->setLength(5); 
     
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     GetDecoder().processIncomingCameraData(packet);
@@ -269,15 +268,15 @@ TEST_F(UsbFrameDecoderTest, IgnoresTruncatedMetadata) {
 TEST_F(UsbFrameDecoderTest, IgnoresUnsupportedCameraConfiguration) {
     std::vector<uint8_t> packet(20, 0x00);
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb->header = 0xBBAA;
+    usb->setHeader(0xBBAA);
     usb->cameraId = 11;
-    usb->length = 15;
+    usb->setLength(15);
 
     auto* chunk = reinterpret_cast<ChunkMetadata*>(packet.data() + sizeof(UsbPacketHeader));
     chunk->frameId = 1;
     chunk->cameraNumber = 5;
     chunk->flags = 0;
-    chunk->gravitySensor = 0;
+    chunk->setGravitySensor(0);
 
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     GetDecoder().processIncomingCameraData(packet);
@@ -286,25 +285,25 @@ TEST_F(UsbFrameDecoderTest, IgnoresUnsupportedCameraConfiguration) {
 TEST_F(UsbFrameDecoderTest, AbortsOnMidFrameCameraShift) {
     std::vector<uint8_t> packet1(20, 0x00);
     auto* usb1 = reinterpret_cast<UsbPacketHeader*>(packet1.data());
-    usb1->header = 0xBBAA;
+    usb1->setHeader(0xBBAA);
     usb1->cameraId = 11;
-    usb1->length = 15;
+    usb1->setLength(15);
     auto* chunk1 = reinterpret_cast<ChunkMetadata*>(packet1.data() + sizeof(UsbPacketHeader));
     chunk1->frameId = 1;
     chunk1->cameraNumber = 0;
-    chunk1->gravitySensor = 0;
+    chunk1->setGravitySensor(0);
     
     GetDecoder().processIncomingCameraData(packet1);
 
     std::vector<uint8_t> packet2(20, 0x00);
     auto* usb2 = reinterpret_cast<UsbPacketHeader*>(packet2.data());
-    usb2->header = 0xBBAA;
+    usb2->setHeader(0xBBAA);
     usb2->cameraId = 11;
-    usb2->length = 15;
+    usb2->setLength(15);
     auto* chunk2 = reinterpret_cast<ChunkMetadata*>(packet2.data() + sizeof(UsbPacketHeader));
     chunk2->frameId = 1; 
     chunk2->cameraNumber = 1;
-    chunk2->gravitySensor = 0;
+    chunk2->setGravitySensor(0);
 
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
     GetDecoder().processIncomingCameraData(packet2);

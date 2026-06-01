@@ -18,14 +18,14 @@ UsbFrameDecoder::UsbFrameDecoder(
 void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
     streamBuffer.insert(streamBuffer.end(), data.begin(), data.end());
 
-    size_t i = 0;
+    size_t i = readOffset;
     const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
 
     while (i + TOTAL_HEADER_SIZE <= streamBuffer.size()) {
         UsbPacketHeader header{};
         std::memcpy(&header, &streamBuffer[i], sizeof(UsbPacketHeader));
 
-        if (header.header != ServerConstants::USB_FRAME_HEADER || 
+        if (header.getHeader() != ServerConstants::USB_FRAME_HEADER || 
            (header.cameraId != 0x0B && header.cameraId != 0x07)) {
             i++;
             continue;
@@ -50,7 +50,7 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
             continue;
         }
 
-        size_t chunkTotalSize = sizeof(UsbPacketHeader) + header.length;
+        size_t chunkTotalSize = sizeof(UsbPacketHeader) + header.getLength();
 
         if (i + chunkTotalSize > streamBuffer.size()) {
             break;
@@ -80,8 +80,14 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
         i += chunkTotalSize;
     }
 
-    if (i > 0) {
-        streamBuffer.erase(streamBuffer.begin(), streamBuffer.begin() + i);
+    readOffset = i;
+
+    if (readOffset == streamBuffer.size()) {
+        streamBuffer.clear();
+        readOffset = 0;
+    } else if (readOffset > ServerConstants::FOUR_KILOBYTES) {
+        streamBuffer.erase(streamBuffer.begin(), streamBuffer.begin() + readOffset);
+        readOffset = 0;
     }
 }
 

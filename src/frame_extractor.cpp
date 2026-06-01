@@ -7,9 +7,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include "chunk_metadata.hpp"
+#include "data_structures.hpp"
 #include "server_constants.hpp"
-#include "usb_packet_header.hpp"
 
 struct DumpRange {
     size_t start;
@@ -165,7 +164,7 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
 
         const UsbPacketHeader* header = reinterpret_cast<const UsbPacketHeader*>(&fileData[i]);
 
-        if (header->header != MAGIC_NUMBER || (header->cameraId != 0x0B && header->cameraId != 0x07)) {
+        if (header->getHeader() != MAGIC_NUMBER || (header->cameraId != 0x0B && header->cameraId != 0x07)) {
             i++;
             continue;
         }
@@ -191,7 +190,7 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
             continue;
         }
 
-        size_t chunkTotalSize = sizeof(UsbPacketHeader) + header->length;
+        size_t chunkTotalSize = sizeof(UsbPacketHeader) + header->getLength();
         if (i + chunkTotalSize > fileData.size()) {
             std::cout << "Reached incomplete hardware block at end of file. Stopping.\n";
             break; 

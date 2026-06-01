@@ -6,8 +6,7 @@
 #include <functional>
 #include <span>
 #include <vector>
-#include "chunk_metadata.hpp"
-#include "usb_packet_header.hpp"
+#include "data_structures.hpp"
 
 class UsbFrameDecoder {
 public:
@@ -26,6 +25,8 @@ private:
     std::vector<uint8_t> frameBuffer;
     std::vector<uint8_t> emitBuffer;
     ChunkMetadata metadata_{};
+
+    size_t readOffset{0};
     
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler;
     std::function<void()> buttonHandler;

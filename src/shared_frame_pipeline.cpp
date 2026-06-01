@@ -44,6 +44,7 @@ void SharedFramePipeline::updateFrame(std::shared_ptr<std::vector<uint8_t>> newF
     }
 
     std::shared_ptr<const std::vector<uint8_t>> oldActive;
+    std::shared_ptr<std::vector<uint8_t>> oldSnapshotToReturn;
 
     {
         std::scoped_lock lock(activeMutex_);
@@ -53,17 +54,26 @@ void SharedFramePipeline::updateFrame(std::shared_ptr<std::vector<uint8_t>> newF
         latestFrame_ = std::move(newFrame);
 
         if (captureSnapshotRequested_) {
-            auto& mutableSnapshot = 
-                *std::const_pointer_cast<std::vector<uint8_t>>(snapshotFrame_);
-            mutableSnapshot.assign(latestFrame_->begin(), latestFrame_->end());            
+            auto newSnapshotBuffer = checkoutBuffer();
+            
+            if (newSnapshotBuffer) {
+                newSnapshotBuffer->assign(latestFrame_->begin(), latestFrame_->end());
+
+                oldSnapshotToReturn = std::move(snapshotFrame_);
+                snapshotFrame_ = std::move(newSnapshotBuffer);
+            }
+            
             initialSnapshotCaptured_ = true;
             captureSnapshotRequested_ = false;
         }
     }
 
     if (oldActive) {
-        std::scoped_lock lock(poolMutex_);
-        freePool_.push_back(std::const_pointer_cast<std::vector<uint8_t>>(std::move(oldActive)));
+        returnBuffer(std::const_pointer_cast<std::vector<uint8_t>>(std::move(oldActive)));
+    }
+    
+    if (oldSnapshotToReturn) {
+        returnBuffer(std::move(oldSnapshotToReturn));
     }
 }
 
@@ -83,9 +93,7 @@ std::shared_ptr<const std::vector<uint8_t>> SharedFramePipeline::getSnapshot() c
     std::scoped_lock lock(activeMutex_);
 
     if (!initialSnapshotCaptured_ && latestFrame_ && !latestFrame_->empty()) {
-        auto& mutableSnapshot = 
-            *std::const_pointer_cast<std::vector<uint8_t>>(snapshotFrame_);
-        mutableSnapshot.assign(latestFrame_->begin(), latestFrame_->end());
+        snapshotFrame_->assign(latestFrame_->begin(), latestFrame_->end());
         initialSnapshotCaptured_ = true;
     }
 

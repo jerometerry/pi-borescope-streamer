@@ -1,5 +1,6 @@
 #pragma once
 
+#include <poll.h>
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -55,8 +56,8 @@ private:
 
     std::unique_ptr<std::array<ClientConnection, ServerConstants::MAX_CLIENTS>> clients;
     std::mutex clientsMutex;
-    
-    std::vector<struct pollfd> pollFileDescriptors;
+
+    std::array<struct pollfd, ServerConstants::MAX_CLIENTS + 1> pollFds{};
     std::thread workerThread;
 
     const int port;

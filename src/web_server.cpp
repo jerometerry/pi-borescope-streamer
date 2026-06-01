@@ -98,7 +98,14 @@ bool WebServer::initialize() {
         return false;
     }
 
-    pollFileDescriptors.reserve(ServerConstants::MAX_CLIENTS + 1);
+    for (auto& pfd : pollFds) {
+        pfd.fd = -1;
+        pfd.events = 0;
+        pfd.revents = 0;
+    }
+
+    pollFds.front().fd = listenFileDescriptor;
+    pollFds.front().events = POLLIN;
 
     return true;
 }
@@ -108,9 +115,6 @@ void WebServer::start() {
         std::cerr << "[Network Core Warning] WebServer::start() called on an already active engine instance.\n";
         return; 
     }
-
-    pollFileDescriptors.clear();
-    pollFileDescriptors.reserve(ServerConstants::MAX_CLIENTS + 1);
 
     std::cout << "[Network Core] Launching asynchronous engine worker thread...\n";
     workerThread = std::thread(&WebServer::eventLoop, this);
@@ -123,49 +127,41 @@ void WebServer::eventLoop() {
         {
             std::scoped_lock<std::mutex> lock(clientsMutex);
 
-            pollFileDescriptors.clear();
-            pollFileDescriptors.push_back({listenFileDescriptor, POLLIN, 0});
-            
-            for (const auto& client : *clients) {
-                if (!client.isActive()) {
-                    continue;
+            for (size_t i = 0; i < ServerConstants::MAX_CLIENTS; ++i) {
+                auto& client = clients->at(i);
+                auto& pfd = pollFds.at(i + 1);
+
+                if (client.isActive()) {
+                    pfd.fd = client.fd();
+                    pfd.events = POLLIN | (client.isOutboxEmpty() ? 0 : POLLOUT);
+                } else {
+                    pfd.fd = -1;
                 }
-                short events = POLLIN;
-                if (!client.isOutboxEmpty()) {
-                    events |= POLLOUT;
-                }
-                pollFileDescriptors.push_back({client.fd(), events, 0});
             }
         }
 
-        int ret = poll(pollFileDescriptors.data(), pollFileDescriptors.size(), 30);
+        int ret = poll(pollFds.data(), pollFds.size(), 30);
         if (ret == -1) {
-            if (errno == EINTR) { 
-                continue;
-            }
+            if (errno == EINTR) continue;
             break;
         }
 
-        for (const auto& pfd : pollFileDescriptors) {
-            if (pfd.revents == 0) { 
-                continue; 
-            }
+        if (pollFds.front().revents & POLLIN) {
+            handleAccept();
+        }
 
-            if (pfd.fd == listenFileDescriptor) {
-                if (pfd.revents & POLLIN) { 
-                    handleAccept(); 
-                }
+        for (size_t i = 1; i < pollFds.size(); ++i) {
+            auto& pfd = pollFds.at(i);
+            if (pfd.revents == 0 || pfd.fd == -1) continue;
+
+            if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                closeConnection(pfd.fd);
             } else {
-                if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
-                    closeConnection(pfd.fd);
-                } 
-                else {
-                    if (pfd.revents & POLLIN) { 
-                        handleRead(pfd.fd); 
-                    }
-                    if (pfd.revents & POLLOUT) { 
-                        handleWrite(pfd.fd); 
-                    }
+                if (pfd.revents & POLLIN) { 
+                    handleRead(pfd.fd);
+                }
+                if (pfd.revents & POLLOUT) { 
+                    handleWrite(pfd.fd);
                 }
             }
         }

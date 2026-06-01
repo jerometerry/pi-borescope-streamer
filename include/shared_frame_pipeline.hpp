@@ -25,7 +25,7 @@ private:
 
     std::vector<std::shared_ptr<std::vector<uint8_t>>> freePool_;
     std::shared_ptr<const std::vector<uint8_t>> latestFrame_;
-    std::shared_ptr<const std::vector<uint8_t>> snapshotFrame_;
+    std::shared_ptr<std::vector<uint8_t>> snapshotFrame_;
     
     uint32_t frameId_{0};
     bool captureSnapshotRequested_{false};
