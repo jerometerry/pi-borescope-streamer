@@ -1,6 +1,6 @@
 {
 	"cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
-    "cmake.options.statusBarVisibility": "visible",
+    //"cmake.options.statusBarVisibility": "visible",
     "cmake.debugConfig": {
         "type": "lldb",
         "request": "launch",

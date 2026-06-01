@@ -7,6 +7,12 @@
  */
 class Clock {
 public:
+    /** @brief Destructor.
+     */
     virtual ~Clock() = default;
+
+    /** @brief Get the current time.
+     *  @return The current time point.
+     */
     virtual std::chrono::steady_clock::time_point now() const noexcept = 0;
 };

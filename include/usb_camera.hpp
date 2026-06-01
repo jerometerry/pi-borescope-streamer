@@ -45,11 +45,16 @@ public:
 
     /** 
      * @brief Open the USB camera
+     * @param context The libusb context
      * @param target The target USB device
      * @return True if the camera was opened successfully, false otherwise
      */
     static libusb_device_handle *open(libusb_context *context, const DeviceInfo& target);
 
+    /** 
+     * @brief List all available USB cameras
+     * @return A vector of available USB camera devices
+     */
     static std::vector<DeviceInfo> listCameras();
 
     /** 
@@ -62,8 +67,8 @@ public:
     /** 
      * @brief Read data from the USB camera
      * @param buffer The buffer to store the data
-     * @param maxSize
-     * @param numBytes
+     * @param maxSize The maximum number of bytes to read
+     * @param numBytes The number of bytes read
      * @return The number of bytes read, or a negative value on error
      */
     int read(uint8_t* buffer, size_t maxSize, int& numBytes);
@@ -72,8 +77,8 @@ public:
      * @brief Read data from the USB camera
      * @param endpoint The endpoint to read from
      * @param buffer The buffer to store the data
-     * @param length The number of bytes to read
-     * @param numBytes
+     * @param maxSize The maximum number of bytes to read
+     * @param numBytes The number of bytes read
      * @return The number of bytes read, or a negative value on error
      */
     int read(unsigned char endpoint, uint8_t* buffer, size_t maxSize, int& numBytes);
@@ -82,8 +87,8 @@ public:
      * @brief Read data from the USB camera
      * @param endpoint The endpoint to read from
      * @param buffer The buffer to store the data
-     * @param length The number of bytes to read
-     * @param numBytes
+     * @param maxSize The maximum number of bytes to read
+     * @param numBytes The number of bytes read
      * @return The number of bytes read, or a negative value on error
      */
     int read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t maxSize, int& numBytes);
@@ -93,7 +98,7 @@ public:
      * @param endpoint The endpoint to write to
      * @param buffer The buffer containing the data to write
      * @param length The length of the data to write
-     * @param numBytes
+     * @param numBytes The number of bytes written
      * @return The number of bytes written, or a negative value on error
      */
     int write(unsigned char endpoint, const uint8_t* buffer, size_t length, int& numBytes);
@@ -125,12 +130,12 @@ private:
     static constexpr unsigned char ENDPOINT_2 = 2;
 
     /**
-     * @brief
+     * @brief The USB timeout value
      */
     static constexpr unsigned int USB_TIMEOUT = 1000;
 
     /**
-     * @brief
+     * @brief The libusb context
      */
     libusb_context *context{nullptr};
 

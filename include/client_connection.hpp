@@ -15,45 +15,139 @@
  */
 class ClientConnection {
 public:
+    /** @brief Enum representing the status of a write operation.
+     */
     enum class WriteStatus : uint8_t {
         Flushed,
         Pending,
         ClosedOrError
     };
 
+    /** @brief Static constants for buffer sizes.
+     */
     static constexpr size_t READ_BUFFER_SIZE = ServerConstants::FOUR_KILOBYTES;
+
+    /** @brief Static constant for the maximum expected frame size from engines.
+     */
     static constexpr size_t ENGINES_EXPECTED_FRAME_MAX = ServerConstants::FORTY_KILOBYTES; 
+
+    /** @brief Static constant for the maximum capacity of the output box.
+     */
     static constexpr size_t MAX_OUTBOX_CAPACITY = ENGINES_EXPECTED_FRAME_MAX * 3;
 
+    /** @brief Default constructor.
+     */
     ClientConnection() {
         m_readBuffer.resize(READ_BUFFER_SIZE);
         m_outbox.reserve(MAX_OUTBOX_CAPACITY);
     }
 
-    // Disallow copying to prevent accidental buffer duplication overhead
+    /** @brief Deleted copy constructor.
+     */
     ClientConnection(const ClientConnection&) = delete;
+
+    /** @brief Deleted assignment operator.
+     */
     ClientConnection& operator=(const ClientConnection&) = delete;
+
+    /** @brief Default move constructor.
+     */
     ClientConnection(ClientConnection&&) noexcept = default;
+
+    /** @brief Default move assignment operator.
+     */
     ClientConnection& operator=(ClientConnection&&) noexcept = default;
 
-    // --- State Accessors ---
-    [[nodiscard]] int fd() const noexcept { return m_fileDescriptor; }
-    [[nodiscard]] bool isActive() const noexcept { return m_isActive; }
-    [[nodiscard]] bool isStreaming() const noexcept { return m_isStreaming; }
-    [[nodiscard]] bool closeAfterWrite() const noexcept { return m_closeAfterWrite; }
-    [[nodiscard]] uint32_t sentFrameId() const noexcept { return m_sentFrameId; }
-    [[nodiscard]] bool isOutboxEmpty() const noexcept { return m_outbox.empty(); }
-    [[nodiscard]] size_t outboxSize() const noexcept { return m_outbox.size(); }
-    
-    // Read buffer accessors for zero-copy string_view scanning
-    [[nodiscard]] const char* readData() const noexcept { return m_readBuffer.data(); }
-    [[nodiscard]] size_t readLen() const noexcept { return m_readBufferLen; }
+    /** @brief Get the file descriptor for the client connection.
+     *  @return The file descriptor.
+     */
+    [[nodiscard]] int fd() const noexcept { 
+        return m_fileDescriptor; 
+    }
 
-    // --- Mutators ---
-    void setStreaming(bool streaming) noexcept { m_isStreaming = streaming; }
-    void setCloseAfterWrite(bool close) noexcept { m_closeAfterWrite = close; }
-    void setSentFrameId(uint32_t frameId) noexcept { m_sentFrameId = frameId; }
-    void resetReadBuffer() noexcept { m_readBufferLen = 0; }
+    /** @brief Check if the client connection is active.
+     *  @return True if active, false otherwise.
+     */
+    [[nodiscard]] bool isActive() const noexcept { 
+        return m_isActive; 
+    }
+
+    /** @brief Check if the client connection is streaming.
+     *  @return True if streaming, false otherwise.
+     */
+    [[nodiscard]] bool isStreaming() const noexcept { 
+        return m_isStreaming; 
+    }
+
+    /** @brief Check if the client connection should close after writing.
+     *  @return True if it should close, false otherwise.
+     */
+    [[nodiscard]] bool closeAfterWrite() const noexcept { 
+        return m_closeAfterWrite; 
+    }
+
+    /** @brief Get the ID of the last sent frame.
+     *  @return The frame ID.
+     */
+    [[nodiscard]] uint32_t sentFrameId() const noexcept { 
+        return m_sentFrameId; 
+    }
+
+    /** @brief Check if the output box is empty.
+     *  @return True if empty, false otherwise.
+     */
+    [[nodiscard]] bool isOutboxEmpty() const noexcept { 
+        return m_outbox.empty(); 
+    }
+
+    /** @brief Get the size of the output box.
+     *  @return The size of the output box.
+     */
+    [[nodiscard]] size_t outboxSize() const noexcept { 
+        return m_outbox.size(); 
+    }
+
+    /** @brief Get a pointer to the read buffer.
+     *  @return A pointer to the read buffer.
+     */
+    [[nodiscard]] const char* readData() const noexcept { 
+        return m_readBuffer.data(); 
+    }
+
+    /** @brief Get the length of the data in the read buffer.
+     *  @return The length of the data in the read buffer.
+     */
+    [[nodiscard]] size_t readLen() const noexcept { 
+        return m_readBufferLen; 
+    }
+
+    /** @brief Set the streaming status of the client connection.
+     *  @param streaming The streaming status.
+     */
+    void setStreaming(bool streaming) noexcept { 
+        m_isStreaming = streaming; 
+    }
+
+    /** @brief Set the close-after-write status of the client connection.
+     *  @param close The close-after-write status.
+     */
+    void setCloseAfterWrite(bool close) noexcept { 
+        m_closeAfterWrite = close; 
+    }
+
+    /** @brief Set the ID of the last sent frame.
+     *  @param frameId The frame ID.
+     */
+    void setSentFrameId(uint32_t frameId) noexcept { 
+        m_sentFrameId = frameId; 
+    }
+
+    /** @brief Reset the read buffer.
+     *  @return True if successful, false otherwise.
+     */
+    void resetReadBuffer() noexcept { 
+        m_readBufferLen = 0; 
+    }
 
     /** 
      * @brief Reset the client object state for a new incoming connection.
@@ -67,7 +161,7 @@ public:
         m_sentFrameId = 0;
         m_isStreaming = false;
         m_closeAfterWrite = false;
-        m_outbox.clear(); // Shrinks size to 0, preserves pre-allocated capacity
+        m_outbox.clear();
     }
 
     /**
@@ -100,7 +194,7 @@ public:
 
         if (m_outboxOffset == m_outbox.size()) {
             m_outboxOffset = 0;
-            m_outbox.clear(); // Size goes to 0, capacity remains fully intact
+            m_outbox.clear();
 
             if (m_closeAfterWrite) {
                 evict();
@@ -116,7 +210,7 @@ public:
      */
     bool appendToReadBuffer(const char* data, size_t size) noexcept {
         if (m_readBufferLen + size > m_readBuffer.size()) {
-            return false; // Overflow safety trigger
+            return false;
         }
         std::memcpy(m_readBuffer.data() + m_readBufferLen, data, size);
         m_readBufferLen += size;
@@ -127,12 +221,12 @@ public:
     * @brief Automatically generates a content-length header, structures the HTTP frame, and queues the payload.
     * @param headerPrefix The HTTP header string leading up to the content-length (e.g., HTTP_OK_HTML_HDR).
     * @param payload The raw trailing content payload to transmit.
-    * @param headerSuffix The trailing headers block (defaults to HTTP_HDR_END).
+    * @param headerSuffix The trailing headers block (e.e.g HTTP_HDR_END).
     */
     template <typename T>
     void queueResponse(std::string_view headerPrefix,
                        const T& payload, 
-                       std::string_view headerSuffix = ServerConstants::HTTP_HDR_END) {
+                       std::string_view headerSuffix) {
         queueData(headerPrefix);
 
         char headerStackBuf[ServerConstants::STACK_BUF_SIZE]; 
@@ -170,6 +264,10 @@ public:
         );
     }
 
+    /** @brief Queue data for transmission.
+     *  @param data Pointer to the data to queue.
+     *  @param size Size of the data to queue.
+     */
     void queueData(const uint8_t* data, size_t size) {
         if (!m_isActive || data == nullptr || size == 0) {
             return; 
@@ -204,15 +302,25 @@ public:
         m_outbox.insert(m_outbox.end(), data, data + size);
     }
 
+    /** @brief Queue a string view for transmission.
+     *  @param data The string view to queue.
+     */
     void queueData(std::string_view data) {
         queueData(reinterpret_cast<const uint8_t*>(data.data()), data.size());
     }
 
+    /** @brief Queue a container of data for transmission.
+     *  @param container The container to queue.
+     */
     template <typename T>
     void queueData(const T& container) {
         queueData(reinterpret_cast<const uint8_t*>(container.data()), container.size());
     }
 
+    /** @brief Queue data for transmission.
+     *  @param bufStart Pointer to the start of the buffer.
+     *  @param result The result of the conversion.
+     */
     void queueData(const char* bufStart, const std::to_chars_result& result) {
         if (result.ec == std::errc{}) [[likely]] {
             queueData(std::string_view(bufStart, result.ptr - bufStart));
@@ -220,15 +328,39 @@ public:
     }
 
 private:
+    /** @brief The file descriptor for the client connection.
+     */
     int m_fileDescriptor = -1;
+
+    /** @brief Indicates if the connection is active.
+     */
     bool m_isActive = false;
+
+    /** @brief Indicates if the connection is in streaming mode.
+     */
     bool m_isStreaming = false;
+
+    /** @brief Indicates if the connection should be closed after writing.
+     */
     bool m_closeAfterWrite = false;
     
+    /** @brief The buffer for reading incoming data.
+     */
     std::vector<char> m_readBuffer;
+
+    /** @brief The length of the data in the read buffer.
+     */
     size_t m_readBufferLen = 0;
     
+    /** @brief The buffer for outgoing data.
+     */
     std::vector<uint8_t> m_outbox;
+
+    /** @brief The offset of the data in the outbox.
+     */
     size_t m_outboxOffset = 0;
+
+    /** @brief The ID of the last sent frame.
+     */
     uint32_t m_sentFrameId = 0;
 };
