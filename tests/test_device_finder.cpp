@@ -1,14 +1,8 @@
 #include <gtest/gtest.h>
-#include <chrono>
-#include <cstdint>
-#include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 #include "device_finder.hpp"
-#include "shared_frame_pipeline.hpp"
-#include "hardware_button_manager.hpp"
-
+#include "device_info.hpp"
 
 class DeviceFinderTest : public ::testing::Test {
 private:

@@ -4,8 +4,11 @@
 #include <cstdint>
 #include <thread>
 #include <vector>
-#include "App.h"
-#include "shared_frame_pipeline.hpp"
+
+class SharedFramePipeline;
+namespace uWS { template <bool SSL> struct HttpResponse; }
+struct us_listen_socket_t;
+struct us_timer_t;
 
 /**
  * @brief The server that streams the USB camera video to your web browser or video player.

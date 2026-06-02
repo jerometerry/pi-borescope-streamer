@@ -1,5 +1,6 @@
 #include <libusb.h>
 #include <algorithm>
+#include <cstddef>
 #include <format>
 #include <span>
 #include <string>

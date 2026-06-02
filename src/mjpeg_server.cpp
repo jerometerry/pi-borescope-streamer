@@ -1,12 +1,21 @@
+#include <App.h>
+#include <HttpResponse.h>
+#include <Loop.h>
+#include <libusockets.h>
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
 #include <iostream>
 #include <future>
+#include <memory>
+#include <string>
+#include <string_view>
 #include "device_finder.hpp"
 #include "http_headers.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
 #include "server_constants.hpp"
+#include "shared_frame_pipeline.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, SharedFramePipeline& pipeline)
     : port(port), running(running), pipeline(pipeline) {}
