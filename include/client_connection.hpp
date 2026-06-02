@@ -8,6 +8,7 @@
 #include <vector>
 #include <string_view>
 #include <charconv>
+#include "http_headers.hpp"
 #include "server_constants.hpp"
 
 /**
@@ -313,9 +314,9 @@ public:
     template <typename T>
     void queueHttpOkResponse(const T& payload) {
         queueResponse(
-            ServerConstants::HTTP_OK_HTML_HDR, 
+            HttpHeaders::HTTP_OK_HTML_HDR, 
             payload, 
-            ServerConstants::HTTP_HDR_END);
+            HttpHeaders::HTTP_HDR_END);
     }
 
     /**
@@ -325,9 +326,9 @@ public:
     template <typename T>
     void queueJpegOkResponse(const T& payload) {
         queueResponse(
-            ServerConstants::HTTP_OK_JPEG_HDR,
+            HttpHeaders::HTTP_OK_JPEG_HDR,
             payload, 
-            ServerConstants::HTTP_HDR_END
+            HttpHeaders::HTTP_HDR_END
         );
     }
 

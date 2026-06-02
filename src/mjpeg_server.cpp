@@ -11,9 +11,15 @@
 #include <csignal>
 #include <iostream>
 #include "client_connection.hpp"
+#include "device_finder.hpp"
+#include "http_headers.hpp"
+#include "http_routes.hpp"
 #include "index_html.hpp"
-#include "shared_frame_pipeline.hpp"
 #include "mjpeg_server.hpp"
+#include "server_constants.hpp"
+#include "shared_frame_pipeline.hpp"
+#include "socket_errors.hpp"
+
 
 MjpegServer::MjpegServer(const int port,
                      const std::atomic<bool>& running,
@@ -61,7 +67,7 @@ bool MjpegServer::initialize() {
 
     listenFileDescriptor = socket(AF_INET, SOCK_STREAM, 0);
     if (listenFileDescriptor == -1) {
-        std::cerr << ERR_SOCKET;
+        std::cerr << SocketErrors::ERR_SOCKET;
         return false;
     }
 
@@ -78,21 +84,21 @@ bool MjpegServer::initialize() {
     address.sin_port = htons(port);
 
     if (bind(listenFileDescriptor, reinterpret_cast<struct sockaddr*>(&address), sizeof(address)) < 0) {
-        std::cerr << "Error binding to port: " << port << '\n';
+        std::cerr << std::format(SocketErrors::ERR_BIND, port);
         close(listenFileDescriptor);
         listenFileDescriptor = -1;
         return false;
     }
 
     if (listen(listenFileDescriptor, 10) < 0) {
-        std::cerr << ERR_LISTEN;
+        std::cerr << SocketErrors::ERR_LISTEN;
         close(listenFileDescriptor);
         listenFileDescriptor = -1;
         return false;
     }
 
     if (!setNonBlocking(listenFileDescriptor)) {
-        std::cerr << ERR_NONBLOCK;
+        std::cerr << SocketErrors::ERR_NONBLOCK;
         close(listenFileDescriptor);
         listenFileDescriptor = -1;
         return false;
@@ -286,17 +292,18 @@ void MjpegServer::handleRead(int fileDescriptor) {
     }
 
     std::string_view incoming(client.readData(), client.readLen());
-    if (incoming.find(HEADER_DELIMITER) != std::string_view::npos) {
+    if (incoming.find(HttpHeaders::HEADER_DELIMITER) != std::string_view::npos) {
         processClientRequest(client);
     }
 }
 
+
+
 void MjpegServer::processClientRequest(ClientConnection& client) const {
     std::string_view request(client.readData(), client.readLen());
 
-     if (size_t webPos = request.find(ROUTE_WEB); webPos != std::string_view::npos) {
-        size_t nextCharIdx = webPos + ROUTE_WEB.size();
-        if (nextCharIdx < request.size() && (request[nextCharIdx] == ' ' || request[nextCharIdx] == '?')) {
+     if (HttpRoutes::requestMatchesRoute(request, HttpRoutes::ROUTE_DASHBOARD)) {
+        if (HttpRoutes::exactMatch(request, HttpRoutes::ROUTE_DASHBOARD)) {
             client.setCloseAfterWrite(true);
             std::string_view htmlPageContent = Resources::index_html;
 
@@ -304,16 +311,31 @@ void MjpegServer::processClientRequest(ClientConnection& client) const {
             client.resetReadBuffer();
             return; 
         }
-    } 
+    }
+
+    if (HttpRoutes::requestMatchesRoute(request, HttpRoutes::ROUTE_CAMERAS)) {
+        if (HttpRoutes::exactMatch(request, HttpRoutes::ROUTE_CAMERAS)) {
+            client.setCloseAfterWrite(true);
+            auto cameras = DeviceFinder::superCameras();
+            std::string jsonPayload = DeviceFinder::toJson(cameras);
+
+            client.queueResponse(
+                HttpHeaders::HTTP_OK_JSON_HDR, 
+                jsonPayload, 
+                HttpHeaders::HTTP_HDR_END
+            );
+            
+            return;
+        }
+    }
     
-    if (size_t snapPos = request.find(ROUTE_SNAPSHOT); snapPos != std::string_view::npos) {
-        size_t nextCharIdx = snapPos + ROUTE_SNAPSHOT.size();
-        if (nextCharIdx < request.size() && (request[nextCharIdx] == ' ' || request[nextCharIdx] == '?')) {
+    if (HttpRoutes::requestMatchesRoute(request, HttpRoutes::ROUTE_SNAPSHOT)) {
+        if (HttpRoutes::exactMatch(request, HttpRoutes::ROUTE_SNAPSHOT)) {
             client.setCloseAfterWrite(true);
             std::shared_ptr<const std::vector<uint8_t>> snapshot = pipeline.getSnapshot();
 
             if (!snapshot || snapshot->empty()) {
-                client.queueData(ServerConstants::HTTP_NOT_FOUND);
+                client.queueData(HttpHeaders::HTTP_NOT_FOUND);
             } else {
                 client.queueJpegOkResponse(*snapshot);
             }
@@ -322,26 +344,25 @@ void MjpegServer::processClientRequest(ClientConnection& client) const {
         }
     }
 
-    if (size_t favPos = request.find(ROUTE_FAVICON); favPos != std::string_view::npos) {
-        size_t nextCharIdx = favPos + ROUTE_FAVICON.size();
-        if (nextCharIdx < request.size() && (request[nextCharIdx] == ' ' || request[nextCharIdx] == '?')) {
+    if (HttpRoutes::requestMatchesRoute(request, HttpRoutes::ROUTE_FAVICON)) {
+        if (HttpRoutes::exactMatch(request, HttpRoutes::ROUTE_FAVICON)) {
             client.setCloseAfterWrite(true);
-            client.queueData(ServerConstants::FAVICON_NOT_FOUND);
+            client.queueData(HttpHeaders::FAVICON_NOT_FOUND);
             client.resetReadBuffer();
             return;
         }
     } 
     
-    if (request.find("GET / HTTP") != std::string_view::npos || 
-        request.find("GET /?") != std::string_view::npos) {
+    if (HttpRoutes::requestMatchesRoute(request, HttpRoutes::ROUTE_STREAM) || 
+        HttpRoutes::requestMatchesRoute(request, HttpRoutes::ROUTE_STREAM_QUERY)) {
         client.setStreaming(true);
         client.setSentFrameId(0);
         client.setCloseAfterWrite(false); 
-        client.queueData(ServerConstants::HTTP_OK_MJPEG);
+        client.queueData(HttpHeaders::HTTP_OK_MJPEG);
     }
     else {
         client.setCloseAfterWrite(true);
-        client.queueData(ServerConstants::HTTP_NOT_FOUND);
+        client.queueData(HttpHeaders::HTTP_NOT_FOUND);
     }
     
     client.resetReadBuffer();
@@ -371,7 +392,7 @@ void MjpegServer::broadcastLatestFrame() {
         }
 
         if (client.isOutboxEmpty() && client.sentFrameId() < currentFrameId) {
-            client.queueData(MJPEG_CHUNK_PREFIX);
+            client.queueData(HttpHeaders::MJPEG_CHUNK_PREFIX);
 
             std::to_chars_result result = std::to_chars(
                 partHeaderBuf, 
@@ -380,7 +401,7 @@ void MjpegServer::broadcastLatestFrame() {
             );
 
             client.queueData(partHeaderBuf, result);
-            client.queueData(MJPEG_CHUNK_SUFFIX);
+            client.queueData(HttpHeaders::MJPEG_CHUNK_SUFFIX);
             client.queueData(*currentFrame);
 
             client.setSentFrameId(currentFrameId);

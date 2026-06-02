@@ -1,5 +1,6 @@
 #include <libusb.h>
 #include <algorithm>
+#include <format>
 #include <span>
 #include <string>
 #include "device_finder.hpp"
@@ -86,4 +87,30 @@ libusb_device_handle* DeviceFinder::open(UsbContext& context, const DeviceInfo& 
         }
     }
     return nullptr;
+}
+
+std::string DeviceFinder::toJson(const std::vector<DeviceInfo>& devices) {
+    std::string json = "[";
+    for (size_t i = 0; i < devices.size(); ++i) {
+        const auto& dev = devices[i];
+        
+        json += std::format(
+            R"({{"bus":{},"address":{},"vendorId":{},"productId":{},"manufacturer":"{}","product":"{}","serialNumber":"{}","isSuperCamera":{}}})",
+            dev.bus, 
+            dev.address, 
+            dev.vendorId, 
+            dev.productId, 
+            dev.manufacturer, 
+            dev.product, 
+            dev.serialNumber,
+            dev.isSuperCamera
+        );
+
+        if (i < devices.size() - 1) {
+            json += ",";
+        }
+    }
+
+    json += "]";    
+    return json;
 }

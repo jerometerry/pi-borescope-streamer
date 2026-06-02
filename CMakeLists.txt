@@ -83,6 +83,7 @@ target_link_libraries(useeplus_protocol PRIVATE project_warnings)
 
 add_library(borescope_core STATIC 
     src/application_context.cpp
+    src/http_routes.cpp
     src/mjpeg_server.cpp
     src/server_time.cpp
     src/shared_frame_pipeline.cpp
@@ -170,8 +171,9 @@ if(BUILD_TESTING)
     target_compile_options(gmock_main PRIVATE -w)
 
     add_executable(run_project_tests 
-        tests/test_mjpeg_frame_decoder.cpp
         tests/test_application_context.cpp
+        tests/test_device_finder.cpp
+        tests/test_mjpeg_frame_decoder.cpp
         tests/test_mjpeg_server.cpp
     )
 

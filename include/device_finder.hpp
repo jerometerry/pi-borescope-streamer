@@ -1,6 +1,7 @@
 #pragma once
 
 #include <libusb.h>
+#include <string>
 #include <vector>
 #include "device_info.hpp"
 
@@ -41,4 +42,10 @@ namespace DeviceFinder {
      * @return A raw handle to the opened device, or a null pointer if it was unplugged before we could open it.
      */
     libusb_device_handle* open(UsbContext& context, const DeviceInfo& target);
+
+    /**
+    * @brief Scans the USB bus and builds a JSON array of all connected Useeplus cameras.
+    * @return A formatted JSON string ready to be sent over the network.
+    */
+    std::string toJson(const std::vector<DeviceInfo>& devices);
 };
