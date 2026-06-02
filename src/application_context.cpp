@@ -8,7 +8,7 @@
 
 ApplicationContext::ApplicationContext(SharedFramePipeline& pipeline, 
                          HardwareButtonManager& buttonManager, 
-                         WebServer& server,
+                         MjpegServer& server,
                          std::atomic<bool>& running)
     : pipeline_(pipeline), 
       buttonManager_(buttonManager), 

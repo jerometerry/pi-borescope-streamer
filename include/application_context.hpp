@@ -6,7 +6,7 @@
 
 class SharedFramePipeline;
 class HardwareButtonManager;
-class WebServer;
+class MjpegServer;
 struct DeviceInfo;
 
 /** @brief A class representing the application context.
@@ -23,7 +23,7 @@ public:
      */
     ApplicationContext(SharedFramePipeline& pipeline, 
                 HardwareButtonManager& buttonManager, 
-                WebServer& server,
+                MjpegServer& server,
                 std::atomic<bool>& running);
 
     /** @brief Destructs an ApplicationContext instance.
@@ -60,7 +60,7 @@ private:
 
     /** @brief The web server.
      */
-    std::reference_wrapper<WebServer> server_;
+    std::reference_wrapper<MjpegServer> server_;
 
     /** @brief The running flag.
      */

@@ -22,15 +22,15 @@ namespace {
     constexpr int TEST_PORT = 18080; 
 }
 
-class WebServerTest : public ::testing::Test {
+class MjpegServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
     SharedFramePipeline pipeline_;
-    std::unique_ptr<WebServer> server_;
+    std::unique_ptr<MjpegServer> server_;
 
 protected:
     void SetUp() override {
-        server_ = std::make_unique<WebServer>(
+        server_ = std::make_unique<MjpegServer>(
             TEST_PORT, 
             running_, 
             pipeline_
@@ -104,14 +104,14 @@ protected:
     }
 };
 
-TEST_F(WebServerTest, Returns404ForUnknownRoutes) {
+TEST_F(MjpegServerTest, Returns404ForUnknownRoutes) {
     std::string response = fetchFromLocalhost("GET /invalid-route HTTP/1.1\r\n\r\n");
     
     EXPECT_FALSE(response.empty());
     EXPECT_NE(response.find("HTTP/1.1 404 Not Found"), std::string::npos);
 }
 
-TEST_F(WebServerTest, ReturnsFaviconNotFoundWithCacheHeaders) {
+TEST_F(MjpegServerTest, ReturnsFaviconNotFoundWithCacheHeaders) {
     std::string response = fetchFromLocalhost("GET /favicon.ico HTTP/1.1\r\n\r\n");
     
     EXPECT_FALSE(response.empty());
@@ -119,7 +119,7 @@ TEST_F(WebServerTest, ReturnsFaviconNotFoundWithCacheHeaders) {
     EXPECT_NE(response.find("max-age=31536000"), std::string::npos); 
 }
 
-TEST_F(WebServerTest, ServesSnapshotJpegData) {
+TEST_F(MjpegServerTest, ServesSnapshotJpegData) {
     std::vector<uint8_t> mockJpeg = {0xFF, 0xD8, 0x01, 0x02, 0x03, 0xFF, 0xD9};
     injectMockSnapshot(mockJpeg);
 
@@ -132,14 +132,14 @@ TEST_F(WebServerTest, ServesSnapshotJpegData) {
     EXPECT_NE(response.find(payloadString), std::string::npos) << "Binary JPEG payload was corrupted or missing.";
 }
 
-TEST_F(WebServerTest, ServesWebDashboard) {
+TEST_F(MjpegServerTest, ServesWebDashboard) {
     std::string response = fetchFromLocalhost("GET /web HTTP/1.1\r\n\r\n");
 
     EXPECT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos);
     EXPECT_NE(response.find("Content-Type: text/html"), std::string::npos);
 }
 
-TEST_F(WebServerTest, ServesContinuousMjpegStream) {
+TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     ASSERT_GE(sock, 0);
 

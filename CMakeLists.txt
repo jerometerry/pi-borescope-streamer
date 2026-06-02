@@ -83,7 +83,7 @@ target_link_libraries(useeplus_protocol PRIVATE project_warnings)
 
 add_library(borescope_core STATIC 
     src/application_context.cpp
-    src/web_server.cpp
+    src/mjpeg_server.cpp
     src/server_time.cpp
     src/shared_frame_pipeline.cpp
     src/hardware_button_manager.cpp
@@ -172,7 +172,7 @@ if(BUILD_TESTING)
     add_executable(run_project_tests 
         tests/test_usb_frame_decoder.cpp
         tests/test_application_context.cpp
-        tests/test_web_server.cpp
+        tests/test_mjpeg_server.cpp
     )
 
     target_include_directories(run_project_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")

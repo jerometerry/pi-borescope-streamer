@@ -103,7 +103,7 @@ int main(int argc, const char* argv[]) {
         SharedFramePipeline pipeline;
         HardwareButtonManager buttonManager(serverTime);
 
-        WebServer server(port, globalRunning, pipeline);
+        MjpegServer server(port, globalRunning, pipeline);
         if (!server.initialize()) {
             std::cerr << "[Fatal Exception] Failed to initialize web server socket bindings.\n";
             return EXIT_FAILURE;

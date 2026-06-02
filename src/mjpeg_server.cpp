@@ -15,7 +15,7 @@
 #include "shared_frame_pipeline.hpp"
 #include "web_server.hpp"
 
-WebServer::WebServer(const int port,
+MjpegServer::MjpegServer(const int port,
                      const std::atomic<bool>& running,
                      SharedFramePipeline& pipeline)
     : clients(std::make_unique<std::array<ClientConnection, ServerConstants::MAX_CLIENTS>>()),
@@ -24,7 +24,7 @@ WebServer::WebServer(const int port,
       pipeline(pipeline) {
 }
 
-WebServer::~WebServer() {
+MjpegServer::~MjpegServer() {
     if (listenFileDescriptor != -1) {
         close(listenFileDescriptor);
         listenFileDescriptor = -1;
@@ -52,7 +52,7 @@ WebServer::~WebServer() {
     }
 }
 
-bool WebServer::initialize() {
+bool MjpegServer::initialize() {
     struct sigaction signalAction{};
     signalAction.sa_handler = SIG_IGN;
     sigemptyset(&signalAction.sa_mask);
@@ -110,17 +110,17 @@ bool WebServer::initialize() {
     return true;
 }
 
-void WebServer::start() {
+void MjpegServer::start() {
     if (workerThread.joinable()) {
-        std::cerr << "[Network Core Warning] WebServer::start() called on an already active engine instance.\n";
+        std::cerr << "[Network Core Warning] MjpegServer::start() called on an already active engine instance.\n";
         return; 
     }
 
     std::cout << "[Network Core] Launching asynchronous engine worker thread...\n";
-    workerThread = std::thread(&WebServer::eventLoop, this);
+    workerThread = std::thread(&MjpegServer::eventLoop, this);
 }
 
-void WebServer::eventLoop() {
+void MjpegServer::eventLoop() {
     while (running) {
         broadcastLatestFrame();
 
@@ -168,7 +168,7 @@ void WebServer::eventLoop() {
     }
 }
 
-bool WebServer::setNonBlocking(int fileDescriptor) {
+bool MjpegServer::setNonBlocking(int fileDescriptor) {
     if (fileDescriptor < 0) {
         return false;
     }
@@ -189,7 +189,7 @@ bool WebServer::setNonBlocking(int fileDescriptor) {
     return true;
 }
 
-void WebServer::handleAccept() {
+void MjpegServer::handleAccept() {
     while (true) {
         sockaddr_in clientAddr{};
         socklen_t clientLen = sizeof(clientAddr);
@@ -240,7 +240,7 @@ void WebServer::handleAccept() {
     }
 }
 
-void WebServer::handleRead(int fileDescriptor) {
+void MjpegServer::handleRead(int fileDescriptor) {
     std::array<char, ClientConnection::READ_BUFFER_SIZE> temporaryBuffer{};
     ssize_t bytesRead = 0;
 
@@ -291,7 +291,7 @@ void WebServer::handleRead(int fileDescriptor) {
     }
 }
 
-void WebServer::processClientRequest(ClientConnection& client) const {
+void MjpegServer::processClientRequest(ClientConnection& client) const {
     std::string_view request(client.readData(), client.readLen());
 
      if (size_t webPos = request.find(ROUTE_WEB); webPos != std::string_view::npos) {
@@ -347,7 +347,7 @@ void WebServer::processClientRequest(ClientConnection& client) const {
     client.resetReadBuffer();
 }
 
-void WebServer::broadcastLatestFrame() {
+void MjpegServer::broadcastLatestFrame() {
     uint32_t globalFrameId = 0;
     std::shared_ptr<const std::vector<uint8_t>> currentFrame = pipeline.getCurrentFrame(globalFrameId);
 
@@ -388,7 +388,7 @@ void WebServer::broadcastLatestFrame() {
     }
 }
 
-void WebServer::handleWrite(int fileDescriptor) {
+void MjpegServer::handleWrite(int fileDescriptor) {
     bool shouldDisconnectSocket = false;
     ClientConnection* clientToDisconnect = nullptr;
 
@@ -426,7 +426,7 @@ void WebServer::handleWrite(int fileDescriptor) {
 }
 
 
-void WebServer::closeConnection(int fileDescriptor) {
+void MjpegServer::closeConnection(int fileDescriptor) {
     {
         std::scoped_lock<std::mutex> lock(clientsMutex);
         
