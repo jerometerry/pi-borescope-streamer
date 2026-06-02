@@ -95,8 +95,8 @@ Run the binary out of its target profile directory. You can optionally specify a
 
 Once the server is running and the camera is plugged in, you can access the streams locally or across your network:
 
-* **Interactive Web Dashboard:** `http://<raspberry-pi-ip>:8080/web`
-* **Raw VLC MJPEG Stream:** `http://<raspberry-pi-ip>:8080/`
+* **Interactive Web Dashboard:** `http://<raspberry-pi-ip>:8080`
+* **Raw VLC MJPEG Stream:** `http://<raspberry-pi-ip>:8080/stream`
 * **Latest Snapshot (Triggered by Hardware Button):** `http://<raspberry-pi-ip>:8080/snapshot`
 
 ## 🐳 Docker Build
