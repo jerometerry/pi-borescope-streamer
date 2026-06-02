@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(FetchContent)
+
+find_package(Threads REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(OpenSSL REQUIRED)
+
 set(HTML_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/index.html")
 set(GENERATED_HPP "${CMAKE_CURRENT_BINARY_DIR}/generated/index_html.hpp")
 
@@ -69,19 +75,49 @@ if(NOT APPLE)
     endif()
 endif()
 
-add_library(useeplus_protocol STATIC 
+FetchContent_Declare(
+    uSockets
+    GIT_REPOSITORY https://github.com/uNetworking/uSockets.git
+    GIT_TAG v0.8.8
+)
+FetchContent_MakeAvailable(uSockets)
+
+file(GLOB USOCKETS_SOURCES 
+    "${usockets_SOURCE_DIR}/src/*.c" 
+    "${usockets_SOURCE_DIR}/src/eventing/*.c"
+)
+
+add_library(usockets STATIC ${USOCKETS_SOURCES})
+target_include_directories(usockets PUBLIC "${usockets_SOURCE_DIR}/src")
+target_link_libraries(usockets PUBLIC OpenSSL::SSL OpenSSL::Crypto ZLIB::ZLIB Threads::Threads)
+
+if(APPLE)
+    target_compile_definitions(usockets PRIVATE WITH_KQUEUE=1)
+elseif(UNIX AND NOT APPLE)
+    target_compile_definitions(usockets PRIVATE WITH_EPOLL=1)
+endif()
+
+target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
+
+add_library(uNetworking INTERFACE)
+target_link_libraries(uNetworking INTERFACE uwebsockets_headers usockets)
+
+FetchContent_Declare(
+    uWebSockets
+    GIT_REPOSITORY https://github.com/uNetworking/uWebSockets.git
+    GIT_TAG v20.67.0
+)
+FetchContent_MakeAvailable(uWebSockets)
+
+add_library(uwebsockets_headers INTERFACE)
+target_include_directories(uwebsockets_headers INTERFACE "${uwebsockets_SOURCE_DIR}/src")
+target_link_libraries(uwebsockets_headers INTERFACE ZLIB::ZLIB)
+
+add_library(borescope_core STATIC 
     src/usb_context.cpp
     src/device_finder.cpp
     src/usb_camera.cpp 
     src/mjpeg_frame_decoder.cpp
-)
-add_library(Borescope::Protocol ALIAS useeplus_protocol)
-
-target_include_directories(useeplus_protocol PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
-target_link_libraries(useeplus_protocol PUBLIC PkgConfig::LIBUSB)
-target_link_libraries(useeplus_protocol PRIVATE project_warnings)
-
-add_library(borescope_core STATIC 
     src/application_context.cpp
     src/http_routes.cpp
     src/mjpeg_server.cpp
@@ -93,9 +129,14 @@ add_library(borescope_core STATIC
 )
 add_library(Borescope::Core ALIAS borescope_core)
 
-target_include_directories(borescope_core PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-target_link_libraries(borescope_core PUBLIC Borescope::Protocol)
+target_include_directories(borescope_core 
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
+)
+
+target_link_libraries(borescope_core PUBLIC PkgConfig::LIBUSB)
 target_link_libraries(borescope_core PRIVATE project_warnings)
+target_link_libraries(borescope_core PUBLIC usockets)
 
 add_executable(pi-borescope-streamer 
     src/server.cpp
@@ -181,7 +222,7 @@ if(BUILD_TESTING)
 
     target_link_libraries(run_project_tests 
         PRIVATE 
-            borescope_core 
+            borescope_core
             project_warnings 
             GTest::gtest_main
             GTest::gmock
@@ -193,9 +234,6 @@ endif()
 
 option(ENABLE_COVERAGE "Enable code coverage tracking" OFF)
 if(ENABLE_COVERAGE)
-    target_compile_options(useeplus_protocol PUBLIC --coverage)
-    target_link_options(useeplus_protocol PUBLIC --coverage)
-    
     target_compile_options(borescope_core PUBLIC --coverage)
     target_link_options(borescope_core PUBLIC --coverage)
 endif()
