@@ -15,8 +15,8 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include "mjpeg_server.hpp"
 #include "shared_frame_pipeline.hpp"
-#include "web_server.hpp"
 
 namespace {
     constexpr int TEST_PORT = 18080; 

@@ -1,3 +1,15 @@
+/**
+ * @file server.cpp
+ * @brief The main entry point for the live video streaming application.
+ * @details This is the primary program you run to actually use your camera. 
+ * When executed, it automatically finds the camera on the USB bus, launches the 
+ * video decoding engine, spins up the network broadcaster, and starts serving 
+ * the live video feed to any web browser that connects to the Raspberry Pi's IP address.
+ * 
+ * By default, it broadcasts on port 8080, but you can override this by passing 
+ * a different port number when you launch the program from the terminal.
+ */
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -14,7 +26,7 @@
 #include "wall_clock.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "hardware_button_manager.hpp"
-#include "web_server.hpp"
+#include "mjpeg_server.hpp"
 
 namespace {
     constexpr int DEFAULT_PORT = 8080;

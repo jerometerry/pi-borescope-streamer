@@ -13,7 +13,7 @@
 #include "client_connection.hpp"
 #include "index_html.hpp"
 #include "shared_frame_pipeline.hpp"
-#include "web_server.hpp"
+#include "mjpeg_server.hpp"
 
 MjpegServer::MjpegServer(const int port,
                      const std::atomic<bool>& running,
@@ -348,14 +348,14 @@ void MjpegServer::processClientRequest(ClientConnection& client) const {
 }
 
 void MjpegServer::broadcastLatestFrame() {
-    uint32_t globalFrameId = 0;
-    std::shared_ptr<const std::vector<uint8_t>> currentFrame = pipeline.getCurrentFrame(globalFrameId);
+    uint32_t currentFrameId = 0;
+    std::shared_ptr<const std::vector<uint8_t>> currentFrame = pipeline.getCurrentFrame(currentFrameId);
 
-    if (!currentFrame || currentFrame->empty() || globalFrameId == localLatestFrameId) {
+    if (!currentFrame || currentFrame->empty() || currentFrameId == lastBroadcastedFrameId) {
         return;
     }
 
-    localLatestFrameId = globalFrameId;
+    lastBroadcastedFrameId = currentFrameId;
     std::scoped_lock<std::mutex> lock(clientsMutex);
     char partHeaderBuf[ServerConstants::STACK_BUF_SIZE];
 
@@ -370,7 +370,7 @@ void MjpegServer::broadcastLatestFrame() {
             continue;
         }
 
-        if (client.isOutboxEmpty() && client.sentFrameId() < globalFrameId) {
+        if (client.isOutboxEmpty() && client.sentFrameId() < currentFrameId) {
             client.queueData(MJPEG_CHUNK_PREFIX);
 
             std::to_chars_result result = std::to_chars(
@@ -383,7 +383,7 @@ void MjpegServer::broadcastLatestFrame() {
             client.queueData(MJPEG_CHUNK_SUFFIX);
             client.queueData(*currentFrame);
 
-            client.setSentFrameId(globalFrameId);
+            client.setSentFrameId(currentFrameId);
         }
     }
 }

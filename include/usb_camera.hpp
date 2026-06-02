@@ -66,6 +66,12 @@ public:
      */
     static libusb_device_handle *open(libusb_context *context, const DeviceInfo& target);
 
+    /** 
+     * @brief List all available USB cameras
+     * @return A vector of available USB camera devices
+     */
+    static std::vector<DeviceInfo> listCameras();
+
     /**
      * @brief Scan the computer for any plugged-in borescopes.
      * @details Useful for detecting if the camera is actually plugged in and recognized 

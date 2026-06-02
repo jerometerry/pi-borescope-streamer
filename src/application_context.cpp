@@ -3,8 +3,8 @@
 #include <iostream>
 #include <thread>
 #include "application_context.hpp"
+#include "mjpeg_server.hpp"
 #include "usb_capture_engine.hpp"
-#include "web_server.hpp"
 
 ApplicationContext::ApplicationContext(SharedFramePipeline& pipeline, 
                          HardwareButtonManager& buttonManager, 

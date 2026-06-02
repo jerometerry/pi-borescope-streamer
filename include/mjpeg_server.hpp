@@ -82,6 +82,92 @@ private:
      */
     static constexpr std::string_view MJPEG_CHUNK_PREFIX = 
         "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: ";
+    
+    /** 
+     * @brief The suffix for MJPEG chunks
+     */
+    static constexpr std::string_view MJPEG_CHUNK_SUFFIX = "\r\n\r\n";
+
+    /** 
+     * @brief The delimiter for HTTP headers
+     */
+    static constexpr std::string_view HEADER_DELIMITER = "\r\n\r\n";
+
+    /** 
+     * @brief The route for the web page
+     */
+    static constexpr std::string_view ROUTE_WEB = "GET /web";
+
+    /** 
+     * @brief The route for the snapshot endpoint
+     */
+    static constexpr std::string_view ROUTE_SNAPSHOT = "GET /snapshot";
+
+    /** 
+     * @brief The route for the favicon endpoint
+     */
+    static constexpr std::string_view ROUTE_FAVICON =  "GET /favicon.ico";
+
+    /** 
+     * @brief The format string for HTTP 200 OK responses with HTML content
+     */
+    static constexpr std::string_view HTTP_OK_HTML_FMT = 
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n";
+
+    /** 
+     * @brief The format string for HTTP 200 OK responses with JPEG content
+     */
+    static constexpr std::string_view HTTP_OK_JPEG_FMT = 
+        "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n";
+
+    /** 
+     * @brief The format string for HTTP 200 OK responses with MJPEG content
+     */
+    static constexpr std::string_view HTTP_OK_MJPEG = 
+        "HTTP/1.1 200 OK\r\nConnection: close\r\nCache-Control: no-cache, private\r\nPragma: no-cache\r\nContent-Type: multipart/x-mixed-replace; boundary=mjpegstream\r\n\r\n";
+
+    /** 
+     * @brief The format string for HTTP 404 Not Found responses
+     */
+    static constexpr std::string_view HTTP_NOT_FOUND = 
+        "HTTP/1.1 404 Not Found\r\nCache-Control: no-cache\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
+    /** 
+     * @brief The format string for favicon not found responses
+     */
+    static constexpr std::string_view FAVICON_NOT_FOUND = 
+        "HTTP/1.1 404 Not Found\r\nCache-Control: public, max-age=31536000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
+    /** 
+     * @brief The format string for MJPEG frame headers
+     */
+    static constexpr std::string_view MJPEG_FRAME_FMT = 
+        "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\n\r\n";
+
+    /** 
+     * @brief The format string for MJPEG frame footers
+     */
+    static constexpr std::string_view MJPEG_FOOTER = "\r\n";
+
+    /** 
+     * @brief The error message for socket allocation failures
+     */
+    static constexpr std::string_view ERR_SOCKET = "[Web Server Error] Failed to allocate base server socket.\n";
+
+    /** 
+     * @brief The error message for binding failures
+     */
+    static constexpr std::string_view ERR_BIND = "[Web Server Error] Binding network interface to port {} failed.\n";
+
+    /** 
+     * @brief The error message for listen failures
+     */
+    static constexpr std::string_view ERR_LISTEN = "[Web Server Error] Backlog listener setup failed.\n";
+
+    /** 
+     * @brief The error message for non-blocking failures
+     */
+    static constexpr std::string_view ERR_NONBLOCK = "[Web Server Error] Failed to set non-blocking on listener.\n";
 
     /**
      * @brief The main background loop that keeps the video flowing.
@@ -194,5 +280,5 @@ private:
     /**
      * @brief Keeps track of the last picture sent, so we don't send duplicates.
      */
-    uint64_t latestFrameIdBroadcasted_ = 0;
+    uint64_t lastBroadcastedFrameId{0};
 };

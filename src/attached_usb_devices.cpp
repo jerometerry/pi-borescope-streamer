@@ -1,3 +1,12 @@
+/**
+ * @file attached_usb_devices.cpp
+ * @brief A diagnostic tool to scan the Raspberry Pi's USB ports for compatible cameras.
+ * @details Before a user tries to start the main streaming server, they can run this 
+ * simple utility to verify that their camera is physically plugged in, turned on, 
+ * and recognized by the operating system. It prints out a clean list of every 
+ * compatible endoscope it finds, including the hardware Bus and Address numbers.
+ */
+
 #include <csignal>
 #include <cstdlib>
 #include <exception>

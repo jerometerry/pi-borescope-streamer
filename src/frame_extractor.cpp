@@ -1,3 +1,15 @@
+/**
+ * @file frame_extractor.cpp
+ * @brief An offline tool to pull clean JPEG pictures out of raw camera dumps.
+ * @details This is the companion tool to `binary_stream_capture`. If you record a raw 
+ * `.bin` or `.mjpeg` file from the camera, you can feed it into this tool. It will 
+ * scan the raw byte data, find the hidden camera headers, strip them away, stitch the 
+ * video chunks back together, and save perfect `.jpg` image files to your hard drive. 
+ * 
+ * It is essentially the `MjpegFrameDecoder` class pulled out of the live server and 
+ * turned into a standalone command-line tool.
+ */
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
