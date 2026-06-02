@@ -176,7 +176,7 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
 
         const UsbPacketHeader* header = reinterpret_cast<const UsbPacketHeader*>(&fileData[i]);
 
-        if (header->getHeader() != MAGIC_NUMBER || (header->cameraId != 0x0B && header->cameraId != 0x07)) {
+        if (header->getHeader() != MAGIC_NUMBER || (header->getCameraId() != 0x0B && header->getCameraId() != 0x07)) {
             i++;
             continue;
         }
@@ -210,7 +210,7 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
 
         const CameraPacketHeader* meta = reinterpret_cast<const CameraPacketHeader*>(&fileData[i + sizeof(UsbPacketHeader)]);
 
-        if (lastFrameId != -1 && meta->frameId != lastFrameId) {
+        if (lastFrameId != -1 && meta->getFrameId() != lastFrameId) {
             if (!currentFrame.empty()) {
 
                 size_t soiOffset = std::string::npos;
@@ -245,9 +245,9 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
                 currentFrame.clear();
             }
         }
-        lastFrameId = meta->frameId;
+        lastFrameId = meta->getFrameId();
 
-        if (!meta->hasGravitySensor() && meta->getOtherFlags() == 0 && meta->cameraNumber < 2) {
+        if (!meta->hasGravitySensor() && meta->getOtherFlags() == 0 && meta->getCameraNumber() < 2) {
             size_t payloadStart = i + TOTAL_HEADER_SIZE;
             size_t payloadSize = chunkTotalSize - TOTAL_HEADER_SIZE;
             

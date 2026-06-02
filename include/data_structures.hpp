@@ -5,19 +5,32 @@
 #include <cstdint>
 
 /**
- * @brief Safely read numbers sent by the camera, regardless of your computer's architecture.
- * @details The physical camera always sends its numbers in "Little-Endian" format (meaning 
- * it sends the least significant bytes first). If you are running this on a standard Raspberry Pi, 
- * your computer already speaks this language, and this function completely disappears when compiled, 
- * costing zero performance. 
+ * @brief Single-byte bypass for wire translation.
+ * @details A single byte (8 bits) has no endianness. This overload ensures that 
+ * asking to translate a single byte safely returns the exact same value without 
+ * invoking the template logic.
+ * @param val The raw byte directly from the USB wire.
+ * @return The exact same byte.
+ */
+constexpr uint8_t wireToHost(uint8_t val) noexcept {
+    return val;
+}
+
+/**
+ * @brief Safely translate multi-byte numbers coming off the USB wire into native CPU numbers.
+ * @details The physical camera always sends its numbers in "Little-Endian" format. 
+ * If you are running this on a standard Raspberry Pi, your computer already speaks 
+ * this language, and this function completely disappears when compiled, costing zero 
+ * performance. 
  * 
- * However, if you compile this on a system that reads numbers backward (Big-Endian), it will 
- * automatically flip the bytes so the camera data isn't misinterpreted as corrupted garbage.
+ * However, if you compile this on a system that reads numbers backward (Big-Endian), 
+ * it will automatically flip the bytes so the hardware data isn't misinterpreted as 
+ * corrupted garbage.
  * @param val The raw number directly from the USB wire.
- * @return The exact same number, safely formatted for your specific CPU.
+ * @return The safely formatted native host number.
  */
 template <std::integral T>
-constexpr T from_le(T val) noexcept {
+constexpr T wireToHost(T val) noexcept {
     if constexpr (std::endian::native == std::endian::big) {
         return std::byteswap(val);
     }
@@ -25,16 +38,27 @@ constexpr T from_le(T val) noexcept {
 }
 
 /**
- * @brief Safely package numbers before sending them back to the camera.
- * @details The exact reverse of `from_le`. Ensures that if we ever need to send a size 
- * or configuration number down the USB cable, the camera receives it in the Little-Endian 
- * format its hardware strictly expects.
- * @param val The native number from our software.
- * @return The number packed into the camera's required byte order.
+ * @brief Single-byte bypass for wire packaging.
+ * @details A single byte has no endianness, so this safely returns the value exactly as-is.
+ * @param val The native byte from our software.
+ * @return The exact same byte.
+ */
+constexpr uint8_t hostToWire(uint8_t val) noexcept {
+    return val;
+}
+
+/**
+ * @brief Safely package multi-byte native CPU numbers before sending them out over the USB wire.
+ * @details Formats numbers into the strict byte order the camera hardware expects.
+ * @param val The native host number from our software.
+ * @return The number formatted for the USB wire.
  */
 template <std::integral T>
-constexpr T to_le(T val) noexcept {
-    return from_le(val);
+constexpr T hostToWire(T val) noexcept {
+    if constexpr (std::endian::native == std::endian::big) {
+        return std::byteswap(val);
+    }
+    return val;
 }
 
 /**
@@ -42,7 +66,7 @@ constexpr T to_le(T val) noexcept {
  * @details In network terms, this is the transport layer. When the camera fires data down 
  * the wire, it places every chunk of video into this exact 5-byte envelope. We read this 
  * outer header first to know exactly how many bytes are inside, ensuring we never read 
- * out of bounds and crash the server.
+ * out of bounds and crash the server. 
  * 
  * Once we verify this envelope is valid and safe to open, we strip it away to reveal 
  * the actual inner payload (which begins with the CameraPacketHeader).
@@ -57,7 +81,7 @@ struct [[gnu::packed]] UsbPacketHeader {
     /**
      * @brief Which physical camera lens this data came from (used if the endoscope has multiple lenses).
      */
-    uint8_t cameraId;
+    uint8_t leCameraId;
 
     /**
      * @brief The raw, un-translated size of the video payload inside this envelope.
@@ -69,7 +93,7 @@ struct [[gnu::packed]] UsbPacketHeader {
      * @return The translated verification code, ready for our software to check.
      */
     constexpr uint16_t getHeader() const noexcept { 
-        return from_le(leHeader); 
+        return wireToHost(leHeader); 
     }
 
     /**
@@ -77,7 +101,23 @@ struct [[gnu::packed]] UsbPacketHeader {
      * @param val The code to package for the camera.
      */
     constexpr void setHeader(uint16_t val) noexcept { 
-        leHeader = to_le(val); 
+        leHeader = hostToWire(val); 
+    }
+
+    /**
+     * @brief Get the ID of the camera lens that generated this chunk.
+     * @return The safe, translated camera ID.
+     */
+    constexpr uint8_t getCameraId() const noexcept { 
+        return wireToHost(leCameraId); 
+    }
+
+    /**
+     * @brief Set the ID of the camera lens generating this chunk.
+     * @param val The camera ID.
+     */
+    constexpr void setCameraId(uint8_t val) noexcept { 
+        leCameraId = hostToWire(val); 
     }
 
     /**
@@ -85,7 +125,7 @@ struct [[gnu::packed]] UsbPacketHeader {
      * @return The safe, translated length of the inner payload.
      */
     constexpr uint16_t getLength() const noexcept { 
-        return from_le(leLength); 
+        return wireToHost(leLength); 
     }
 
     /**
@@ -93,7 +133,7 @@ struct [[gnu::packed]] UsbPacketHeader {
      * @param val The length in bytes.
      */
     constexpr void setLength(uint16_t val) noexcept { 
-        leLength = to_le(val); 
+        leLength = hostToWire(val); 
     }
 };
 
@@ -113,17 +153,17 @@ struct [[gnu::packed]] CameraPacketHeader {
     /**
      * @brief A rolling counter that helps us stitch chunks together into a full picture.
      */
-    uint8_t frameId;
+    uint8_t leFrameId;
 
     /**
      * @brief Identifies which lens is active on dual-lens endoscopes.
      */
-    uint8_t cameraNumber;
+    uint8_t leCameraNumber;
 
     /**
      * @brief A densely packed byte where each bit represents a yes/no switch (like a button press).
      */
-    uint8_t flags;
+    uint8_t leFlags;
 
     /**
      * @brief The raw, un-translated orientation data piggybacked from the camera's gyroscope.
@@ -131,11 +171,59 @@ struct [[gnu::packed]] CameraPacketHeader {
     uint32_t leGravitySensor;
 
     /**
+     * @brief Get the sequence ID of the frame this chunk belongs to.
+     * @return The safe, translated frame ID.
+     */
+    constexpr uint8_t getFrameId() const noexcept { 
+        return wireToHost(leFrameId); 
+    }
+
+    /**
+     * @brief Set the sequence ID for the frame this chunk belongs to.
+     * @param val The frame ID.
+     */
+    constexpr void setFrameId(uint8_t val) noexcept { 
+        leFrameId = hostToWire(val); 
+    }
+
+    /**
+     * @brief Get the internal camera lens number.
+     * @return The safe, translated camera number.
+     */
+    constexpr uint8_t getCameraNumber() const noexcept { 
+        return wireToHost(leCameraNumber); 
+    }
+
+    /**
+     * @brief Set the internal camera lens number.
+     * @param val The camera number.
+     */
+    constexpr void setCameraNumber(uint8_t val) noexcept { 
+        leCameraNumber = hostToWire(val); 
+    }
+
+    /**
+     * @brief Get the raw hardware flags byte.
+     * @return The safe, translated flags byte.
+     */
+    constexpr uint8_t getFlags() const noexcept { 
+        return wireToHost(leFlags); 
+    }
+
+    /**
+     * @brief Set the raw hardware flags byte.
+     * @param val The flags byte to pack.
+     */
+    constexpr void setFlags(uint8_t val) noexcept { 
+        leFlags = hostToWire(val); 
+    }
+
+    /**
      * @brief Get the camera's physical orientation safely.
      * @return The translated gyroscope reading.
      */
     constexpr uint32_t getGravitySensor() const noexcept { 
-        return from_le(leGravitySensor); 
+        return wireToHost(leGravitySensor); 
     }
 
     /**
@@ -143,7 +231,7 @@ struct [[gnu::packed]] CameraPacketHeader {
      * @param val The gyroscope reading to pack.
      */
     constexpr void setGravitySensor(uint32_t val) noexcept { 
-        leGravitySensor = to_le(val); 
+        leGravitySensor = hostToWire(val); 
     }
 
     /**
@@ -151,7 +239,7 @@ struct [[gnu::packed]] CameraPacketHeader {
      * @return True if the hardware supports orientation tracking.
      */
     constexpr bool hasGravitySensor() const noexcept { 
-        return (flags & 0x01) != 0; 
+        return (getFlags() & 0x01) != 0; 
     }
 
     /**
@@ -159,12 +247,13 @@ struct [[gnu::packed]] CameraPacketHeader {
      * @param hasGravitySensor True to turn the flag on, false to turn it off.
      */
     constexpr void setHasGravitySensor(bool hasGravitySensor) noexcept { 
+        uint8_t current = getFlags();
         if (hasGravitySensor) { 
-            flags |= 0x01; 
+            current |= 0x01; 
+        } else { 
+            current &= ~0x01; 
         }
-        else { 
-            flags &= ~0x01; 
-        }
+        setFlags(current);
     }
 
     /**
@@ -172,7 +261,7 @@ struct [[gnu::packed]] CameraPacketHeader {
      * @return True if the button is currently held down.
      */
     constexpr bool isButtonPressed() const noexcept { 
-        return (flags & 0x02) != 0; 
+        return (getFlags() & 0x02) != 0; 
     }
 
     /**
@@ -180,12 +269,13 @@ struct [[gnu::packed]] CameraPacketHeader {
      * @param pressed True to mark the button as pressed.
      */
     constexpr void setButtonPressed(bool pressed) noexcept {
+        uint8_t current = getFlags();
         if (pressed) {
-            flags |= 0x02;
+            current |= 0x02;
+        } else {
+            current &= ~0x02;
         }
-        else {
-            flags &= ~0x02;
-        }
+        setFlags(current);
     }
 
     /**
@@ -193,7 +283,7 @@ struct [[gnu::packed]] CameraPacketHeader {
      * @return A clean byte containing only the reserved hardware flags.
      */
     constexpr uint8_t getOtherFlags() const noexcept { 
-        return (flags >> 2) & 0x3F; 
+        return (getFlags() >> 2) & 0x3F; 
     }
 
     /**
@@ -201,8 +291,10 @@ struct [[gnu::packed]] CameraPacketHeader {
      * @param val The flags to pack into the remaining bits.
      */
     constexpr void setOtherFlags(uint8_t val) noexcept {
-        flags &= 0x03;
-        flags |= ((val & 0x3F) << 2); 
+        uint8_t current = getFlags();
+        current &= 0x03;
+        current |= ((val & 0x3F) << 2); 
+        setFlags(current);
     }
 };
 

@@ -26,7 +26,7 @@ void MjpegFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data)
         std::memcpy(&header, &streamBuffer[i], sizeof(UsbPacketHeader));
 
         if (header.getHeader() != ServerConstants::USB_FRAME_HEADER || 
-           (header.cameraId != 0x0B && header.cameraId != 0x07)) {
+           (header.getCameraId() != 0x0B && header.getCameraId() != 0x07)) {
             i++;
             continue;
         }
@@ -59,7 +59,7 @@ void MjpegFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data)
         CameraPacketHeader meta{};
         std::memcpy(&meta, &streamBuffer[i + sizeof(UsbPacketHeader)], sizeof(CameraPacketHeader));
 
-        if (!frameBuffer.empty() && metadata_.frameId != meta.frameId) {
+        if (!frameBuffer.empty() && metadata_.getFrameId() != meta.getFrameId()) {
             trimAndEmitFrame();
         }
         metadata_ = meta;
@@ -68,7 +68,7 @@ void MjpegFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data)
             buttonHandler();
         }
 
-        if (!meta.hasGravitySensor() && meta.getOtherFlags() == 0 && meta.cameraNumber < 2) {
+        if (!meta.hasGravitySensor() && meta.getOtherFlags() == 0 && meta.getCameraNumber() < 2) {
             size_t payloadStart = i + TOTAL_HEADER_SIZE;
             size_t payloadSize = chunkTotalSize - TOTAL_HEADER_SIZE;
             

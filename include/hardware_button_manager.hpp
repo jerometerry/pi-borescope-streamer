@@ -35,7 +35,8 @@ public:
      * @details This is the only question the rest of the software cares about. It checks 
      * if the button was held down long enough to be a real press (ignoring accidental bumps), 
      * but released quickly enough to be a deliberate "click" (rather than a sustained hold). 
-     * * If it was a valid click, this function returns true and immediately "resets" the 
+     * 
+     * If it was a valid click, this function returns true and immediately "resets" the 
      * trigger so the server doesn't accidentally take multiple pictures from a single press.
      * @return True if a clean, quick click just finished. False otherwise.
      */
