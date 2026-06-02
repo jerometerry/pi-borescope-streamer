@@ -5,7 +5,7 @@
 class HardwareButtonManager;
 class SharedFramePipeline;
 class UsbCamera;
-class UsbFrameDecoder;
+class MjpegFrameDecoder;
 struct DeviceInfo;
 
 /** 
@@ -50,7 +50,7 @@ private:
     /** 
      * @brief The USB frame decoder instance
      */
-    std::unique_ptr<UsbFrameDecoder> decoder_;
+    std::unique_ptr<MjpegFrameDecoder> decoder_;
 
     /** 
      * @brief The shared frame pipeline

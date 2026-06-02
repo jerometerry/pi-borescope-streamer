@@ -157,7 +157,7 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
     int frameCount = 0;
     int lastFrameId = -1;
 
-    const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
+    const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader);
     const uint16_t MAGIC_NUMBER = 0xBBAA; 
 
     while (i + TOTAL_HEADER_SIZE <= fileData.size()) {
@@ -196,7 +196,7 @@ void extractFrames(const std::vector<uint8_t>& fileData) {
             break; 
         }
 
-        const ChunkMetadata* meta = reinterpret_cast<const ChunkMetadata*>(&fileData[i + sizeof(UsbPacketHeader)]);
+        const CameraPacketHeader* meta = reinterpret_cast<const CameraPacketHeader*>(&fileData[i + sizeof(UsbPacketHeader)]);
 
         if (lastFrameId != -1 && meta->frameId != lastFrameId) {
             if (!currentFrame.empty()) {

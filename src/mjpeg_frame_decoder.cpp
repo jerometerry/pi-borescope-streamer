@@ -4,10 +4,10 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "usb_frame_decoder.hpp"
+#include "mjpeg_frame_decoder.hpp"
 #include "server_constants.hpp"
 
-UsbFrameDecoder::UsbFrameDecoder(
+MjpegFrameDecoder::MjpegFrameDecoder(
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler, std::function<void()> buttonHandler) 
     : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {
         frameBuffer.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
@@ -15,11 +15,11 @@ UsbFrameDecoder::UsbFrameDecoder(
         emitBuffer.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 }
 
-void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
+void MjpegFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
     streamBuffer.insert(streamBuffer.end(), data.begin(), data.end());
 
     size_t i = readOffset;
-    const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(ChunkMetadata);
+    const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader);
 
     while (i + TOTAL_HEADER_SIZE <= streamBuffer.size()) {
         UsbPacketHeader header{};
@@ -56,8 +56,8 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
             break;
         }
 
-        ChunkMetadata meta{};
-        std::memcpy(&meta, &streamBuffer[i + sizeof(UsbPacketHeader)], sizeof(ChunkMetadata));
+        CameraPacketHeader meta{};
+        std::memcpy(&meta, &streamBuffer[i + sizeof(UsbPacketHeader)], sizeof(CameraPacketHeader));
 
         if (!frameBuffer.empty() && metadata_.frameId != meta.frameId) {
             trimAndEmitFrame();
@@ -91,7 +91,7 @@ void UsbFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data) {
     }
 }
 
-void UsbFrameDecoder::trimAndEmitFrame() {
+void MjpegFrameDecoder::trimAndEmitFrame() {
     if (frameBuffer.empty()) {
         return;
     }

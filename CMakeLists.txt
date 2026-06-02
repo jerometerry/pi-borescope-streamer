@@ -73,7 +73,7 @@ add_library(useeplus_protocol STATIC
     src/usb_context.cpp
     src/device_finder.cpp
     src/usb_camera.cpp 
-    src/usb_frame_decoder.cpp
+    src/mjpeg_frame_decoder.cpp
 )
 add_library(Borescope::Protocol ALIAS useeplus_protocol)
 
@@ -170,7 +170,7 @@ if(BUILD_TESTING)
     target_compile_options(gmock_main PRIVATE -w)
 
     add_executable(run_project_tests 
-        tests/test_usb_frame_decoder.cpp
+        tests/test_mjpeg_frame_decoder.cpp
         tests/test_application_context.cpp
         tests/test_mjpeg_server.cpp
     )

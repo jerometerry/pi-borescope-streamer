@@ -38,11 +38,14 @@ constexpr T to_le(T val) noexcept {
 }
 
 /**
- * @brief The "shipping label" attached to every piece of data coming from the camera.
- * @details When the camera fires data down the USB cable, it doesn't just send one massive 
- * video file. It slices the video into small chunks and slaps this exact 5-byte header 
- * on the front of each one. We read this header first to know exactly how many bytes of 
- * actual video follow it, ensuring we never read out of bounds and crash the server.
+ * @brief The outer "shipping envelope" that safely transports data across the USB cable.
+ * @details In network terms, this is the transport layer. When the camera fires data down 
+ * the wire, it places every chunk of video into this exact 5-byte envelope. We read this 
+ * outer header first to know exactly how many bytes are inside, ensuring we never read 
+ * out of bounds and crash the server.
+ * 
+ * Once we verify this envelope is valid and safe to open, we strip it away to reveal 
+ * the actual inner payload (which begins with the CameraPacketHeader).
  */
 struct [[gnu::packed]] UsbPacketHeader {
 
@@ -57,7 +60,7 @@ struct [[gnu::packed]] UsbPacketHeader {
     uint8_t cameraId;
 
     /**
-     * @brief The raw, un-translated size of the video data attached to this label.
+     * @brief The raw, un-translated size of the video payload inside this envelope.
      */
     uint16_t leLength;
 
@@ -78,8 +81,8 @@ struct [[gnu::packed]] UsbPacketHeader {
     }
 
     /**
-     * @brief Check exactly how many bytes of video data are attached to this chunk.
-     * @return The safe, translated length of the upcoming data.
+     * @brief Check exactly how many bytes of video data are enclosed in this envelope.
+     * @return The safe, translated length of the inner payload.
      */
     constexpr uint16_t getLength() const noexcept { 
         return from_le(leLength); 
@@ -95,13 +98,17 @@ struct [[gnu::packed]] UsbPacketHeader {
 };
 
 /**
- * @brief The hidden status report embedded inside the video stream.
- * @details The physical camera handle has extra hardware, like a physical snapshot button 
- * and a gravity sensor so the app knows which way is "up". The camera sneaks this status 
- * information into the USB data stream using a tightly packed 7-byte block. This structure 
- * safely unpacks those hidden signals so our software can react when you click the hardware button.
+ * @brief The internal assembly instructions for the actual camera payload.
+ * @details When you strip away the outer USB packet, you are left with the raw camera payload. 
+ * Because a single JPEG picture is too large to fit in one transfer, the camera chops it up. 
+ * This 7-byte header sits at the front of the inner payload, providing the sequence number 
+ * (`frameId`) needed to stitch the picture back together in the correct order.
+ * 
+ * Rather than creating a separate data channel for the physical hardware sensors, the camera's 
+ * engineers cleverly used the remaining bytes in this header to piggyback the gravity sensor and 
+ * button state alongside the video data.
  */
-struct [[gnu::packed]] ChunkMetadata {
+struct [[gnu::packed]] CameraPacketHeader {
 
     /**
      * @brief A rolling counter that helps us stitch chunks together into a full picture.
@@ -119,7 +126,7 @@ struct [[gnu::packed]] ChunkMetadata {
     uint8_t flags;
 
     /**
-     * @brief The raw, un-translated orientation data from the camera's gyroscope.
+     * @brief The raw, un-translated orientation data piggybacked from the camera's gyroscope.
      */
     uint32_t leGravitySensor;
 
@@ -199,4 +206,7 @@ struct [[gnu::packed]] ChunkMetadata {
     }
 };
 
-static_assert(sizeof(ChunkMetadata) == 7, "ChunkMetadata size must be exactly 7 bytes to match the hardware protocol!");
+static_assert(
+    sizeof(CameraPacketHeader) == 7, 
+    "CameraPacketHeader size must be exactly 7 bytes to match the hardware protocol!"
+);

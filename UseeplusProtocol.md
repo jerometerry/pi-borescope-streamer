@@ -72,7 +72,7 @@ struct [[gnu::packed]] UsbPacketHeader {
 };
 ```
 
-Immediately following the 5-byte header, the camera inserts exactly 7 bytes of proprietary `ChunkMetadata` before the actual JPEG pixels begin. 
+Immediately following the 5-byte header, the camera inserts exactly 7 bytes of proprietary `CameraPacketHeader` before the actual JPEG pixels begin. 
 
 Let's look at the 12 bytes preceding the JPEG SOI (`ff d8`) from our hex dump:
 `aa bb 0b ab 03` **`02 00 00 60 33 30 24`** `ff d8...`
@@ -80,7 +80,7 @@ Let's look at the 12 bytes preceding the JPEG SOI (`ff d8`) from our hex dump:
 This 7-byte block (**`02 00 00 60 33 30 24`**) maps directly to our packed business logic struct:
 
 ```cpp
-struct [[gnu::packed]] ChunkMetadata {
+struct [[gnu::packed]] CameraPacketHeader {
     uint8_t frameId;
     uint8_t cameraNumber;
     unsigned char hasGravitySensor:1;
@@ -99,9 +99,9 @@ Using `[[gnu::packed]]` forces the compiler to lay this out in exactly 7 bytes o
 
 A single USB bulk transfer packet does not contain a full image.
 
-* **The Payload Math:** Each video packet declares a payload length of **939 bytes** (`ab 03` in Little-Endian). Subtracting the 7 bytes consumed by the `ChunkMetadata` leaves exactly **932 bytes** of pure JPEG data per packet.
+* **The Payload Math:** Each video packet declares a payload length of **939 bytes** (`ab 03` in Little-Endian). Subtracting the 7 bytes consumed by the `CameraPacketHeader` leaves exactly **932 bytes** of pure JPEG data per packet.
 * **The Frame Size:** At 640x480 resolution, a single compressed MJPEG frame ranges from **15KB to 40KB**.
-* **The Assembly:** To transmit a 20KB image, the camera sends roughly 22 consecutive USB packets. The `frameId` remains constant across all chunks belonging to the same image. The `UsbFrameDecoder` continuously appends the 932-byte payloads to `frameBuffer`. When the Frame ID increments, the decoder filters out any padded tails or trailing garbage before flushing the completed image to the broadcast queue.
+* **The Assembly:** To transmit a 20KB image, the camera sends roughly 22 consecutive USB packets. The `frameId` remains constant across all chunks belonging to the same image. The `MjpegFrameDecoder` continuously appends the 932-byte payloads to `frameBuffer`. When the Frame ID increments, the decoder filters out any padded tails or trailing garbage before flushing the completed image to the broadcast queue.
 
 ## The 4KB Hardware Alignment Flaw (Ghost Headers)
 
@@ -111,7 +111,7 @@ To fit four 944-byte physical packets ($5 \text{ bytes header} + 939 \text{ byte
 
 Because the firmware fails to zero-initialize this padding, the camera leaks stale memory from its internal hardware buffer, creating **"Ghost Headers"** (stale `AA BB` markers) inside the padding.
 
-Our C++ `UsbFrameDecoder` bypasses this flaw by operating on fixed, linear 4KB read blocks. By calculating `chunkTotalSize = sizeof(UsbPacketHeader) + header.length`, the parser processes the exact boundaries of a valid packet. It then uses a bounded lookahead scan to detect ghost headers in the padding zone before they can corrupt the MJPEG stream parser, ensuring stable, zero-leak video synchronization.
+Our C++ `MjpegFrameDecoder` bypasses this flaw by operating on fixed, linear 4KB read blocks. By calculating `chunkTotalSize = sizeof(UsbPacketHeader) + header.length`, the parser processes the exact boundaries of a valid packet. It then uses a bounded lookahead scan to detect ghost headers in the padding zone before they can corrupt the MJPEG stream parser, ensuring stable, zero-leak video synchronization.
 
 ## USB Packet Structure
 

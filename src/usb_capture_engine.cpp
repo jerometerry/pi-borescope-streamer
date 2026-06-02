@@ -13,7 +13,7 @@
 #include "shared_frame_pipeline.hpp"
 #include "usb_camera.hpp"
 #include "usb_capture_engine.hpp"
-#include "usb_frame_decoder.hpp"
+#include "mjpeg_frame_decoder.hpp"
 
 UsbCaptureEngine::UsbCaptureEngine(SharedFramePipeline& pipeline, HardwareButtonManager& buttonManager, std::atomic<bool>& running)
         : pipeline_(pipeline), buttonManager_(buttonManager), running_(running) {}
@@ -33,7 +33,7 @@ void UsbCaptureEngine::stop() {
 void UsbCaptureEngine::loop(const DeviceInfo& target) {
     try {
         camera_ = std::make_unique<UsbCamera>(target);
-        decoder_ = std::make_unique<UsbFrameDecoder>(
+        decoder_ = std::make_unique<MjpegFrameDecoder>(
             [this](const std::vector<uint8_t>& frame) { 
                 auto buffer = pipeline_.checkoutBuffer();
                 if (buffer) {
