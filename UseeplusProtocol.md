@@ -12,6 +12,7 @@ current working directory.
 cmake . --preset release
 cmake --build --preset release
 
+
 ```
 
 **Capturing Stream Data**
@@ -19,6 +20,7 @@ To save the raw camera stream to a binary file for debugging and protocol analys
 
 ```bash
 ./out/build/release/binary_stream_capture
+
 
 ```
 
@@ -30,6 +32,7 @@ line represents 16 bytes of data, grouped into 2-byte columns.
 
 ```bash
 xxd raw_camera_dump.bin | grep -A 2 -B 2 "aa bb" | head -n 30
+
 
 ```
 
@@ -43,6 +46,7 @@ Here is an example of the output:
 00023620: 4600 0102 0100 4800 4800 00ff db00 8400  F.....H.H.......
 --
 
+
 ```
 
 ## The Protocol Breakdown
@@ -53,26 +57,29 @@ By mapping this hex dump to our C++ implementation, we can decode the Useeplus h
 using specific vendor and product IDs (e.g., `0x2ce3:0x3828` or `0x0329:0x2022`).
 * **The Packet Delimiter (`USB_FRAME_HEADER`):** The sequence `aa bb` marks the start of a new USB chunk. Due to Little-Endian architecture, this matches our C++ core definition of `0xBBAA`.
 * **The Camera ID (`VALID_CAMERA_IDS`):** The Useeplus hardware multiplexes two separate streams over a single shared bulk endpoint:
-  * Camera `11` (`0x0B`) is the **Video Feed** (transmitting packets with a declared payload length of 939 bytes).
-  * Camera `7` (`0x07`) is the **Gravity Sensor Telemetry Feed** (transmitting 427-byte payloads).
-  * To prevent injecting raw telemetry data directly into the Huffman-encoded JPEG stream, the decoder explicitly discards packets matching Camera 7 or packets where telemetry flags are active.
+* Camera `11` (`0x0B`) is the **Video Feed** (transmitting packets with a declared payload length of 939 bytes).
+* Camera `7` (`0x07`) is the **Gravity Sensor Telemetry Feed** (transmitting 427-byte payloads).
+* To prevent injecting raw telemetry data directly into the Huffman-encoded JPEG stream, the decoder explicitly discards packets matching Camera 7 or packets where telemetry flags are active.
+
+
 * **The JPEG SOI Marker (`JPEG_SOI_MARKERS`):** The sequence `ff d8` is the universal JPEG Start of Image (SOI) marker. Due to uninitialized hardware garbage padding, our decoder must actively scan the start of the frame assembly buffer for this marker before broadcasting.
 * **The JPEG EOI Marker:** The two bytes immediately preceding a fresh `aa bb` delimiter are `ff d9`. This is the universal JPEG End of Image (EOI) marker, cleanly terminating the active video frame.
 * **The App0 Segment:** Immediately after the SOI marker, the sequence `ff e0` followed by `4a 46 49 46 00` translates to `JFIF` in ASCII, confirming the payload is a standard JPEG container.
 
-## The Chunk Metadata (The 7-Byte Payload Header)
+## The Camera Packet Header (The 7-Byte Payload Header)
 
 The total packet layout begins with a 5-byte `UsbPacketHeader` (2-byte magic identifier, 1-byte camera ID, and a 2-byte payload length specifier):
 
 ```cpp
 struct [[gnu::packed]] UsbPacketHeader {
-    uint16_t header;
+    uint16_t leHeader;
     uint8_t cameraId;
-    uint16_t length;
+    uint16_t leLength;
 };
+
 ```
 
-Immediately following the 5-byte header, the camera inserts exactly 7 bytes of proprietary `CameraPacketHeader` before the actual JPEG pixels begin. 
+Immediately following the 5-byte header, the camera inserts exactly 7 bytes of proprietary `CameraPacketHeader` before the actual JPEG pixels begin.
 
 Let's look at the 12 bytes preceding the JPEG SOI (`ff d8`) from our hex dump:
 `aa bb 0b ab 03` **`02 00 00 60 33 30 24`** `ff d8...`
@@ -83,17 +90,16 @@ This 7-byte block (**`02 00 00 60 33 30 24`**) maps directly to our packed busin
 struct [[gnu::packed]] CameraPacketHeader {
     uint8_t frameId;
     uint8_t cameraNumber;
-    unsigned char hasGravitySensor:1;
-    unsigned char buttonPress:1;
-    unsigned char otherFlags:6;
-    uint32_t gravitySensor;
+    uint8_t flags;
+    uint32_t leGravitySensor;
 };
+
 ```
 
 Using `[[gnu::packed]]` forces the compiler to lay this out in exactly 7 bytes of memory without inserting padding bytes. Combined with the 5-byte packet header, the raw JPEG payload **always begins exactly 12 bytes from the start of the packet**.
 
 * **The Frame ID:** This is a sequential identifier. The exact moment the `frameId` changes, the state machine knows the previous image has finished transmitting and triggers a frame flush.
-* **The Button Press Flag:** The physical hardware button flips the `buttonPress` bit to `1` for the duration of a press event.
+* **The Button Press Flag:** The physical hardware button flips the second bit of the `flags` byte (0x02) to `1` for the duration of a press event.
 
 ## Assembling a Complete JPEG Frame
 
@@ -105,9 +111,9 @@ A single USB bulk transfer packet does not contain a full image.
 
 ## The 4KB Hardware Alignment Flaw (Ghost Headers)
 
-The camera's physical endpoint forces all transmissions to align with standard **4096-byte (4KB) USB bulk transfer boundaries**. 
+The camera's physical endpoint forces all transmissions to align with standard **4096-byte (4KB) USB bulk transfer boundaries**.
 
-To fit four 944-byte physical packets ($5 \text{ bytes header} + 939 \text{ bytes payload}$) into a 4096-byte memory page, the camera's firmware must inject 320 bytes of padding ($4096 - [4 \times 944] = 320$). The firmware distributes this dynamically, leaving unaligned gaps of 0, 80, or 160 bytes between individual chunks.
+To fit four 944-byte physical packets (5 bytes header + 939 bytes payload) into a 4096-byte memory page, the camera's firmware must inject 320 bytes of padding (4096 - (4 * 944) = 320). The firmware distributes this dynamically, leaving unaligned gaps of 0, 80, or 160 bytes between individual chunks.
 
 Because the firmware fails to zero-initialize this padding, the camera leaks stale memory from its internal hardware buffer, creating **"Ghost Headers"** (stale `AA BB` markers) inside the padding.
 
@@ -116,14 +122,14 @@ Our C++ `MjpegFrameDecoder` bypasses this flaw by operating on fixed, linear 4KB
 ## USB Packet Structure
 
 | Byte Address | Field Name | Hex Value Example | Description / C++ Field mapping |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 00 - 01 | Packet Delimiter | aa bb | 0xBBAA (Little-Endian) Magic Frame Header Anchor |
 | 02 | Camera Stream ID | 0b | 0x0B = Video Feed, 0x07 = Gravity Telemetry |
 | 03 - 04 | Payload Length | ab 03 | Total remaining bytes in packet payload (0x03AB = 939B) |
 | 05 | Frame Sequence ID | 08 | Increments when a complete MJPEG frame finish transmitting |
 | 06 | Camera Sub-System | 00 | Secondary internal lens index routing |
-| 07 | Packed Bitfield Flags | 00 | Bit 0: hasGravitySensor, Bit 1: buttonPress, Bits 2-7: Unused |
-| 08 - 11 | Gravity Sensor Matrix | 60 33 30 24 | 32-bit internal IMU accelerometer telemetry payload |
+| 07 | Hardware Flags Byte | 00 | Bit 0: hasGravitySensor, Bit 1: isButtonPressed, Bits 2-7: Reserved |
+| 08 - 11 | leGravitySensor Matrix | 60 33 30 24 | 32-bit internal IMU accelerometer telemetry payload |
 | 12 - 13 | JPEG SOI Marker | ff d8 | Universal JPEG Start of Image Boundary |
 | 14 - 15 | JPEG APP0 Header Marker | ff e0 | JFIF |
 | 16 - 17 | APP0 Segment Length | 00 10 | 16 bytes |

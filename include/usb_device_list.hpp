@@ -4,20 +4,26 @@
 #include <span>
 #include "usb_context.hpp"
 
-/** 
- * @brief Class representing a list of USB devices
+/**
+ * @brief A safely managed snapshot of every device currently plugged into the computer.
+ * @details Asking the operating system for a list of USB devices requires reserving a chunk 
+ * of memory. If you forget to free that memory, the system eventually crashes. 
+ * 
+ * This class acts as an automatic garbage collector for that list. It grabs the "census" of 
+ * plugged-in devices, lets you read it safely, and guarantees the memory is cleanly deleted 
+ * as soon as you are done looking at it.
  */
 class UsbDeviceList {
 public:
-    /** 
-     * @brief Construct a new USB device list instance
-     * @param context The USB context
+    /**
+     * @brief Take a snapshot of all currently connected USB devices.
+     * @param context The active USB permit required to ask the OS for this list.
      */
     explicit UsbDeviceList(UsbContext& context) :
         count(libusb_get_device_list(context.get(), &devices)) {}
     
-    /** 
-     * @brief Destroy the USB device list instance
+    /**
+     * @brief Automatically throw away the snapshot and free the memory.
      */
     ~UsbDeviceList() {
         if (devices) {
@@ -25,20 +31,19 @@ public:
         }
     }
 
-    /** 
-     * @brief Copy constructor for the USB device list instance
+    /**
+     * @brief Prevent copying so we don't accidentally free the same list of devices twice.
      */
     UsbDeviceList(const UsbDeviceList&) = delete;
 
-    /** 
-     * @brief Assignment operator for the USB device list instance
-     * @return A reference to the assigned USB device list instance
+    /**
+     * @brief Prevent assignment to enforce safe memory cleanup.
      */
     UsbDeviceList& operator=(const UsbDeviceList&) = delete;
 
-    /** 
-     * @brief Get the USB device list
-     * @return A span containing the USB devices
+    /**
+     * @brief Look at the census of devices.
+     * @return A modern C++ span (a safe viewing window) over the raw list of devices.
      */
     std::span<libusb_device*> get() const {
         if (count <= 0 || !devices) return {};
@@ -46,13 +51,13 @@ public:
     }
 
 private:
-    /** 
-     * @brief The list of USB devices
+    /**
+     * @brief The raw, dangerous C-array of hardware devices provided by the OS.
      */
     libusb_device** devices{nullptr};
 
-    /** 
-     * @brief The number of USB devices in the list
+    /**
+     * @brief Exactly how many devices were found plugged in.
      */
     ssize_t count{0};
 };

@@ -5,154 +5,162 @@
 #include <string_view>
 #include <utility>
 
-/** 
- * @brief Namespace for server constants
+/**
+ * @brief The master dial board and blueprint for the entire system.
+ * @details When building hardware projects, burying "magic numbers" (like buffer 
+ * sizes, HTTP strings, or specific camera IDs) deep inside the code makes it 
+ * incredibly difficult to update or modify the system later. 
+ * 
+ * This namespace acts as the single source of truth for every hardcoded value 
+ * in the server. If you want to increase the maximum number of viewers, change 
+ * the memory bucket sizes, or add support for a brand new endoscope model's 
+ * Vendor ID, you only ever have to change it right here.
  */
 namespace ServerConstants {
 
-    /** 
-     * @brief The size of one kilobyte
+    /**
+     * @brief The baseline byte count for a standard memory kilobyte.
      */
     inline constexpr size_t ONE_KILOBYTE = 1024;
 
-    /** 
-     * @brief The size of four kilobytes
+    /**
+     * @brief Standard memory bucket size for small network reads (e.g., incoming HTTP text).
      */
     inline constexpr size_t FOUR_KILOBYTES = 4 * ONE_KILOBYTE;
 
-    /** 
-     * @brief The size of 8 kilobytes
+    /**
+     * @brief Standard memory bucket size for intermediate processing buffers.
      */
     inline constexpr size_t EIGHT_KILOBYTES = 8 * ONE_KILOBYTE;
 
-    /** 
-     * @brief The size of 40 kilobytes
+    /**
+     * @brief The absolute maximum byte size expected for a single incoming JPEG picture.
      */
     inline constexpr size_t FORTY_KILOBYTES = 40 * ONE_KILOBYTE;
 
-    /** 
-     * @brief The size of 64 kilobytes
+    /**
+     * @brief Standard memory bucket size for moderate stream processing.
      */
     inline constexpr size_t SIXTY_FOUR_KILOBYTES = 64 * ONE_KILOBYTE;
 
-    /** 
-     * @brief The size of 128 kilobytes
+    /**
+     * @brief The massive memory bucket size used for the main shared video canvases.
      */
     inline constexpr size_t ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES = 128 * ONE_KILOBYTE;
 
-    /** 
-     * @brief The size of 256 kilobytes
+    /**
+     * @brief Safe-zone memory allocation size for extracting unchunked raw frames.
      */
     inline constexpr size_t TWO_HUNDRED_FIFTY_SIX_KILOBYTES = 256 * ONE_KILOBYTE;
 
-    /** 
-     * @brief The size of one megabyte
+    /**
+     * @brief The baseline byte count for a standard memory megabyte.
      */
     inline constexpr size_t ONE_MEGABYTE   = ONE_KILOBYTE * ONE_KILOBYTE;
 
-    /** 
-     * @brief The size of two megabytes
+    /**
+     * @brief Standard memory size for large disk-write operations.
      */
     inline constexpr size_t TWO_MEGABYTES  = 2 * ONE_MEGABYTE;
 
-    /** 
-     * @brief The USB timeout in milliseconds
+    /**
+     * @brief How long (in ms) we will wait for the USB hardware to respond before assuming it disconnected.
      */
     inline constexpr unsigned int USB_TIMEOUT = 1000;
 
-    /** 
-     * @brief The maximum number of concurrent clients
+    /**
+     * @brief The absolute maximum number of web browsers allowed to watch the live feed simultaneously.
      */
     inline constexpr size_t MAX_CLIENTS = 16;
 
-    /** 
-     * @brief The size of the stack buffer
+    /**
+     * @brief The size of the fast temporary memory stack used to build network text headers.
      */
     inline constexpr size_t STACK_BUF_SIZE = 128;
 
-    /** 
-     * @brief The HTTP OK HTML header
+    /**
+     * @brief Standard web browser greeting used to deliver text-based dashboards.
      */
     inline constexpr std::string_view HTTP_OK_HTML_HDR =
         "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
 
-    /** 
-     * @brief The HTTP OK JPEG header
+    /**
+     * @brief Standard web browser greeting used to deliver a single, static picture.
      */
     inline constexpr std::string_view HTTP_OK_JPEG_HDR =
         "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: ";
 
-    /** 
-     * @brief The HTTP header end
+    /**
+     * @brief The mandatory blank line required to tell a web browser that our greeting is finished.
      */
     inline constexpr std::string_view HTTP_HDR_END =
         "\r\nConnection: close\r\n\r\n";
 
-    /** 
-     * @brief The HTTP OK MJPEG header
+    /**
+     * @brief The complex web browser greeting required to establish a continuous, infinite video stream.
      */
     inline constexpr std::string_view HTTP_OK_MJPEG =
         "HTTP/1.1 200 OK\r\nConnection: close\r\nCache-Control: no-cache, private\r\nPragma: no-cache\r\nContent-Type: multipart/x-mixed-replace; boundary=mjpegstream\r\n\r\n";
 
-    /** 
-     * @brief The HTTP NOT FOUND header
+    /**
+     * @brief Standard web browser rejection used when a viewer asks for a page that doesn't exist.
      */
     inline constexpr std::string_view HTTP_NOT_FOUND = 
         "HTTP/1.1 404 Not Found\r\nCache-Control: no-cache\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 
-    /** 
-     * @brief The FAVICON NOT FOUND header
+    /**
+     * @brief Silently ignores browser requests for website icons to save bandwidth.
      */
     inline static constexpr std::string_view FAVICON_NOT_FOUND = 
         "HTTP/1.1 404 Not Found\r\nCache-Control: public, max-age=31536000\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
 
-    /** 
-     * @brief The button debounce time in milliseconds
+    /**
+     * @brief The electrical "noise filter". Ignores rapidly stuttering button signals under this duration.
      */
     inline constexpr int BUTTON_DEBOUNCE_TIME_MS = 200;
 
-    /** 
-     * @brief The minimum time for a quick press in milliseconds
+    /**
+     * @brief The minimum amount of time a button must be held down to be considered a deliberate press.
      */
     inline constexpr int QUICK_PRESS_MIN_MS = 150;
 
     /**
-     * @brief The maximum time for a quick press in milliseconds
+     * @brief If the button is held longer than this, it is considered a "long press" rather than a quick snapshot click.
      */
     inline constexpr int QUICK_PRESS_MAX_MS = 450;
 
-    /** 
-     * @brief The JPEG SOI markers
+    /**
+     * @brief The universal mathematical signature (Start of Image) that begins every valid JPEG file.
      */
     inline constexpr uint8_t JPEG_SOI_MARKERS[] = { 0xFF, 0xD8 };
 
-    /** 
-     * @brief The maximum position of the JPEG SOI markers
+    /**
+     * @brief We will stop searching for the JPEG start signature if we don't find it within the first 32 bytes of a payload.
      */
     inline constexpr int JPEG_SOI_MARKERS_MAX_POSITION = 32;
 
-    /** 
-     * @brief The camera ID for the gravity sensor camera
+    /**
+     * @brief The internal hardware lens ID for endoscopes equipped with a physical orientation sensor.
      */
     inline constexpr uint8_t GRAVITY_SENSOR_CAMERA_ID = 0x07;
 
-    /** 
-     * @brief The camera ID for the video camera
+    /**
+     * @brief The internal hardware lens ID for standard, non-gravity video endoscopes.
      */
     inline constexpr uint8_t VIDEO_CAMERA_ID = 0x0B;
 
-    /** 
-     * @brief An array of valid camera IDs
+    /**
+     * @brief A registry of all known internal camera lenses this software knows how to decode.
      */
     inline constexpr uint8_t VALID_CAMERA_IDS[] = {GRAVITY_SENSOR_CAMERA_ID, VIDEO_CAMERA_ID};
 
-    /** 
-     * @brief The USB frame header
+    /**
+     * @brief The secret 0xBBAA "shipping label" code the hardware uses to tag a valid video chunk on the wire.
      */
     inline constexpr uint16_t USB_FRAME_HEADER = 0xBBAA;
 
-    /** 
-     * @brief A list of vendor and product IDs for supported devices
+    /**
+     * @brief The official hardware whitelist. The software will only connect to cameras matching these Manufacturer and Model IDs.
      */
     inline constexpr std::pair<uint16_t, uint16_t> VENDOR_PRODUCT_ID_LIST[] = {
         {0x2ce3, 0x3828}, 
