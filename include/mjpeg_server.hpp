@@ -6,13 +6,11 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <string_view>
 #include <thread>
-#include <vector>
+#include "client_connection.hpp"
+#include "HttpRouter.h"
 #include "server_constants.hpp"
-
-class ClientConnection;
-class SharedFramePipeline;
+#include "shared_frame_pipeline.hpp"
 
 /**
  * @brief The server that streams the USB camera video to your web browser or video player.
@@ -147,13 +145,6 @@ private:
     int listenFileDescriptor = -1;
 
     /**
-     * @brief The list of all available viewing slots.
-     * @details Created once when the server starts. Limiting this to a fixed maximum 
-     * number keeps the Raspberry Pi from running out of memory.
-     */
-    std::unique_ptr<std::array<ClientConnection, ServerConstants::MAX_CLIENTS>> clients;
-
-    /**
      * @brief A lock to safely manage people joining and leaving.
      */
     std::mutex clientsMutex;
@@ -182,6 +173,15 @@ private:
      * @brief The pipeline where the server picks up the fresh video.
      */
     SharedFramePipeline& pipeline;
+
+    /**
+     * @brief The list of all available viewing slots.
+     * @details Created once when the server starts. Limiting this to a fixed maximum 
+     * number keeps the Raspberry Pi from running out of memory.
+     */
+    std::unique_ptr<std::array<ClientConnection, ServerConstants::MAX_CLIENTS>> clients;
+
+    uWS::HttpRouter<int> router{};
 
     /**
      * @brief Keeps track of the last picture sent, so we don't send duplicates.

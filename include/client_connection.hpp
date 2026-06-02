@@ -236,11 +236,12 @@ public:
         }
         if (m_outbox.empty()) {
             return WriteStatus::Flushed;
-        }
+        }        
 
         while (m_outboxOffset < m_outbox.size()) {
-            size_t remaining = m_outbox.size() - m_outboxOffset;
-            ssize_t sent = send(m_fileDescriptor, m_outbox.data() + m_outboxOffset, remaining, MSG_NOSIGNAL);
+            size_t xy = 0;
+            xy = m_outbox.size() - m_outboxOffset;
+            ssize_t sent = send(m_fileDescriptor, m_outbox.data() + m_outboxOffset, xy, MSG_NOSIGNAL);
 
             if (sent > 0) {
                 m_outboxOffset += static_cast<size_t>(sent);
@@ -407,45 +408,45 @@ private:
     /**
      * @brief The operating system's ticket number for this specific Wi-Fi connection.
      */
-    int m_fileDescriptor = -1;
+    int m_fileDescriptor{-1};
 
     /**
      * @brief True if someone is currently parked in this viewing slot.
      */
-    bool m_isActive = false;
+    bool m_isActive{false};
 
     /**
      * @brief True if the occupant is subscribed to the live video feed.
      */
-    bool m_isStreaming = false;
+    bool m_isStreaming{false};
 
     /**
      * @brief True if we plan to kick the occupant out once their outbox is completely emptied.
      */
-    bool m_closeAfterWrite = false;
+    bool m_closeAfterWrite{false};
     
     /**
      * @brief The inbox used to read what the viewer's web browser is asking us to do.
      */
-    std::vector<char> m_readBuffer;
+    std::vector<char> m_readBuffer{};
 
     /**
      * @brief A bookmark tracking exactly how many valid characters are currently in the inbox.
      */
-    size_t m_readBufferLen = 0;
+    size_t m_readBufferLen{0};
     
     /**
      * @brief The outbox containing all the video pictures waiting to be sent over the Wi-Fi.
      */
-    std::vector<uint8_t> m_outbox;
+    std::vector<uint8_t> m_outbox{};
 
     /**
      * @brief A bookmark tracking our progress if we only managed to send part of the outbox data.
      */
-    size_t m_outboxOffset = 0;
+    size_t m_outboxOffset{0};
 
     /**
      * @brief Tracks the ID of the last video picture sent, preventing us from sending duplicates.
      */
-    uint32_t m_sentFrameId = 0;
+    uint32_t m_sentFrameId{0};
 };

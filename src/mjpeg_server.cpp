@@ -21,13 +21,24 @@
 #include "socket_errors.hpp"
 
 
-MjpegServer::MjpegServer(const int port,
-                     const std::atomic<bool>& running,
-                     SharedFramePipeline& pipeline)
-    : clients(std::make_unique<std::array<ClientConnection, ServerConstants::MAX_CLIENTS>>()),
-      port(port),
-      running(running),
-      pipeline(pipeline) {
+MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, 
+    SharedFramePipeline& pipeline) : port(port), running(running), pipeline(pipeline), 
+    clients(std::make_unique<std::array<ClientConnection, ServerConstants::MAX_CLIENTS>>()) {
+
+    router.add({"*"}, "/static/route", [](auto *) {
+        std::cout << "ANY static route" << '\n';
+        return true;
+    }, router.LOW_PRIORITY);
+
+    router.add({"PATCH"}, "/static/route", [](auto *) {
+        std::cout << "PATCH static route" << '\n';
+        return false;
+    });
+
+    router.add({"GET"}, "/static/route", [](auto *) {
+        std::cout << "GET static route" << '\n';
+        return true;
+    });
 }
 
 MjpegServer::~MjpegServer() {

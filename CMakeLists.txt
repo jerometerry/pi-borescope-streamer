@@ -76,11 +76,25 @@ if(NOT APPLE)
 endif()
 
 FetchContent_Declare(
+    uWebSockets
+    GIT_REPOSITORY https://github.com/uNetworking/uWebSockets.git
+    GIT_TAG v20.67.0
+)
+FetchContent_MakeAvailable(uWebSockets)
+
+add_library(uwebsockets_headers INTERFACE)
+target_include_directories(uwebsockets_headers SYSTEM INTERFACE "${uwebsockets_SOURCE_DIR}/src")
+target_link_libraries(uwebsockets_headers INTERFACE ZLIB::ZLIB)
+
+FetchContent_Declare(
     uSockets
     GIT_REPOSITORY https://github.com/uNetworking/uSockets.git
     GIT_TAG v0.8.8
 )
 FetchContent_MakeAvailable(uSockets)
+
+add_library(uNetworking INTERFACE)
+target_link_libraries(uNetworking INTERFACE uwebsockets_headers usockets ZLIB::ZLIB)
 
 file(GLOB USOCKETS_SOURCES 
     "${usockets_SOURCE_DIR}/src/*.c" 
@@ -88,7 +102,7 @@ file(GLOB USOCKETS_SOURCES
 )
 
 add_library(usockets STATIC ${USOCKETS_SOURCES})
-target_include_directories(usockets PUBLIC "${usockets_SOURCE_DIR}/src")
+target_include_directories(usockets SYSTEM PUBLIC "${usockets_SOURCE_DIR}/src")
 target_link_libraries(usockets PUBLIC OpenSSL::SSL OpenSSL::Crypto ZLIB::ZLIB Threads::Threads)
 
 if(APPLE)
@@ -98,20 +112,6 @@ elseif(UNIX AND NOT APPLE)
 endif()
 
 target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
-
-add_library(uNetworking INTERFACE)
-target_link_libraries(uNetworking INTERFACE uwebsockets_headers usockets)
-
-FetchContent_Declare(
-    uWebSockets
-    GIT_REPOSITORY https://github.com/uNetworking/uWebSockets.git
-    GIT_TAG v20.67.0
-)
-FetchContent_MakeAvailable(uWebSockets)
-
-add_library(uwebsockets_headers INTERFACE)
-target_include_directories(uwebsockets_headers INTERFACE "${uwebsockets_SOURCE_DIR}/src")
-target_link_libraries(uwebsockets_headers INTERFACE ZLIB::ZLIB)
 
 add_library(borescope_core STATIC 
     src/usb_context.cpp
@@ -134,9 +134,13 @@ target_include_directories(borescope_core
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
-target_link_libraries(borescope_core PUBLIC PkgConfig::LIBUSB)
-target_link_libraries(borescope_core PRIVATE project_warnings)
-target_link_libraries(borescope_core PUBLIC usockets)
+target_link_libraries(borescope_core 
+    PUBLIC 
+        PkgConfig::LIBUSB
+        uNetworking
+    PRIVATE 
+        project_warnings
+)
 
 add_executable(pi-borescope-streamer 
     src/server.cpp
