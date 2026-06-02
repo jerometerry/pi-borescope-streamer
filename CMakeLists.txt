@@ -119,7 +119,6 @@ add_library(borescope_core STATIC
     src/usb_camera.cpp 
     src/mjpeg_frame_decoder.cpp
     src/application_context.cpp
-    src/http_routes.cpp
     src/mjpeg_server.cpp
     src/server_time.cpp
     src/shared_frame_pipeline.cpp

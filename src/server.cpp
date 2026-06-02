@@ -111,16 +111,9 @@ int main(int argc, const char* argv[]) {
 
         WallClock systemClock;
         const ServerTime serverTime(systemClock, std::chrono::steady_clock::now());
-        
         SharedFramePipeline pipeline;
         HardwareButtonManager buttonManager(serverTime);
-
         MjpegServer server(port, globalRunning, pipeline);
-        if (!server.initialize()) {
-            std::cerr << "[Fatal Exception] Failed to initialize web server socket bindings.\n";
-            return EXIT_FAILURE;
-        }
-
         ApplicationContext app(pipeline, buttonManager, server, globalRunning);
 
         app.run(camera);
