@@ -1,0 +1,47 @@
+#include <fcntl.h>
+#include <linux/videodev2.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#include <iostream>
+#include "v4l2_publisher.hpp"
+
+V4l2Publisher::V4l2Publisher(const V4l2Config& config) {
+    v4l2_fd_ = open(config.devicePath.c_str(), O_RDWR);
+    if (v4l2_fd_ < 0) {
+        std::cerr << "[V4L2 Core] Failed to open " << config.devicePath << ". Is v4l2loopback loaded?\n";
+        return;
+    }
+
+    struct v4l2_format vid_format = {};
+    vid_format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+    vid_format.fmt.pix.width = config.width;
+    vid_format.fmt.pix.height = config.height;
+    vid_format.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+    vid_format.fmt.pix.sizeimage = config.sizeImage;
+    vid_format.fmt.pix.field = V4L2_FIELD_NONE;
+
+    if (ioctl(v4l2_fd_, VIDIOC_S_FMT, &vid_format) < 0) {
+        std::cerr << "[V4L2 Core] Failed to set loopback video format.\n";
+        close(v4l2_fd_);
+        v4l2_fd_ = -1;
+        return;
+    }
+
+    std::cout << "[V4L2 Core] Virtual video device initialized at " 
+              << config.width << "x" << config.height << " on " << config.devicePath << ".\n";
+}
+
+V4l2Publisher::~V4l2Publisher() {
+    if (v4l2_fd_ >= 0) {
+        close(v4l2_fd_);
+    }
+}
+
+void V4l2Publisher::writeFrame(const std::vector<uint8_t>& frame) {
+    if (v4l2_fd_ >= 0) {
+        ssize_t bytesWritten = write(v4l2_fd_, frame.data(), frame.size());
+        if (bytesWritten < 0) {
+            std::cerr << "[V4L2 Core] Warning: Failed to write frame to loopback device.\n";
+        }
+    }
+}

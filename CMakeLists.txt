@@ -159,6 +159,21 @@ add_executable(frame_extractor
 )
 target_link_libraries(frame_extractor PRIVATE Borescope::Core project_warnings)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_sources(borescope_core PRIVATE src/v4l2_publisher.cpp)
+    add_executable(v4l2-borescope-daemon src/v4l2_main.cpp)
+    target_link_libraries(v4l2-borescope-daemon
+        PRIVATE 
+            borescope_core
+            project_warnings
+            ${LIBUSB_LIBRARIES}
+    )
+    
+    message(STATUS "Linux detected: Building v4l2-borescope-daemon target.")
+else()
+    message(STATUS "macOS detected: Skipping v4l2-borescope-daemon target.")
+endif()
+
 option(BUILD_DOC "Build documentation" ON)
 if(BUILD_DOC)
     find_package(Doxygen)
