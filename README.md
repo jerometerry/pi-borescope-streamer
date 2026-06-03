@@ -153,6 +153,21 @@ WantedBy=multi-user.target
 EOF
 ```
 
+```bash
+# Refresh daemon list
+sudo systemctl daemon-reload
+
+# Enable on system boot
+sudo systemctl enable v4l2-borescope.service
+
+# Start the daemon
+sudo systemctl start v4l2-borescope.service
+
+# Get status of the daemon
+sudo systemctl start v4l2-borescope.service
+
+```
+
 **Example service definition**
 
 ``ini
