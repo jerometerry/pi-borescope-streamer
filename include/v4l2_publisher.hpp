@@ -13,7 +13,7 @@ public:
      * 
      * @param config 
      */
-    V4l2Publisher(const V4l2Config& config);
+    explicit V4l2Publisher(const V4l2Config& config);
 
     /**
      * @brief Destroy the V4l2Publisher object

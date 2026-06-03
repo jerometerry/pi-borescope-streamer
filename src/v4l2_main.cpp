@@ -1,8 +1,12 @@
+#include <stdint.h>
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdlib> 
+#include <exception>
 #include <iostream>
 #include <string>
+#include <memory>
 #include <thread>
 #include <vector>
 #include "device_info.hpp"
@@ -19,9 +23,13 @@ void signalHandler(int signal) {
     globalRunning.store(false, std::memory_order_release);
 }
 
-V4l2Config parseArguments(int argc, const char* argv[]) {
-    V4l2Config config;
-    
+enum class ParseResult {
+    Success,
+    HelpRequested,
+    Error
+};
+
+ParseResult parseArguments(int argc, const char* argv[], V4l2Config& config) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         
@@ -42,24 +50,32 @@ V4l2Config parseArguments(int argc, const char* argv[]) {
                           << "  --height <px>    Video height (default: 480)\n"
                           << "  --size <bytes>   Max frame buffer size (default: 131072)\n"
                           << "  --help           Show this message\n";
-                std::exit(EXIT_SUCCESS);
+                return ParseResult::HelpRequested;
             } else {
                 std::cerr << "Unknown argument: " << arg << "\n";
+                return ParseResult::Error;
             }
         } catch (const std::exception& e) {
             std::cerr << "Invalid value provided for argument " << arg << "\n";
-            std::exit(EXIT_FAILURE);
+            return ParseResult::Error;
         }
     }
     
-    return config;
+    return ParseResult::Success;
 }
 
 int main(int argc, const char* argv[]) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
-    V4l2Config config = parseArguments(argc, argv);
+    V4l2Config config;
+
+    ParseResult result = parseArguments(argc, argv, config);
+    if (result == ParseResult::HelpRequested) {
+        return EXIT_SUCCESS;
+    } else if (result == ParseResult::Error) {
+        return EXIT_FAILURE;
+    }
 
     auto cameras = DeviceFinder::superCameras();
     if (cameras.empty()) {
@@ -67,7 +83,7 @@ int main(int argc, const char* argv[]) {
         return EXIT_FAILURE;
     }
     
-    DeviceInfo camera = cameras[0];
+    const DeviceInfo camera = cameras[0];
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
