@@ -92,6 +92,11 @@ Run the binary out of its target profile directory. You can optionally specify a
 ### 5. Launch the Video4Linux Daemon
 
 ```bash
+# Create a Video4Linux Loopback for the camera so the v4l2-borescope-daemon can stream the data to it
+sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1
+```
+
+```bash
 # Defaults are --dev /dev/video7 --width 640 --height 480 --size 131072
 ./out/build/release/v4l2-borescope-daemon
 ```

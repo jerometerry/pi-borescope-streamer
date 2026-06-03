@@ -23,7 +23,7 @@ void signalHandler(int signal) {
     globalRunning.store(false, std::memory_order_release);
 }
 
-enum class ParseResult {
+enum class ParseResult : std::uint8_t {
     Success,
     HelpRequested,
     Error
