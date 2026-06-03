@@ -6,11 +6,11 @@ This project evolved from a simple synchronous USB-polling script into a robust,
 
 ## 🚀 Features
 
-* **Zero-Heap-Allocation Hot Path:** Built for long-running stability. After initial startup, the event loop and streaming multiplexer operate without a single call to `malloc` or `free`, entirely eliminating heap fragmentation and garbage-collection latency.
-* **Asynchronous Network Stack:** Uses a custom `poll`-based event loop with non-blocking sockets. A slow client on a bad Wi-Fi connection will never block the hardware camera thread.
-* **Zero-Copy Broadcasting:** Video frames are written directly to pre-allocated client outboxes with hardware-level `memcpy`, bypassing intermediate deep copies.
-* **Multi-Client Support:** Stream to multiple browser tabs or VLC instances simultaneously with graceful backpressure handling (automatically drops frames for clients whose buffers exceed 2MB).
-* **Hardware Button Integration:** Fully supports the physical button on Useeplus borescopes to trigger high-resolution still-frame captures without interrupting the MJPEG stream.
+* **Zero-Heap-Allocation Hot Path:** Built for long-running stability. After initial startup, the video pipeline and streaming multiplexer operate without a single call to `malloc` or `free`, entirely eliminating heap fragmentation and garbage-collection latency.
+* **Asynchronous Network Stack:** Powered by `uWebSockets` (an ultra-fast C++ `epoll` engine). A slow client on a bad Wi-Fi connection will never block the hardware camera thread.
+* **Zero-Copy Broadcasting:** Video frames are streamed directly from pre-allocated memory pools with hardware-level efficiency, bypassing intermediate deep copies.
+* **Multi-Client Support:** Stream to multiple browser tabs or VLC instances simultaneously with aggressive backpressure handling (automatically evicts lagging clients to protect server memory).
+* **Client-Side Snapshots:** The web dashboard utilizes the HTML5 `<canvas>` API to capture high-resolution snapshots instantly on the user's device, completely removing image-processing overhead from the Raspberry Pi.
 
 ## 🛠️ Architecture Highlights
 
@@ -20,7 +20,7 @@ Most hobbyist MJPEG servers suffer from "buffer churn"—constantly resizing `st
 
 1. **Stack-Based Formatting:** HTTP multipart chunk boundaries and payload sizes are calculated entirely on the stack using `std::to_chars` and `std::format_to_n`.
 2. **Double-Buffering Hardware IO:** `libusb` ingestion swaps memory blocks atomically, keeping the hardware mutex locked for less than a microsecond.
-3. **Strict Memory Layouts:** Vectors for active frames, snapshots, and client buffers are pre-allocated (`reserve()`) at startup to their maximum safe sizes.
+3. **Strict Memory Layouts:** The memory exchange zone (`SharedFramePipeline`) pre-allocates a fixed pool of memory buffers at startup, constantly recycling them between the USB hardware and network broadcaster to prevent leaks.
 
 ## 📦 Prerequisites
 
@@ -91,13 +91,12 @@ Run the binary out of its target profile directory. You can optionally specify a
 
 *Note: For a clean rebuild, run `cmake --build --preset clean-debug` or `cmake --build --preset clean-release` to clear old artifacts.*
 
-## 📡 MJPEG Streaming Server Usage
+## 📡 PI Streaming Server Usage
 
 Once the server is running and the camera is plugged in, you can access the streams locally or across your network:
 
-* **Interactive Web Dashboard:** `http://<raspberry-pi-ip>:8080`
+* **Interactive Web Dashboard (with Snapshots):** `http://<raspberry-pi-ip>:8080/`
 * **Raw VLC MJPEG Stream:** `http://<raspberry-pi-ip>:8080/stream`
-* **Latest Snapshot (Triggered by Hardware Button):** `http://<raspberry-pi-ip>:8080/snapshot`
 
 ## 🐳 Docker Build
 
@@ -119,15 +118,22 @@ docker run --device=/dev/bus/usb -p 8080:8080 pi-borescope-test
 
 ## 🔬 Advanced Documentation
 
-Want to look under the hood? I have written a detailed guide on how to configure a Raspberry Pi kernel for eBPF and generate CPU/Memory FlameGraphs to prove the zero-allocation architecture.
+Want to look under the hood? I have written a detailed guide on how to configure a Raspberry Pi kernel for eBPF and 
+generate CPU/Memory FlameGraphs to prove the zero-allocation architecture.
 
 * [Profiling using BPF and FlameGraphs](PerformanceProfiling.md)
 * [Useeplus Protocol Deep Dive](UseeplusProtocol.md) - Hex dumps, hardware quirks, and frame assembly math.
 
 ## 🧠 Acknowledgements
 
-This project was heavily inspired by the reverse-engineering work of [hbens](https://github.com/hbens/geek-szitman-supercamera), [jmz3](https://github.com/jmz3/EndoscopeCamera), and [doctormo](https://github.com/doctormo). Their original proofs-of-concept laid the groundwork for decoding the `com.useeplus.protocol`.
+This project was heavily inspired by the reverse-engineering work of 
+[hbens](https://github.com/hbens/geek-szitman-supercamera), [jmz3](https://github.com/jmz3/EndoscopeCamera), and 
+[doctormo](https://github.com/doctormo). Their original proofs-of-concept laid the groundwork for decoding the 
+`com.useeplus.protocol`.
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+For information regarding the third-party libraries used in this project, please see the 
+[THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES.md) file.
