@@ -62,7 +62,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
                 continue;
             }
 
-            if (res->getWriteOffset() > ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES) {
+            if (res->getWriteOffset() > ServerConstants::TWO_MEGABYTES) {
                 std::cerr << "[Network Core] Evicting lagging viewer on /stream.\n";
                 res->end();
                 server->activeViewers.erase(server->activeViewers.begin() + i);
@@ -72,34 +72,33 @@ void MjpegServer::onTimer(us_timer_t *t) {
             if (viewer.lastSentFrameId < currentFrameId) {
                 size_t backpressure = res->getWriteOffset();
 
-                if (backpressure > 0) {
+                if (backpressure == 0) {
+                    if (viewer.isLagging) {
+                        uint32_t droppedFrames = currentFrameId - viewer.lagStartFrameId;
+                        std::cout << "[Network Telemetry] Viewer recovered. TCP pipe cleared. " 
+                                  << droppedFrames << " frames were deliberately dropped to maintain real-time latency.\n";
+                        viewer.isLagging = false;
+                    }
+
+                    res->cork([&]() {
+                        res->write(HttpHeaders::MJPEG_CHUNK_PREFIX);
+                        
+                        char headerBuf[ServerConstants::STACK_BUF_SIZE];
+                        auto result = std::to_chars(headerBuf, headerBuf + ServerConstants::STACK_BUF_SIZE, currentFrame->size());
+                        res->write(std::string_view(headerBuf, result.ptr - headerBuf));
+                        
+                        res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
+                        res->write(std::string_view(reinterpret_cast<const char*>(currentFrame->data()), currentFrame->size()));
+                    });
+                } else {
                     if (!viewer.isLagging) {
                         std::cout << "[Network Telemetry] Warning: TCP stall detected! OS buffer backed up with " 
-                                  << backpressure << " bytes.\n";
+                                  << backpressure << " bytes. Dropping frames...\n";
                         viewer.isLagging = true;
-
-                        viewer.lagStartFrameId = viewer.lastSentFrameId; 
-                    }
-                } else {
-                    if (viewer.isLagging) {
-                        uint32_t framesDelayed = currentFrameId - viewer.lagStartFrameId;
-                        std::cout << "[Network Telemetry] Viewer recovered. TCP pipe cleared. " 
-                                  << framesDelayed << " frames were buffered and delayed during the stall.\n";
-                        viewer.isLagging = false;
+                        viewer.lagStartFrameId = currentFrameId;
                     }
                 }
 
-                res->cork([&]() {
-                    res->write(HttpHeaders::MJPEG_CHUNK_PREFIX);
-                    
-                    char headerBuf[ServerConstants::STACK_BUF_SIZE];
-                    auto result = std::to_chars(headerBuf, headerBuf + ServerConstants::STACK_BUF_SIZE, currentFrame->size());
-                    res->write(std::string_view(headerBuf, result.ptr - headerBuf));
-                    
-                    res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
-                    res->write(std::string_view(reinterpret_cast<const char*>(currentFrame->data()), currentFrame->size()));
-                });
-                
                 viewer.lastSentFrameId = currentFrameId;
             }
             ++i;
