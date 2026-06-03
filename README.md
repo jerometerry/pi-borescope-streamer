@@ -91,18 +91,28 @@ Run the binary out of its target profile directory. You can optionally specify a
 
 ### 5. Launch the Video4Linux Daemon
 
-```bash
-# Create a Video4Linux Loopback for the camera so the v4l2-borescope-daemon can stream the data to it
-sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1
-```
+Before launching the daemon, you must allocate a virtual Video4Linux loopback device for it to stream into. 
+*(Note: This virtual device will disappear if the Raspberry Pi reboots, so you must run this command after every restart).*
 
 ```bash
-# Defaults are --dev /dev/video7 --width 640 --height 480 --size 131072
-./out/build/release/v4l2-borescope-daemon
+sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1
+
 ```
+
+Once the virtual device is active, launch the compiled background daemon. By default, it will automatically bind to `/dev/video7` at `640x480`.
+
+```bash
+# Launch with default parameters
+./out/build/release/v4l2-borescope-daemon
+
+```
+
+**Advanced Configuration:**
+If you upgrade to a 1080p camera or want to stream to a different video node, you can override the defaults using command-line arguments. *(Ensure you also update your `modprobe` command to create the matching `/dev/videoX` node).*
 
 ```bash
 ./out/build/release/v4l2-borescope-daemon --dev /dev/video9 --width 1920 --height 1080 --size 262144
+
 ```
 
 *Note: For a clean rebuild, run `cmake --build --preset clean-debug` or `cmake --build --preset clean-release` to clear old artifacts.*
