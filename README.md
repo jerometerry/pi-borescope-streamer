@@ -117,34 +117,34 @@ If you upgrade to a 1080p camera or want to stream to a different video node, yo
 
 ```
 
-**Daemon Configuration**
+**Daemon Configuration (Persistent Setup)**
+
+To ensure the virtual device and background streaming service survive a system reboot, run the following commands. 
+
+*(Ensure you are currently inside the `pi-borescope-streamer` directory before running step 3, as it uses your current path to configure the service).*
 
 ```bash
-# Start the v4l2loopback service on boot
+# Start the v4l2loopback module on boot
 echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf
 
-# Register the supercamera as a v4l2loopback device on system boot
+# Register the supercamera hardware parameters for the module
 echo 'options v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1' | sudo tee /etc/modprobe.d/v4l2loopback.conf
 
-# create the v4l2-borescope service. 
-cat << 'EOF' | sudo tee /etc/systemd/system/my-custom.service > /dev/null
+# Create the systemd service file dynamically for your user
+cat << EOF | sudo tee /etc/systemd/system/v4l2-borescope.service > /dev/null
 [Unit]
-Description=[REPLACE_WITH_DESIRED_DAEMON_NAME]
+Description=Useeplus Borescope V4L2 Daemon
 After=network.target systemd-modules-load.service
 Wants=systemd-modules-load.service
 
 [Service]
 Type=simple
-User=[REPLACE_WITH_DESIRED_USER]
-Group=[REPLACE_WITH_DESIRED_GROUP]
-WorkingDirectory=[REPLACE_WITH_DESIRED_DIR]
-ExecStart=[REPLACE_WITH_START_CMD]
-
-# Resilience: Automatically restart the daemon if it crashes, but wait 5 seconds to avoid spamming the CPU
+User=$USER
+Group=$USER
+WorkingDirectory=$PWD
+ExecStart=$PWD/out/build/release/v4l2-borescope-daemon --dev /dev/video7 --width 640 --height 480 --size 131072
 Restart=on-failure
 RestartSec=5
-
-# Standardize the kill signal to match your C++ SIGTERM handler
 KillSignal=SIGTERM
 TimeoutStopSec=10
 
@@ -154,41 +154,13 @@ EOF
 ```
 
 ```bash
-# Refresh daemon list
+# Refresh systemd, enable the service, and start it
 sudo systemctl daemon-reload
-
-# Enable on system boot
 sudo systemctl enable v4l2-borescope.service
-
-# Start the daemon
 sudo systemctl start v4l2-borescope.service
 
-# Get status of the daemon
-sudo systemctl start v4l2-borescope.service
-
-```
-
-**Example service definition**
-
-``ini
-[Unit]
-Description=Useeplus Borescope V4L2 Daemon
-After=network.target systemd-modules-load.service
-Wants=systemd-modules-load.service
-
-[Service]
-Type=simple
-User=jterry
-Group=jterry
-WorkingDirectory=/home/jterry/github/pi-borescope-streamer
-ExecStart=/home/jterry/github/pi-borescope-streamer/out/build/release/v4l2-borescope-daemon --dev /dev/video7 --width 640 --height 480 --size 131072
-Restart=on-failure
-RestartSec=5
-KillSignal=SIGTERM
-TimeoutStopSec=10
-
-[Install]
-WantedBy=multi-user.target
+# Verify the service is running successfully
+systemctl status v4l2-borescope.service
 ```
 
 *Note: For a clean rebuild, run `cmake --build --preset clean-debug` or `cmake --build --preset clean-release` to clear old artifacts.*
