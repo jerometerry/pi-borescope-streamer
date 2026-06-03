@@ -16,14 +16,14 @@
 #include "v4l2_publisher.hpp"
 #include "v4l2_config.hpp"
 
-std::atomic<bool> globalRunning{true};
+std::atomic<bool> running{true};
 
 void signalHandler(int signal) {
-    std::cout << "\nSignal " << signal << " received. Shutting down V4L2 daemon...\n";
-    globalRunning.store(false, std::memory_order_release);
+    std::cout << "\n[System] Signal " << signal << " received. Shutting down V4L2 daemon...\n";
+    running.store(false, std::memory_order_release);
 }
 
-enum class ParseResult : std::uint8_t {
+enum class ParseResult {
     Success,
     HelpRequested,
     Error
@@ -65,11 +65,14 @@ ParseResult parseArguments(int argc, const char* argv[], V4l2Config& config) {
 }
 
 int main(int argc, const char* argv[]) {
+    // Disable stdout buffering so logs immediately appear in systemd journalctl
+    std::cout << std::unitbuf;
+
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
     V4l2Config config;
-
+    
     ParseResult result = parseArguments(argc, argv, config);
     if (result == ParseResult::HelpRequested) {
         return EXIT_SUCCESS;
@@ -77,27 +80,34 @@ int main(int argc, const char* argv[]) {
         return EXIT_FAILURE;
     }
 
+    std::cout << "=================================================\n"
+              << "[Startup] Initializing V4L2 Borescope Daemon\n"
+              << "  -> Device Path : " << config.devicePath << "\n"
+              << "  -> Resolution  : " << config.width << "x" << config.height << "\n"
+              << "  -> Max Buffer  : " << config.sizeImage << " bytes\n"
+              << "=================================================\n";
+
     auto cameras = DeviceFinder::superCameras();
     if (cameras.empty()) {
         std::cerr << "[Fatal] No compatible Useeplus cameras found on the USB bus.\n";
         return EXIT_FAILURE;
     }
     
-    const DeviceInfo& camera = cameras[0];
+    DeviceInfo camera = cameras[0];
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
     SharedFramePipeline pipeline;
-    UsbCaptureEngine captureEngine(pipeline, globalRunning);
+    UsbCaptureEngine captureEngine(pipeline, running);
     V4l2Publisher publisher(config);
 
     captureEngine.start(camera);
 
-    std::cout << "[V4L2 Core] Streaming daemon active. Press Ctrl+C to stop.\n";
+    std::cout << "[V4L2 Core] Streaming daemon active and routing frames.\n";
 
     uint32_t lastBroadcastedFrameId = 0;
 
-    while (globalRunning.load(std::memory_order_relaxed)) {
+    while (running.load(std::memory_order_relaxed)) {
         uint32_t currentFrameId = 0;
         auto currentFrame = pipeline.getCurrentFrame(currentFrameId);
 
