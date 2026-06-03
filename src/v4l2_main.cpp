@@ -23,7 +23,7 @@ void signalHandler(int signal) {
     running.store(false, std::memory_order_release);
 }
 
-enum class ParseResult {
+enum class ParseResult : std::uint8_t {
     Success,
     HelpRequested,
     Error
@@ -93,7 +93,7 @@ int main(int argc, const char* argv[]) {
         return EXIT_FAILURE;
     }
     
-    DeviceInfo camera = cameras[0];
+    const DeviceInfo& camera = cameras[0];
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
