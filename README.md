@@ -89,18 +89,26 @@ Run the binary out of its target profile directory. You can optionally specify a
 ./out/build/release/pi-borescope-streamer
 ```
 
+*Note: For a clean rebuild, run `cmake --build --preset clean-debug` or `cmake --build --preset clean-release` to clear old artifacts.*
+
+## 📡 PI Streaming Server Usage
+
+Once the server is running and the camera is plugged in, you can access the streams locally or across your network:
+
+* **Interactive Web Dashboard (with Snapshots):** `http://<raspberry-pi-ip>:8080/`
+* **Raw VLC MJPEG Stream:** `http://<raspberry-pi-ip>:8080/stream`
+
 ## Run as Video4Linux Daemon
 
 Before launching the daemon, you must allocate a virtual Video4Linux loopback device for it to stream into. 
 *(Note: This virtual device will disappear if the Raspberry Pi reboots, so you must run this command after every restart).*
 
 ```bash
-# Add temporary loopback device 
+# Add temporary loopback device, if you are running run v4l2-borescope-daemon as a console app instead of through systemctl.
 sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1
-
 ```
 
-To ensure the virtual device and background streaming service survive a system reboot, run the following commands. 
+To ensure the virtual device and background streaming service survive a system reboot, run the following commands.
 
 ```bash
 # Start the v4l2loopback module on boot
@@ -145,15 +153,6 @@ sudo systemctl start v4l2-borescope.service
 # Verify the service is running successfully
 systemctl status v4l2-borescope.service
 ```
-
-*Note: For a clean rebuild, run `cmake --build --preset clean-debug` or `cmake --build --preset clean-release` to clear old artifacts.*
-
-## 📡 PI Streaming Server Usage
-
-Once the server is running and the camera is plugged in, you can access the streams locally or across your network:
-
-* **Interactive Web Dashboard (with Snapshots):** `http://<raspberry-pi-ip>:8080/`
-* **Raw VLC MJPEG Stream:** `http://<raspberry-pi-ip>:8080/stream`
 
 ## 🐳 Docker Build
 
