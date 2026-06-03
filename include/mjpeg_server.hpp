@@ -33,7 +33,7 @@ private:
         bool isClosed{false};
 
         bool isLagging{false};
-        uint32_t consecutiveDrops{0};
+        uint32_t lagStartFrameId{0};
     };
 
     const int port;
