@@ -206,7 +206,8 @@ vlc v4l2:///dev/video7
 
 ### Using uStreamer
 
-Here is how to deploy uStreamer to create a high-performance HTTP MJPEG streaming server for your Useeplus USB camera.
+Here is how to deploy [uStreamer](https://github.com/pikvm/ustreamer) to create a high-performance HTTP MJPEG streaming 
+server for your Useeplus USB camera.
 
 **Compile and Install uStreamer**
 First, install the required dependencies and build the application from source:
