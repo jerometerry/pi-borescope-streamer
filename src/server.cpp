@@ -54,7 +54,7 @@ int main(int argc, const char* argv[]) {
     }
 
     std::cout << "==================================================================\n";
-    std::cout << "  MJPEG Streaming Server Started\n";
+    std::cout << "  Pi-Borescope Streamer Started\n";
 
     if (isUsingDefaultPort) {
         std::cout << "  -> Status: Running on DEFAULT port " << port << "\n";
@@ -64,8 +64,8 @@ int main(int argc, const char* argv[]) {
         std::cout << "  -> Status: Running on CUSTOM port override " << port << "\n";
     }
     
-    std::cout << "  -> Web Dashboard:          http://localhost:" << port << "/web\n";
-    std::cout << "  -> Raw Streaming (VLC):    http://localhost:" << port << "\n";
+    std::cout << "  -> Web Dashboard:          http://localhost:" << port << "/\n";
+    std::cout << "  -> Raw Streaming (VLC):    http://localhost:" << port << "/stream\n";
     std::cout << "==================================================================\n";
 
     std::signal(SIGINT, signalHandler);
