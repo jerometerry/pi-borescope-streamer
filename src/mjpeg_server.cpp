@@ -70,16 +70,35 @@ void MjpegServer::onTimer(us_timer_t *t) {
             }
 
             if (viewer.lastSentFrameId < currentFrameId) {
-                res->cork([&]() {
-                    res->write(HttpHeaders::MJPEG_CHUNK_PREFIX);
-                    
-                    char headerBuf[ServerConstants::STACK_BUF_SIZE];
-                    auto result = std::to_chars(headerBuf, headerBuf + ServerConstants::STACK_BUF_SIZE, currentFrame->size());
-                    res->write(std::string_view(headerBuf, result.ptr - headerBuf));
-                    
-                    res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
-                    res->write(std::string_view(reinterpret_cast<const char*>(currentFrame->data()), currentFrame->size()));
-                });
+                size_t backpressure = res->getWriteOffset();
+
+                if (backpressure == 0) {
+                    if (viewer.isLagging) {
+                        std::cout << "[Network Telemetry] Viewer recovered. TCP pipe cleared after dropping " 
+                                  << viewer.consecutiveDrops << " frames.\n";
+                        viewer.isLagging = false;
+                        viewer.consecutiveDrops = 0;
+                    }
+
+                    res->cork([&]() {
+                        res->write(HttpHeaders::MJPEG_CHUNK_PREFIX);
+                        
+                        char headerBuf[ServerConstants::STACK_BUF_SIZE];
+                        auto result = std::to_chars(headerBuf, headerBuf + ServerConstants::STACK_BUF_SIZE, currentFrame->size());
+                        res->write(std::string_view(headerBuf, result.ptr - headerBuf));
+                        
+                        res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
+                        res->write(std::string_view(reinterpret_cast<const char*>(currentFrame->data()), currentFrame->size()));
+                    });
+                } else {
+                    if (!viewer.isLagging) {
+                        std::cout << "[Network Telemetry] Warning: TCP stall detected! OS buffer backed up with " 
+                                  << backpressure << " bytes. Dropping frames to maintain real-time latency...\n";
+                        viewer.isLagging = true;
+                    }
+                    viewer.consecutiveDrops++;
+                }
+                
                 viewer.lastSentFrameId = currentFrameId;
             }
             ++i;

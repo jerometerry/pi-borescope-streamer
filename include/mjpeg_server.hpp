@@ -28,9 +28,12 @@ public:
 
 private:
     struct ViewerState {
-        uWS::HttpResponse<false>* res;
-        uint32_t lastSentFrameId;
-        bool isClosed;
+        uWS::HttpResponse<false>* res{};
+        uint32_t lastSentFrameId{0};
+        bool isClosed{false};
+
+        bool isLagging{false};
+        uint32_t consecutiveDrops{0};
     };
 
     const int port;
