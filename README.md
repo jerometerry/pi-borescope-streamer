@@ -89,7 +89,7 @@ Run the binary out of its target profile directory. You can optionally specify a
 ./out/build/release/pi-borescope-streamer
 ```
 
-### 5. Launch the Video4Linux Daemon
+## Run as Video4Linux Daemon
 
 Before launching the daemon, you must allocate a virtual Video4Linux loopback device for it to stream into. 
 *(Note: This virtual device will disappear if the Raspberry Pi reboots, so you must run this command after every restart).*
@@ -99,29 +99,7 @@ Before launching the daemon, you must allocate a virtual Video4Linux loopback de
 sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1
 
 ```
-
-Once the virtual device is active, launch the compiled background daemon. By default, it will automatically bind to `/dev/video7` at `640x480`.
-
-```bash
-# Run as console app with default config
-./out/build/release/v4l2-borescope-daemon
-
-```
-
-**Advanced Configuration:**
-If you upgrade to a 1080p camera or want to stream to a different video node, you can override the defaults using command-line arguments. *(Ensure you also update your `modprobe` command to create the matching `/dev/videoX` node).*
-
-```bash
-# Run as console app with custom config
-./out/build/release/v4l2-borescope-daemon --dev /dev/video9 --width 1920 --height 1080 --size 262144
-
-```
-
-**Daemon Configuration (Persistent Setup)**
-
 To ensure the virtual device and background streaming service survive a system reboot, run the following commands. 
-
-*(Ensure you are currently inside the `pi-borescope-streamer` directory before running step 3, as it uses your current path to configure the service).*
 
 ```bash
 # Start the v4l2loopback module on boot
@@ -129,6 +107,8 @@ echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf
 
 # Register the supercamera hardware parameters for the module
 echo 'options v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1' | sudo tee /etc/modprobe.d/v4l2loopback.conf
+
+**Ensure you are currently inside the `pi-borescope-streamer` directory before running, as it uses your current path to configure the service.**
 
 # Create the systemd service file dynamically for your user
 cat << EOF | sudo tee /etc/systemd/system/v4l2-borescope.service > /dev/null
