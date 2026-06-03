@@ -100,11 +100,6 @@ void MjpegServer::start() {
                ->end(Resources::index_html);
         });
 
-        app.get("/", [](auto *res, auto *) {
-            res->writeHeader("Content-Type", "text/html")
-               ->end(Resources::index_html);
-        });
-
         app.get("/api/cameras", [](auto *res, auto *) {
             auto cameras = DeviceFinder::superCameras();
             std::string jsonPayload = DeviceFinder::toJson(cameras);
@@ -112,27 +107,7 @@ void MjpegServer::start() {
                ->writeHeader("Content-Type", "application/json")
                ->end(jsonPayload);
         });
-
-
-        app.get("/api/cameras", [](auto *res, auto *) {
-            auto cameras = DeviceFinder::superCameras();
-            std::string jsonPayload = DeviceFinder::toJson(cameras);
-            res->writeHeader("Content-Type", "application/json")
-               ->end(jsonPayload);
-        });
         
-        app.get("/snapshot", [this](auto *res, auto *) {
-            auto snapshot = pipeline.getSnapshot();
-            if (!snapshot || snapshot->empty()) {
-                res->writeStatus("404 Not Found")->end();
-            } else {
-                res->writeHeader("Connection", "close")
-                   ->writeHeader("Content-Type", "image/jpeg")
-                   ->writeHeader("Cache-Control", "no-store, max-age=0")
-                   ->end(std::string_view(reinterpret_cast<const char*>(snapshot->data()), snapshot->size()));
-            }
-        });        
-
         app.get("/favicon.ico", [](auto *res, auto *) {
             res->writeStatus("404 Not Found")
                ->writeHeader("Connection", "close")

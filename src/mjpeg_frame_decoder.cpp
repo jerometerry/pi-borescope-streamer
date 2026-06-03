@@ -8,8 +8,8 @@
 #include "server_constants.hpp"
 
 MjpegFrameDecoder::MjpegFrameDecoder(
-    std::function<void(const std::vector<uint8_t>&)> broadcastHandler, std::function<void()> buttonHandler) 
-    : broadcastHandler(std::move(broadcastHandler)), buttonHandler(std::move(buttonHandler)) {
+    std::function<void(const std::vector<uint8_t>&)> broadcastHandler) 
+    : broadcastHandler(std::move(broadcastHandler)) {
         frameBuffer.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         streamBuffer.reserve(ServerConstants::EIGHT_KILOBYTES);
         emitBuffer.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
@@ -63,10 +63,6 @@ void MjpegFrameDecoder::processIncomingCameraData(std::span<const uint8_t> data)
             trimAndEmitFrame();
         }
         metadata_ = meta;
-
-        if (meta.isButtonPressed() && buttonHandler) {
-            buttonHandler();
-        }
 
         if (!meta.hasGravitySensor() && meta.getOtherFlags() == 0 && meta.getCameraNumber() < 2) {
             size_t payloadStart = i + TOTAL_HEADER_SIZE;

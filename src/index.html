@@ -2,32 +2,107 @@
 <html>
 <head>
     <title>Borescope Desk</title>
+    <style>
+        body {
+            background: #111;
+            text-align: center;
+            margin-top: 40px;
+            color: #fff;
+            font-family: sans-serif;
+        }
+
+        .dashboard-container {
+            margin: 20px auto;
+            max-width: 950px;
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .feed-container {
+            flex: 0 1 auto;
+        }
+
+        .video-element {
+            width: 440px;
+            border: 4px solid #333;
+            background: #000;
+            cursor: pointer;
+        }
+
+        .canvas-element {
+            border: 4px solid #4caf50;
+            background: #000;
+        }
+
+        .button-group {
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .action-btn {
+            padding: 8px 16px;
+            background: #4caf50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .action-btn:hover {
+            background: #45a049;
+        }
+
+        .action-btn.download-btn {
+            background: #2196F3;
+        }
+
+        .action-btn.download-btn:hover {
+            background: #0b7dda;
+        }
+    </style>
 </head>
-<body style='background:#111; text-align:center; margin-top:40px; color:#fff; font-family:sans-serif;'>
+<body>
+
     <h2>Borescope Dashboard</h2>
-    <div style='margin: 20px auto; max-width: 950px; display: flex; justify-content: space-around;'>
-        <div>
+    
+    <div class="dashboard-container">
+        <div class="feed-container">
             <h3>Live Stream</h3>
-            <img id='video-feed' src='/stream' onclick='resyncLiveStream()' onerror='reconnectStream()' alt='Live Borescope Feed' style='width:440px; border:4px solid #333; background:#000;' />
-        </div>
-        <div>
-            <h3>Hardware Snap</h3>
-            <img src='' id='snap_view' style='width:440px; border:4px solid #4caf50; background:#000;' 
-                 onerror="this.style.display='none'; document.getElementById('snap_msg').style.display='block';" 
-                 onload="this.style.display='inline-block'; document.getElementById('snap_msg').style.display='none';" />
-            <div id='snap_msg' style='width:440px; height:240px; border:2px dashed #444; line-height:240px; color:#777;'>
-                Click camera button quickly to latch frame.
-            </div>
-            <p>
-                <button onclick="refreshSnapshot();" style='padding:8px 16px; background:#4caf50; color:white; border:none; cursor:pointer;'>
-                    Update Canvas
+            <img id="video-feed" 
+                 src="/stream" 
+                 onclick="takeSnapshot()" 
+                 onerror="reconnectStream()" 
+                 alt="Live Borescope Feed" 
+                 class="video-element" />
+
+            <div class="button-group">
+                <button onclick="takeSnapshot();" class="action-btn">
+                    Take Snapshot
                 </button>
-            </p>
+            </div>
+        </div>
+
+        <div class="feed-container">
+            <h3>Snapshot</h3>
+            <canvas id="snap-view" width="440" height="240" class="canvas-element"></canvas>
+
+            <div class="button-group">
+                <button onclick="downloadSnapshot();" class="action-btn download-btn">
+                    Download Snapshot
+                </button>
+            </div>
         </div>
     </div>
+
     <script>
+        const videoFeedId = 'video-feed';
+        const snapViewId = 'snap-view';
+        const snapMsgId = 'snap-msg';
+
         function resyncLiveStream() {
-            const liveStream = document.getElementById('video-feed');
+            const liveStream = document.getElementById(videoFeedId);
             if (liveStream) {
                 liveStream.src = '/stream?cb=' + Date.now();
             }
@@ -47,16 +122,34 @@
             setTimeout(resyncLiveStream, 2000);
         }
 
-        function refreshSnapshot() {
-            const snap = document.getElementById('snap_view');
-            if (snap) {
-                snap.src = '/snapshot?t=' + Date.now();
+        function takeSnapshot() {
+            const img = document.getElementById(videoFeedId);
+            const canvas = document.getElementById(snapViewId);
+
+            if (!img.complete || img.naturalWidth === 0) {
+                console.log("Stream image data not ready yet.");
+                return;
             }
+
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         }
 
-        setInterval(refreshSnapshot, 5000);
+        function downloadSnapshot() {
+            const canvas = document.getElementById(snapViewId);
+            const link = document.createElement('a');
+            link.download = 'borescope-snap-' + Date.now() + '.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
         resyncLiveStream();
-        refreshSnapshot();
+
+        document.getElementById(videoFeedId).addEventListener('load', function() {
+            takeSnapshot();
+        });
     </script>
 </body>
 </html>

@@ -21,7 +21,6 @@
 namespace {
     constexpr int TEST_PORT = 18080; 
 
-    // Helper to safely check HTTP headers regardless of how the framework capitalizes them
     std::string toLowerString(std::string str) {
         std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c){ return std::tolower(c); });
         return str;
@@ -51,15 +50,6 @@ protected:
         server_.reset(); 
     }
 
-    void injectMockSnapshot(const std::vector<uint8_t>& mockData) {
-        pipeline_.requestSnapshot();
-        auto buffer = pipeline_.checkoutBuffer();
-        if (buffer) {
-            buffer->assign(mockData.begin(), mockData.end());
-            pipeline_.updateFrame(std::move(buffer));
-        }
-    }
-
     void injectMockVideoFrame(const std::vector<uint8_t>& mockData) {
         auto buffer = pipeline_.checkoutBuffer();
         if (buffer) {
@@ -68,7 +58,6 @@ protected:
         }
     }
 
-    // Upgraded to act as a fully compliant HTTP/1.1 client
     std::string fetchFromLocalhost(const std::string& route) {
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) return "";
@@ -88,8 +77,6 @@ protected:
             return "";
         }
 
-        // We MUST send a 'Host' header for HTTP/1.1 compliance.
-        // We MUST send 'Connection: close' so the server hangs up, unblocking our read() loop.
         std::string requestPayload = "GET " + route + " HTTP/1.1\r\n"
                                      "Host: 127.0.0.1\r\n"
                                      "Connection: close\r\n\r\n";
@@ -104,7 +91,7 @@ protected:
             if (bytesRead > 0) {
                 response.append(buffer, bytesRead);
             } else {
-                break; // Server cleanly closed the socket (0) or timeout (-1)
+                break; 
             }
         }
         
@@ -130,23 +117,7 @@ TEST_F(MjpegServerTest, ReturnsFaviconNotFoundWithCacheHeaders) {
     EXPECT_NE(lowerResponse.find("max-age=31536000"), std::string::npos); 
 }
 
-TEST_F(MjpegServerTest, ServesSnapshotJpegData) {
-    std::vector<uint8_t> mockJpeg = {0xFF, 0xD8, 0x01, 0x02, 0x03, 0xFF, 0xD9};
-    injectMockSnapshot(mockJpeg);
-
-    std::string response = fetchFromLocalhost("/snapshot");
-    std::string lowerResponse = toLowerString(response);
-
-    EXPECT_NE(lowerResponse.find("200 ok"), std::string::npos);
-    EXPECT_NE(lowerResponse.find("content-type: image/jpeg"), std::string::npos);
-    
-    // We check the original 'response' (not lowercased) to preserve the binary integrity 
-    std::string payloadString(mockJpeg.begin(), mockJpeg.end());
-    EXPECT_NE(response.find(payloadString), std::string::npos) << "Binary JPEG payload was corrupted or missing.";
-}
-
 TEST_F(MjpegServerTest, ServesWebDashboard) {
-    // Note: The UI is now hosted at the root endpoint '/'
     std::string response = fetchFromLocalhost("/");
     std::string lowerResponse = toLowerString(response);
 
@@ -173,8 +144,6 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
     std::string request = "GET /stream HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
     send(sock, request.c_str(), request.length(), 0);
 
-    // IMMEDIATE INJECTION: We must give the loop something to broadcast immediately,
-    // otherwise uWebSockets will "cork" the initial HTTP headers waiting for a payload!
     std::vector<uint8_t> mockVideoFrame = {0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9};
     injectMockVideoFrame(mockVideoFrame);
 

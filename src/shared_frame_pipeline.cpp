@@ -14,9 +14,6 @@ SharedFramePipeline::SharedFramePipeline() {
 
     latestFrame_ = freePool_.back();
     freePool_.pop_back();
-
-    snapshotFrame_ = freePool_.back();
-    freePool_.pop_back();
 }
 
 std::shared_ptr<std::vector<uint8_t>> SharedFramePipeline::checkoutBuffer() {
@@ -44,7 +41,6 @@ void SharedFramePipeline::updateFrame(std::shared_ptr<std::vector<uint8_t>> newF
     }
 
     std::shared_ptr<const std::vector<uint8_t>> oldActive;
-    std::shared_ptr<std::vector<uint8_t>> oldSnapshotToReturn;
 
     {
         std::scoped_lock lock(activeMutex_);
@@ -52,50 +48,15 @@ void SharedFramePipeline::updateFrame(std::shared_ptr<std::vector<uint8_t>> newF
         
         oldActive = std::move(latestFrame_);
         latestFrame_ = std::move(newFrame);
-
-        if (captureSnapshotRequested_) {
-            auto newSnapshotBuffer = checkoutBuffer();
-            
-            if (newSnapshotBuffer) {
-                newSnapshotBuffer->assign(latestFrame_->begin(), latestFrame_->end());
-
-                oldSnapshotToReturn = std::move(snapshotFrame_);
-                snapshotFrame_ = std::move(newSnapshotBuffer);
-            }
-            
-            initialSnapshotCaptured_ = true;
-            captureSnapshotRequested_ = false;
-        }
     }
 
     if (oldActive) {
         returnBuffer(std::const_pointer_cast<std::vector<uint8_t>>(std::move(oldActive)));
     }
-    
-    if (oldSnapshotToReturn) {
-        returnBuffer(std::move(oldSnapshotToReturn));
-    }
-}
-
-
-void SharedFramePipeline::requestSnapshot() {
-    std::scoped_lock lock(activeMutex_);
-    captureSnapshotRequested_ = true;
 }
 
 std::shared_ptr<const std::vector<uint8_t>> SharedFramePipeline::getCurrentFrame(uint32_t& outFrameId) const {
     std::scoped_lock lock(activeMutex_);
     outFrameId = frameId_;
     return latestFrame_;
-}
-
-std::shared_ptr<const std::vector<uint8_t>> SharedFramePipeline::getSnapshot() const {
-    std::scoped_lock lock(activeMutex_);
-
-    if (!initialSnapshotCaptured_ && latestFrame_ && !latestFrame_->empty()) {
-        snapshotFrame_->assign(latestFrame_->begin(), latestFrame_->end());
-        initialSnapshotCaptured_ = true;
-    }
-
-    return snapshotFrame_;
 }

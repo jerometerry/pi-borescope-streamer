@@ -5,7 +5,6 @@
 #include "usb_capture_engine.hpp"
 
 class SharedFramePipeline;
-class HardwareButtonManager;
 class MjpegServer;
 struct DeviceInfo;
 
@@ -16,8 +15,8 @@ struct DeviceInfo;
  * motherboard or breadboard for the software. 
  * 
  * It takes all the independent, highly-specialized modules (the USB engine, the memory pipeline, 
- * the button filter, and the network server), connects their communication wires together, and 
- * provides a single master power switch to safely start and shut down the entire operation.
+ * and the network server), connects their communication wires together, and provides a single master 
+ * power switch to safely start and shut down the entire operation.
  */
 class ApplicationContext {
 public:
@@ -27,12 +26,10 @@ public:
      * between the camera, the memory pipeline, and the network broadcaster so data can 
      * flow once the power is flipped.
      * @param pipeline The shared memory zone where the camera will drop finished pictures.
-     * @param buttonManager The smart filter that will interpret physical button clicks.
      * @param server The network engine that will broadcast the pictures over Wi-Fi.
      * @param running The master emergency stop switch that keeps the background threads alive.
      */
     ApplicationContext(SharedFramePipeline& pipeline, 
-                       HardwareButtonManager& buttonManager, 
                        MjpegServer& server,
                        std::atomic<bool>& running);
 
@@ -75,11 +72,6 @@ private:
      * @brief A borrowed reference to the memory pipeline.
      */
     std::reference_wrapper<SharedFramePipeline> pipeline_;
-
-    /**
-     * @brief A borrowed reference to the hardware button filter.
-     */
-    std::reference_wrapper<HardwareButtonManager> buttonManager_;
 
     /**
      * @brief A borrowed reference to the network broadcasting engine.

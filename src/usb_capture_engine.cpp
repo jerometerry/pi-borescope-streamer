@@ -8,15 +8,14 @@
 #include <thread>
 #include <utility>
 #include <vector> 
-#include "hardware_button_manager.hpp"
 #include "server_constants.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "usb_camera.hpp"
 #include "usb_capture_engine.hpp"
 #include "mjpeg_frame_decoder.hpp"
 
-UsbCaptureEngine::UsbCaptureEngine(SharedFramePipeline& pipeline, HardwareButtonManager& buttonManager, std::atomic<bool>& running)
-        : pipeline_(pipeline), buttonManager_(buttonManager), running_(running) {}
+UsbCaptureEngine::UsbCaptureEngine(SharedFramePipeline& pipeline, std::atomic<bool>& running)
+        : pipeline_(pipeline), running_(running) {}
 
 UsbCaptureEngine::~UsbCaptureEngine() { stop(); }
 
@@ -40,11 +39,7 @@ void UsbCaptureEngine::loop(const DeviceInfo& target) {
                     buffer->assign(frame.begin(), frame.end());
                     pipeline_.updateFrame(std::move(buffer)); 
                 }
-            },
-            [this]() { 
-                buttonManager_.registerHardwarePress(); 
-                pipeline_.requestSnapshot();
-            }
+            }        
         );
 
         std::array<uint8_t, ServerConstants::FOUR_KILOBYTES> readBuffer{};

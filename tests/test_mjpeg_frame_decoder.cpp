@@ -15,7 +15,6 @@
 class MockHandlers {
 public:
     MOCK_METHOD(void, OnBroadcast, (const std::vector<uint8_t>& frameData));
-    MOCK_METHOD(void, OnButtonPress, ());
 };
 
 class MjpegFrameDecoderTest : public ::testing::Test {
@@ -26,8 +25,7 @@ private:
 protected:
     void SetUp() override {
         decoder_ = std::make_unique<MjpegFrameDecoder>(
-            [this](const std::vector<uint8_t>& data) { mock_handlers_.OnBroadcast(data); },
-            [this]() { mock_handlers_.OnButtonPress(); }
+            [this](const std::vector<uint8_t>& data) { mock_handlers_.OnBroadcast(data); }
         );
     }
 
@@ -156,7 +154,6 @@ TEST_F(MjpegFrameDecoderTest, TriggersButtonHandlerOnHardwareFlag) {
         return packet;
     };
 
-    EXPECT_CALL(GetMock(), OnButtonPress()).Times(1);
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(::testing::AnyNumber());
 
     auto packet1 = buildPacket(1, false, {0xFF, 0xD8, 0x01});
@@ -171,7 +168,6 @@ TEST_F(MjpegFrameDecoderTest, TriggersButtonHandlerOnHardwareFlag) {
 
 TEST_F(MjpegFrameDecoderTest, IgnoresInvalidHeaderOrShortBuffer) {
     EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
-    EXPECT_CALL(GetMock(), OnButtonPress()).Times(0);
 
     std::vector<uint8_t> const short_buffer = {0xAA, 0xBB};
     GetDecoder().processIncomingCameraData(short_buffer);
@@ -195,7 +191,6 @@ TEST_F(MjpegFrameDecoderTest, TriggersButtonHandlerOnFlag) {
     chunk->setGravitySensor(0);
     chunk->setButtonPressed(true);
 
-    EXPECT_CALL(GetMock(), OnButtonPress()).Times(1);
     GetDecoder().processIncomingCameraData(packet);
 }
 
@@ -310,7 +305,7 @@ TEST_F(MjpegFrameDecoderTest, AbortsOnMidFrameCameraShift) {
 }
 
 TEST(UsbFrameDecoderEdgeTest, HandlesNullCallbacksSafely) {
-    MjpegFrameDecoder silentDecoder(nullptr, nullptr);
+    MjpegFrameDecoder silentDecoder(nullptr);
     std::vector<uint8_t> packet(100, 0x00);
     ASSERT_NO_THROW(silentDecoder.processIncomingCameraData(packet));
 }

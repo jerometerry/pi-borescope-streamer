@@ -21,11 +21,8 @@
 #include <vector>
 #include "application_context.hpp"
 #include "device_info.hpp"
-#include "server_time.hpp"
 #include "usb_camera.hpp"
-#include "wall_clock.hpp"
 #include "shared_frame_pipeline.hpp"
-#include "hardware_button_manager.hpp"
 #include "mjpeg_server.hpp"
 
 namespace {
@@ -109,12 +106,9 @@ int main(int argc, const char* argv[]) {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-        WallClock systemClock;
-        const ServerTime serverTime(systemClock, std::chrono::steady_clock::now());
         SharedFramePipeline pipeline;
-        HardwareButtonManager buttonManager(serverTime);
         MjpegServer server(port, globalRunning, pipeline);
-        ApplicationContext app(pipeline, buttonManager, server, globalRunning);
+        ApplicationContext app(pipeline, server, globalRunning);
 
         app.run(camera);
         

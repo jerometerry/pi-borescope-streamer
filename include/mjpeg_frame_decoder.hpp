@@ -27,14 +27,8 @@ public:
      * @brief Construct the decoder and wire up its output destinations.
      * @param broadcastHandler The function we call to hand off a finished, clean JPEG picture. 
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
-     * @param buttonHandler The function we call whenever the camera reports the physical button 
-     * is currently pressed. This usually connects to the HardwareButtonManager, which acts 
-     * as a filter to turn these raw "down" signals into actual "clicks".
      */
-    explicit MjpegFrameDecoder(
-        std::function<void(const std::vector<uint8_t>&)> broadcastHandler, 
-        std::function<void()> buttonHandler
-    );
+    explicit MjpegFrameDecoder(std::function<void(const std::vector<uint8_t>&)> broadcastHandler);
 
     /**
      * @brief Pour new raw data from the camera cable into the decoder.
@@ -91,11 +85,6 @@ private:
      * @brief Where to send finished video pictures.
      */
     std::function<void(const std::vector<uint8_t>&)> broadcastHandler;
-
-    /**
-     * @brief Where to send raw hardware button press alerts.
-     */
-    std::function<void()> buttonHandler;
 
     /**
      * @brief Snip out the exact picture and send it off.

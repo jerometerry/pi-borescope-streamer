@@ -120,9 +120,7 @@ add_library(borescope_core STATIC
     src/mjpeg_frame_decoder.cpp
     src/application_context.cpp
     src/mjpeg_server.cpp
-    src/server_time.cpp
     src/shared_frame_pipeline.cpp
-    src/hardware_button_manager.cpp
     src/usb_capture_engine.cpp
     ${GENERATED_HPP}
 )
@@ -215,7 +213,6 @@ if(BUILD_TESTING)
     target_compile_options(gmock_main PRIVATE -w)
 
     add_executable(run_project_tests 
-        tests/test_application_context.cpp
         tests/test_device_finder.cpp
         tests/test_mjpeg_frame_decoder.cpp
         tests/test_mjpeg_server.cpp

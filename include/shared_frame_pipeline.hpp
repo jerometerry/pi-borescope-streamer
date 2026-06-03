@@ -54,26 +54,12 @@ public:
     void returnBuffer(std::shared_ptr<std::vector<uint8_t>> buffer);
 
     /**
-     * @brief Flag the system to save a permanent copy of the very next picture.
-     * @details Triggered when the physical button on the camera handle is clicked. 
-     * It tells the pipeline to intercept the next incoming video frame and save a 
-     * duplicate of it before handing it over to the live stream.
-     */
-    void requestSnapshot();
-
-    /**
      * @brief Safely look at the picture currently in the active display window.
      * @param outFrameId A counter that updates with the ID of the returned picture, 
      * so the server knows if it has already broadcasted this exact frame.
      * @return The raw JPEG bytes ready to be sent over the Wi-Fi.
      */
     std::shared_ptr<const std::vector<uint8_t>> getCurrentFrame(uint32_t& outFrameId) const;
-
-    /**
-     * @brief Retrieve the picture that was saved during the last button click.
-     * @return The raw JPEG bytes of the saved snapshot.
-     */
-    std::shared_ptr<const std::vector<uint8_t>> getSnapshot() const;
     
 private:
     /**
@@ -97,22 +83,7 @@ private:
     std::shared_ptr<const std::vector<uint8_t>> latestFrame_;
 
     /**
-     * @brief The safe storage box holding the last snapped photo.
-     */
-    std::shared_ptr<std::vector<uint8_t>> snapshotFrame_;
-
-    /**
      * @brief A rolling counter tracking how many pictures have passed through the pipeline.
      */
     uint32_t frameId_{0};
-
-    /**
-     * @brief A hidden switch flipped by the hardware button to capture the next frame.
-     */
-    bool captureSnapshotRequested_{false};
-
-    /**
-     * @brief Ensures we always have at least one valid picture in the snapshot storage box.
-     */
-    mutable bool initialSnapshotCaptured_{false};
 };

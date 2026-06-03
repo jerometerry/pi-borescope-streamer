@@ -7,14 +7,12 @@
 #include "usb_capture_engine.hpp"
 
 ApplicationContext::ApplicationContext(SharedFramePipeline& pipeline, 
-                         HardwareButtonManager& buttonManager, 
                          MjpegServer& server,
                          std::atomic<bool>& running)
     : pipeline_(pipeline), 
-      buttonManager_(buttonManager), 
       server_(server), 
       running_(running),
-      captureEngine_(pipeline, buttonManager, running) {} // 💡 Forward dependencies cleanly
+      captureEngine_(pipeline, running) {}
 
 int ApplicationContext::run(const DeviceInfo& target) {
     auto& serverRef = server_.get();

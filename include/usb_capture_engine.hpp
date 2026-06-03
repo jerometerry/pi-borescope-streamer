@@ -2,7 +2,6 @@
 #include <atomic>
 #include <memory>
 #include <thread>
-class HardwareButtonManager;
 class SharedFramePipeline;
 class UsbCamera;
 class MjpegFrameDecoder;
@@ -15,9 +14,8 @@ struct DeviceInfo;
  * reads raw data off the wire as fast as the camera can send it.
  * 
  * It also acts as the foreman for the intake process: as raw data pours in, it hands the bytes 
- * to the MjpegFrameDecoder. When the decoder successfully extracts a clean picture or detects a 
- * hardware button press, this engine immediately routes those finished products into the 
- * SharedFramePipeline and the HardwareButtonManager.
+ * to the MjpegFrameDecoder. When the decoder successfully extracts a clean picture, this engine immediately routes
+ * those finished products into the SharedFramePipeline.
  */
 class UsbCaptureEngine {
 public:
@@ -26,12 +24,10 @@ public:
      * @details This sets up the routing connections but does not actually turn the pump on 
      * or claim the USB port yet.
      * @param pipeline The memory exchange zone where finished pictures will be dropped.
-     * @param buttonManager The smart filter that will process physical button clicks.
      * @param running The master emergency stop switch that keeps the background thread alive.
      */
     UsbCaptureEngine(
         SharedFramePipeline& pipeline, 
-        HardwareButtonManager& buttonManager, 
         std::atomic<bool>& running
     );
 
@@ -69,11 +65,6 @@ private:
      * @brief The memory exchange zone where this engine drops finished pictures.
      */
     SharedFramePipeline& pipeline_;
-
-    /**
-     * @brief The filter that analyzes hardware button clicks detected by the decoder.
-     */
-    HardwareButtonManager& buttonManager_;
 
     /**
      * @brief The global kill switch that keeps the infinite pumping loop running.
