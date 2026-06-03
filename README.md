@@ -89,6 +89,17 @@ Run the binary out of its target profile directory. You can optionally specify a
 ./out/build/release/pi-borescope-streamer
 ```
 
+### 5. Launch the Video4Linux Daemon
+
+```bash
+# Defaults are --dev /dev/video7 --width 640 --height 480 --size 131072
+./out/build/release/v4l2-borescope-daemon
+```
+
+```bash
+./out/build/release/v4l2-borescope-daemon --dev /dev/video9 --width 1920 --height 1080 --size 262144
+```
+
 *Note: For a clean rebuild, run `cmake --build --preset clean-debug` or `cmake --build --preset clean-release` to clear old artifacts.*
 
 ## 📡 PI Streaming Server Usage

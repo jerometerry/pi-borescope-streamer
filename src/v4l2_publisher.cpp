@@ -2,11 +2,15 @@
 #include <linux/videodev2.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <cstddef>
 #include <iostream>
+#include <string>
+#include "v4l2_config.hpp"
 #include "v4l2_publisher.hpp"
 
-V4l2Publisher::V4l2Publisher(const V4l2Config& config) {
-    v4l2_fd_ = open(config.devicePath.c_str(), O_RDWR);
+V4l2Publisher::V4l2Publisher(const V4l2Config& config) 
+    : v4l2_fd_(open(config.devicePath.c_str(), O_RDWR)) {
+    
     if (v4l2_fd_ < 0) {
         std::cerr << "[V4L2 Core] Failed to open " << config.devicePath << ". Is v4l2loopback loaded?\n";
         return;
@@ -14,11 +18,15 @@ V4l2Publisher::V4l2Publisher(const V4l2Config& config) {
 
     struct v4l2_format vid_format = {};
     vid_format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+    
+    // Suppress C++ union warnings because we are interfacing with a C Linux kernel API
+    // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
     vid_format.fmt.pix.width = config.width;
     vid_format.fmt.pix.height = config.height;
     vid_format.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
     vid_format.fmt.pix.sizeimage = config.sizeImage;
     vid_format.fmt.pix.field = V4L2_FIELD_NONE;
+    // NOLINTEND(cppcoreguidelines-pro-type-union-access)
 
     if (ioctl(v4l2_fd_, VIDIOC_S_FMT, &vid_format) < 0) {
         std::cerr << "[V4L2 Core] Failed to set loopback video format.\n";
