@@ -95,6 +95,7 @@ Before launching the daemon, you must allocate a virtual Video4Linux loopback de
 *(Note: This virtual device will disappear if the Raspberry Pi reboots, so you must run this command after every restart).*
 
 ```bash
+# Add temporary loopback device 
 sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1
 
 ```
@@ -102,7 +103,7 @@ sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman superca
 Once the virtual device is active, launch the compiled background daemon. By default, it will automatically bind to `/dev/video7` at `640x480`.
 
 ```bash
-# Launch with default parameters
+# Run as console app with default config
 ./out/build/release/v4l2-borescope-daemon
 
 ```
@@ -111,8 +112,68 @@ Once the virtual device is active, launch the compiled background daemon. By def
 If you upgrade to a 1080p camera or want to stream to a different video node, you can override the defaults using command-line arguments. *(Ensure you also update your `modprobe` command to create the matching `/dev/videoX` node).*
 
 ```bash
+# Run as console app with custom config
 ./out/build/release/v4l2-borescope-daemon --dev /dev/video9 --width 1920 --height 1080 --size 262144
 
+```
+
+**Daemon Configuration**
+
+```bash
+# Start the v4l2loopback service on boot
+echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf
+
+# Register the supercamera as a v4l2loopback device on system boot
+echo 'options v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1' | sudo tee /etc/modprobe.d/v4l2loopback.conf
+
+# create the v4l2-borescope service. 
+cat << 'EOF' | sudo tee /etc/systemd/system/my-custom.service > /dev/null
+[Unit]
+Description=[REPLACE_WITH_DESIRED_DAEMON_NAME]
+After=network.target systemd-modules-load.service
+Wants=systemd-modules-load.service
+
+[Service]
+Type=simple
+User=[REPLACE_WITH_DESIRED_USER]
+Group=[REPLACE_WITH_DESIRED_GROUP]
+WorkingDirectory=[REPLACE_WITH_DESIRED_DIR]
+ExecStart=[REPLACE_WITH_START_CMD]
+
+# Resilience: Automatically restart the daemon if it crashes, but wait 5 seconds to avoid spamming the CPU
+Restart=on-failure
+RestartSec=5
+
+# Standardize the kill signal to match your C++ SIGTERM handler
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+**Example service definition**
+
+``ini
+[Unit]
+Description=Useeplus Borescope V4L2 Daemon
+After=network.target systemd-modules-load.service
+Wants=systemd-modules-load.service
+
+[Service]
+Type=simple
+User=jterry
+Group=jterry
+WorkingDirectory=/home/jterry/github/pi-borescope-streamer
+ExecStart=/home/jterry/github/pi-borescope-streamer/out/build/release/v4l2-borescope-daemon --dev /dev/video7 --width 640 --height 480 --size 131072
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 *Note: For a clean rebuild, run `cmake --build --preset clean-debug` or `cmake --build --preset clean-release` to clear old artifacts.*
