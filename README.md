@@ -108,7 +108,7 @@ echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf
 # Register the supercamera hardware parameters for the module
 echo 'options v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1' | sudo tee /etc/modprobe.d/v4l2loopback.conf
 
-**Ensure you are currently inside the `pi-borescope-streamer` directory before running, as it uses your current path to configure the service.**
+*Ensure you are currently inside the `pi-borescope-streamer` directory before running, as it uses your current path to configure the service.*
 
 # Create the systemd service file dynamically for your user
 cat << EOF | sudo tee /etc/systemd/system/v4l2-borescope.service > /dev/null
