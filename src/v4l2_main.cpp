@@ -1,7 +1,7 @@
-#include <stdint.h>
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdlib> 
 #include <exception>
 #include <iostream>
@@ -83,7 +83,7 @@ int main(int argc, const char* argv[]) {
         return EXIT_FAILURE;
     }
     
-    const DeviceInfo camera = cameras[0];
+    const DeviceInfo& camera = cameras[0];
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
