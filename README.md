@@ -100,17 +100,10 @@ Once the server is running and the camera is plugged in, you can access the stre
 
 ## Run as Video4Linux Daemon
 
-Before launching the daemon, you must allocate a virtual Video4Linux loopback device for it to stream into. 
-*(Note: This virtual device will disappear if the Raspberry Pi reboots, so you must run this command after every restart).*
-
 ```bash
-# Add temporary loopback device, if you are running run v4l2-borescope-daemon as a console app instead of through systemctl.
+# Add temporary loopback device. Below we will configure this to run on system boot. This is only to avoid restarting.
 sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1
-```
 
-To ensure the virtual device and background streaming service survive a system reboot, run the following commands.
-
-```bash
 # Start the v4l2loopback module on boot
 echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf
 
@@ -152,6 +145,16 @@ sudo systemctl start v4l2-borescope.service
 
 # Verify the service is running successfully
 systemctl status v4l2-borescope.service
+```
+
+```bash
+# Grab a snapshot of a frame from the camera and save it as `snapshot.jpg` in the current directory
+ffmpeg -f v4l2 -i /dev/video7 -vframes 1 -update 1 snapshot.jpg
+```
+
+```bash
+# Open the cameras video stream using VLC Media Player, if you are using Raspberry Pi Desktop
+vlc v4l2:///dev/video7
 ```
 
 ## 🐳 Docker Build
