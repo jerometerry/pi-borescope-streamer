@@ -102,7 +102,9 @@ Once the server is running and the camera is plugged in, you can access the stre
 
 ```bash
 # Add temporary loopback device. Below we will configure this to run on system boot. This is only to avoid restarting.
-sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1
+
+sudo rmmod v4l2loopback
+sudo modprobe v4l2loopback devices=1 video_nr=7 card_label="Geek szitman supercamera" exclusive_caps=1 max_buffers=8
 
 # Start the v4l2loopback module on boot
 echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf
@@ -115,9 +117,9 @@ echo 'options v4l2loopback devices=1 video_nr=7 card_label="Geek szitman superca
 
 ```bash
 # Create the systemd service file dynamically for your user
-cat << EOF | sudo tee /etc/systemd/system/v4l2-borescope.service > /dev/null
+cat << EOF | sudo tee /etc/systemd/system/v4l2-borescope@.service > /dev/null
 [Unit]
-Description=Useeplus Borescope V4L2 Daemon
+Description=Useeplus Borescope V4L2 Daemon (%i)
 After=network.target systemd-modules-load.service
 Wants=systemd-modules-load.service
 
@@ -126,7 +128,7 @@ Type=simple
 User=$USER
 Group=$USER
 WorkingDirectory=$PWD
-ExecStart=$PWD/out/build/release/v4l2-borescope-daemon --dev /dev/video7 --width 640 --height 480 --size 131072
+ExecStart=$PWD/out/build/release/v4l2-borescope-daemon --dev /dev/%i --width 640 --height 480 --size 131072
 Restart=on-failure
 RestartSec=5
 KillSignal=SIGTERM
@@ -140,11 +142,11 @@ EOF
 ```bash
 # Refresh systemd, enable the service, and start it
 sudo systemctl daemon-reload
-sudo systemctl enable v4l2-borescope.service
-sudo systemctl start v4l2-borescope.service
+sudo systemctl enable v4l2-borescope@video7.service
+sudo systemctl start v4l2-borescope@video7.service
 
 # Verify the service is running successfully
-systemctl status v4l2-borescope.service
+systemctl status v4l2-borescope@video7.service
 ```
 
 ```bash
@@ -155,6 +157,54 @@ ffmpeg -f v4l2 -i /dev/video7 -vframes 1 -update 1 snapshot.jpg
 ```bash
 # Open the cameras video stream using VLC Media Player, if you are using Raspberry Pi Desktop
 vlc v4l2:///dev/video7
+```
+
+### Using uStreamer
+
+Here is how to deploy uStreamer to create a high-performance HTTP MJPEG streaming server for your Useeplus USB camera.
+
+**Compile and Install uStreamer**
+First, install the required dependencies and build the application from source:
+
+```bash
+sudo apt update
+sudo apt install libevent-dev libjpeg-dev libbsd-dev
+
+git clone --depth=1 https://github.com/pikvm/ustreamer.git
+cd ustreamer
+make
+sudo make install
+
+```
+
+**Start the v4l2-borescope Daemon**
+Ensure your custom V4L2 loopback device is active. This daemon bridges the proprietary Useeplus protocol into a standard video feed that uStreamer can natively consume.
+*(See the Daemon Configuration section above for setup instructions).*
+
+**Launch the uStreamer Server**
+Start the MJPEG HTTP server, pointing it to your virtual video node (`/dev/video7`). Binding the host to `0.0.0.0` ensures the stream is accessible from any device on your local network:
+
+```bash
+ustreamer -d /dev/video7 -r 640x480 -f 30 -p 8080 --host 0.0.0.0
+
+```
+
+**Viewing the Stream**
+Once the uStreamer server is running and the camera is plugged in, you can access the streams locally or across your network:
+
+* **Video Stream** `http://<raspberry-pi-ip>:8080/stream`
+* **Capture Snapshot** `http://<raspberry-pi-ip>:8080/snapshot`
+* **uStreamer Dashboard** `http://<raspberry-pi-ip>:8080/`
+
+
+### Quick Testing with FFmpeg
+
+For quick debugging or simple tests without installing a dedicated web server, you can use FFmpeg's built-in HTTP listener to broadcast the stream. 
+
+*(Note: While highly convenient, FFmpeg's internal HTTP server is single-threaded and less resilient to network drops than uStreamer. Use this primarily for local testing).*
+
+```bash
+ffmpeg -f v4l2 -i /dev/video7 -c:v copy -f mpjpeg -listen 4 http://0.0.0.0:8080
 ```
 
 ## 🐳 Docker Build
