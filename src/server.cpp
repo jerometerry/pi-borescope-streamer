@@ -110,7 +110,9 @@ int main(int argc, const char* argv[]) {
 
         SharedFramePipeline pipeline;
 
-        MjpegServer server(port, globalRunning, pipeline);
+        MjpegServer server(port, globalRunning, [&pipeline](uint32_t& id) {
+            return pipeline.getCurrentFrame(id);
+        });
 
         MjpegFrameDecoder decoder([&pipeline](const std::vector<uint8_t>& frame) {
             auto buffer = pipeline.checkoutBuffer();

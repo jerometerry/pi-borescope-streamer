@@ -15,14 +15,13 @@
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
 #include "server_constants.hpp"
-#include "shared_frame_pipeline.hpp"
 
-MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, SharedFramePipeline& pipeline)
-    : port(port), running(running), pipeline(pipeline) {}
+MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameSource frameSource)
+    : port_(port), running_(running), frameSource_(std::move(frameSource)) {}
 
 MjpegServer::~MjpegServer() {
-    if (networkThread.joinable()) {
-        networkThread.join();
+    if (networkThread_.joinable()) {
+        networkThread_.join();
     }
     std::cout << "[Network Core] Network engine cleanly terminated.\n";
 }
@@ -30,42 +29,42 @@ MjpegServer::~MjpegServer() {
 void MjpegServer::onTimer(us_timer_t *t) {
     auto* server = *static_cast<MjpegServer**>(us_timer_ext(t));
 
-    if (!server->running) {
-        for (auto& viewer : server->activeViewers) {
+    if (!server->running_) {
+        for (auto& viewer : server->activeViewers_) {
             if (!viewer.isClosed) {
                 viewer.res->close();
             }
         }
-        server->activeViewers.clear();
+        server->activeViewers_.clear();
 
-        if (server->listenSocket) {
+        if (server->listenSocket_) {
             constexpr int GRACEFUL_CLOSE = 0;
-            us_listen_socket_close(GRACEFUL_CLOSE, server->listenSocket);
-            server->listenSocket = nullptr;
+            us_listen_socket_close(GRACEFUL_CLOSE, server->listenSocket_);
+            server->listenSocket_ = nullptr;
         }
         us_timer_close(t);
         return;
     }
 
     uint32_t currentFrameId = 0;
-    auto currentFrame = server->pipeline.getCurrentFrame(currentFrameId);
+    auto currentFrame = server->frameSource_(currentFrameId);
 
-    if (currentFrame && !currentFrame->empty() && currentFrameId != server->lastBroadcastedFrameId) {
-        server->lastBroadcastedFrameId = currentFrameId;
+    if (currentFrame && !currentFrame->empty() && currentFrameId != server->lastBroadcastedFrameId_) {
+        server->lastBroadcastedFrameId_ = currentFrameId;
 
-        for (size_t i = 0; i < server->activeViewers.size(); ) {
-            auto& viewer = server->activeViewers[i];
+        for (size_t i = 0; i < server->activeViewers_.size(); ) {
+            auto& viewer = server->activeViewers_[i];
             auto* res = viewer.res;
 
             if (viewer.isClosed) {
-                server->activeViewers.erase(server->activeViewers.begin() + i);
+                server->activeViewers_.erase(server->activeViewers_.begin() + i);
                 continue;
             }
 
             if (res->getWriteOffset() > ServerConstants::TWO_MEGABYTES) {
                 std::cerr << "[Network Core] Evicting lagging viewer on /stream.\n";
                 res->end();
-                server->activeViewers.erase(server->activeViewers.begin() + i);
+                server->activeViewers_.erase(server->activeViewers_.begin() + i);
                 continue;
             }
 
@@ -110,7 +109,7 @@ void MjpegServer::start() {
     std::promise<void> loopPromise;
     auto loopFuture = loopPromise.get_future();
 
-    networkThread = std::thread([this, &loopPromise]() {
+    networkThread_ = std::thread([this, &loopPromise]() {
         uWS::App app;
         
         app.get("/", [](auto *res, auto *) {
@@ -135,7 +134,7 @@ void MjpegServer::start() {
         });
 
         app.get("/stream", [this](auto *res, auto *) {
-            if (activeViewers.size() >= ServerConstants::MAX_CLIENTS) {
+            if (activeViewers_.size() >= ServerConstants::MAX_CLIENTS) {
                 res->writeStatus("503 Service Unavailable")->end("Server Capacity Reached");
                 return;
             }
@@ -146,13 +145,13 @@ void MjpegServer::start() {
                ->writeHeader("Pragma", "no-cache")
                ->writeHeader("Content-Type", "multipart/x-mixed-replace; boundary=mjpegstream");
 
-            activeViewers.push_back({res, 0, false});
+            activeViewers_.push_back({res, 0, false});
 
             res->onAborted([this, res]() {
-                auto it = std::find_if(activeViewers.begin(), activeViewers.end(),
+                auto it = std::find_if(activeViewers_.begin(), activeViewers_.end(),
                     [res](const ViewerState& v) { return v.res == res; });
                     
-                if (it != activeViewers.end()) {
+                if (it != activeViewers_.end()) {
                     it->isClosed = true;
                 }
             });
@@ -162,10 +161,10 @@ void MjpegServer::start() {
             res->writeStatus("404 Not Found")->end();
         });
 
-        app.listen(port, [this](us_listen_socket_t *socket) {
+        app.listen(port_, [this](us_listen_socket_t *socket) {
             if (socket) {
-                listenSocket = socket;
-                std::cout << "[Network Core] Asynchronous uWebSockets engine listening on port " << port << '\n';
+                listenSocket_ = socket;
+                std::cout << "[Network Core] Asynchronous uWebSockets engine listening on port " << port_ << '\n';
 
                 constexpr int TIMER_FALLTHROUGH = 0;
                 constexpr int TIMER_INTERVAL_MS = 15;
@@ -176,7 +175,7 @@ void MjpegServer::start() {
                 *static_cast<MjpegServer**>(us_timer_ext(timer)) = this;
                 us_timer_set(timer, MjpegServer::onTimer, TIMER_INTERVAL_MS, TIMER_INTERVAL_MS);
             } else {
-                std::cerr << "[Network Core Error] Failed to bind to port " << port << '\n';
+                std::cerr << "[Network Core Error] Failed to bind to port " << port_ << '\n';
             }
         });
 

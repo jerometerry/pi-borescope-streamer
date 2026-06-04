@@ -2,10 +2,10 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <thread>
 #include <vector>
 
-class SharedFramePipeline;
 namespace uWS { template <bool SSL> struct HttpResponse; }
 struct us_listen_socket_t;
 struct us_timer_t;
@@ -18,7 +18,9 @@ struct us_timer_t;
  */
 class MjpegServer {
 public:
-    explicit MjpegServer(int port, const std::atomic<bool>& running, SharedFramePipeline& pipeline);
+    using FrameSource = std::function<std::shared_ptr<const std::vector<uint8_t>>(uint32_t&)>;
+
+    explicit MjpegServer(int port, const std::atomic<bool>& running, FrameSource frameSource);
     ~MjpegServer();
 
     MjpegServer(const MjpegServer&) = delete;
@@ -36,15 +38,15 @@ private:
         uint32_t lagStartFrameId{0};
     };
 
-    const int port;
-    const std::atomic<bool>& running;
-    SharedFramePipeline& pipeline;
+    const int port_;
+    const std::atomic<bool>& running_;
+    FrameSource frameSource_;
 
-    std::thread networkThread;
-    us_listen_socket_t* listenSocket{nullptr};
+    std::thread networkThread_;
+    us_listen_socket_t* listenSocket_{nullptr};
 
-    std::vector<ViewerState> activeViewers;
-    uint32_t lastBroadcastedFrameId{0};
+    std::vector<ViewerState> activeViewers_;
+    uint32_t lastBroadcastedFrameId_{0};
 
     static void onTimer(us_timer_t *t);
 };

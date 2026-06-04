@@ -38,7 +38,9 @@ protected:
         server_ = std::make_unique<MjpegServer>(
             TEST_PORT, 
             running_, 
-            pipeline_
+            [this](uint32_t& id) {
+                return pipeline_.getCurrentFrame(id);
+            }
         );
         
         server_->start();
