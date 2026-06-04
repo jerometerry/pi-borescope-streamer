@@ -69,6 +69,21 @@ namespace ServerConstants {
     inline constexpr unsigned int USB_TIMEOUT = 1000;
 
     /**
+     * @brief 
+     */
+    inline constexpr int POOL_SIZE = 8;
+    
+    /**
+     * @brief 
+     */
+    inline constexpr int CHUNK_SIZE = ServerConstants::FOUR_KILOBYTES;
+
+    /**
+     * @brief 
+     */
+    inline constexpr int ONE_HUNDRED_MILLISECONDS = 100000;
+
+    /**
      * @brief The absolute maximum number of web browsers allowed to watch the live feed simultaneously.
      */
     inline constexpr size_t MAX_CLIENTS = 16;

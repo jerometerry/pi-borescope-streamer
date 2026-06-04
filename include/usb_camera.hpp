@@ -82,6 +82,24 @@ public:
     static std::vector<DeviceInfo> listAvailable(libusb_context *context);
 
     /**
+     * @brief Get the Raw Handle object
+     * 
+     * @return libusb_device_handle* 
+     */
+    [[nodiscard]] libusb_device_handle* getRawHandle() const { 
+        return deviceHandle; 
+    }
+
+    /**
+     * @brief Get the Context object
+     * 
+     * @return libusb_context* 
+     */
+    [[nodiscard]] libusb_context* getContext() const { 
+        return context; 
+    }
+
+    /**
      * @brief Pull the latest chunk of raw data from the main USB cable into a dynamic buffer.
      * @details Listens on the camera's main data channel (Endpoint 1) and waits to receive 
      * up to 4 Kilobytes of video data. The buffer will automatically resize to fit exactly 

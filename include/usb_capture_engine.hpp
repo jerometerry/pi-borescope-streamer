@@ -1,7 +1,10 @@
 #pragma once
+#include <libusb.h>
 #include <atomic>
 #include <memory>
 #include <thread>
+#include <vector>
+
 class SharedFramePipeline;
 class UsbCamera;
 class MjpegFrameDecoder;
@@ -78,6 +81,10 @@ private:
      */
     std::thread workerThread_;
 
+    std::vector<libusb_transfer*> transferPool_;
+
+    std::vector<std::vector<uint8_t>> transferBuffers_;
+
     /**
      * @brief The infinite loop that aggressively reads the USB cable.
      * @details This is the heartbeat of the engine. It continuously scoops 4-Kilobyte buckets 
@@ -87,4 +94,8 @@ private:
      * @param target The hardware device we are looping against.
      */
     void loop(const DeviceInfo& target);
+
+    static void LIBUSB_CALL transferCallback(struct libusb_transfer* transfer);
+
+    void handleIncomingTransfer(struct libusb_transfer* transfer);  
 };
