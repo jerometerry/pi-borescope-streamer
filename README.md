@@ -71,6 +71,13 @@ cmake . --preset debug --fresh
 cmake --build --preset docs-debug
 ```
 
+**For running tests**
+```bash
+cmake . --preset debug --fresh
+cmake --build --preset debug --target run_project_tests
+ctest --test-dir out/build/debug
+```
+
 **For running tests / generating code coverage report**
 ```bash
 cmake . --preset debug -DENABLE_COVERAGE=ON --fresh

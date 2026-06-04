@@ -9,59 +9,21 @@
 #include <memory>
 #include <thread>
 #include <vector>
+#include "argument_parser.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "usb_capture_engine.hpp"
+#include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
-#include "v4l2_config.hpp"
 
-std::atomic<bool> running{true};
+namespace {
+    std::atomic<bool> running{true};
+}
 
 void signalHandler(int signal) {
     std::cout << "\n[System] Signal " << signal << " received. Shutting down V4L2 daemon...\n";
     running.store(false, std::memory_order_release);
-}
-
-enum class ParseResult : std::uint8_t {
-    Success,
-    HelpRequested,
-    Error
-};
-
-ParseResult parseArguments(int argc, const char* argv[], V4l2Config& config) {
-    for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
-        
-        try {
-            if (arg == "--dev" && i + 1 < argc) {
-                config.devicePath = argv[++i];
-            } else if (arg == "--width" && i + 1 < argc) {
-                config.width = std::stoi(argv[++i]);
-            } else if (arg == "--height" && i + 1 < argc) {
-                config.height = std::stoi(argv[++i]);
-            } else if (arg == "--size" && i + 1 < argc) {
-                config.sizeImage = std::stoull(argv[++i]);
-            } else if (arg == "--help") {
-                std::cout << "Usage: v4l2-borescope-daemon [options]\n"
-                          << "Options:\n"
-                          << "  --dev <path>     Path to loopback device (default: /dev/video7)\n"
-                          << "  --width <px>     Video width (default: 640)\n"
-                          << "  --height <px>    Video height (default: 480)\n"
-                          << "  --size <bytes>   Max frame buffer size (default: 131072)\n"
-                          << "  --help           Show this message\n";
-                return ParseResult::HelpRequested;
-            } else {
-                std::cerr << "Unknown argument: " << arg << "\n";
-                return ParseResult::Error;
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "Invalid value provided for argument " << arg << "\n";
-            return ParseResult::Error;
-        }
-    }
-    
-    return ParseResult::Success;
 }
 
 int main(int argc, const char* argv[]) {
@@ -71,18 +33,20 @@ int main(int argc, const char* argv[]) {
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
-    V4l2Config config;
+    V4L2::Config config;
     
-    ParseResult result = parseArguments(argc, argv, config);
-    if (result == ParseResult::HelpRequested) {
+    Arguments::ParseResult result = V4L2::parseArguments(argc, argv, config);
+    if (result == Arguments::ParseResult::HelpRequested) {
         return EXIT_SUCCESS;
-    } else if (result == ParseResult::Error) {
+    } else if (result == Arguments::ParseResult::Error) {
         return EXIT_FAILURE;
     }
 
     std::cout << "=================================================\n"
               << "[Startup] Initializing V4L2 Borescope Daemon\n"
               << "  -> Device Path : " << config.devicePath << "\n"
+              << "  -> Bus         : " << config.bus << "\n"
+              << "  -> Address     : " << config.address << "\n"
               << "  -> Resolution  : " << config.width << "x" << config.height << "\n"
               << "  -> Max Buffer  : " << config.sizeImage << " bytes\n"
               << "=================================================\n";

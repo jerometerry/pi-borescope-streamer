@@ -116,12 +116,15 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 add_library(borescope_core STATIC 
     src/usb_context.cpp
     src/device_finder.cpp
+    src/frame_extractor.cpp
+    src/binary_stream_capture.cpp
     src/usb_camera.cpp 
     src/mjpeg_frame_decoder.cpp
     src/application_context.cpp
     src/mjpeg_server.cpp
     src/shared_frame_pipeline.cpp
     src/usb_capture_engine.cpp
+    src/v4l2.cpp
     ${GENERATED_HPP}
 )
 add_library(Borescope::Core ALIAS borescope_core)
@@ -145,23 +148,29 @@ add_executable(pi-borescope-streamer
 target_link_libraries(pi-borescope-streamer PRIVATE Borescope::Core project_warnings)
 
 add_executable(attached_usb_devices
-    src/attached_usb_devices.cpp 
+    src/attached_usb_devices.cpp
 )
 target_link_libraries(attached_usb_devices PRIVATE Borescope::Core project_warnings)
 
 add_executable(binary_stream_capture
-    src/binary_stream_capture.cpp 
+    src/binary_stream_capture.cpp
+    src/binary_stream_capture_main.cpp
 )
 target_link_libraries(binary_stream_capture PRIVATE Borescope::Core project_warnings)
 
 add_executable(frame_extractor
-    src/frame_extractor.cpp 
+    src/frame_extractor.cpp
+    src/frame_extractor_main.cpp
 )
 target_link_libraries(frame_extractor PRIVATE Borescope::Core project_warnings)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(borescope_core PRIVATE src/v4l2_publisher.cpp)
-    add_executable(v4l2-borescope-daemon src/v4l2_main.cpp)
+    add_executable(v4l2-borescope-daemon
+        src/v4l2.cpp
+        src/v4l2_publisher.cpp
+        src/v4l2_main.cpp
+    )
     target_link_libraries(v4l2-borescope-daemon
         PRIVATE 
             borescope_core
@@ -231,6 +240,7 @@ if(BUILD_TESTING)
         tests/test_device_finder.cpp
         tests/test_mjpeg_frame_decoder.cpp
         tests/test_mjpeg_server.cpp
+        tests/test_v4l2.cpp
     )
 
     target_include_directories(run_project_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -238,7 +248,7 @@ if(BUILD_TESTING)
     target_link_libraries(run_project_tests 
         PRIVATE 
             borescope_core
-            project_warnings 
+            project_warnings
             GTest::gtest_main
             GTest::gmock
     )

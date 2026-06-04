@@ -8,7 +8,7 @@
 #include "v4l2_config.hpp"
 #include "v4l2_publisher.hpp"
 
-V4l2Publisher::V4l2Publisher(const V4l2Config& config) 
+V4l2Publisher::V4l2Publisher(const V4L2::Config& config) 
     : v4l2_fd_(open(config.devicePath.c_str(), O_RDWR)) {
     
     if (v4l2_fd_ < 0) {

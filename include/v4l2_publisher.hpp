@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <vector>
-struct V4l2Config;
+#include "v4l2.hpp"
 
 /**
  * @brief Bridges raw MJPEG frames into the Linux Kernel's Video4Linux subsystem.
@@ -13,7 +13,7 @@ public:
      * 
      * @param config 
      */
-    explicit V4l2Publisher(const V4l2Config& config);
+    explicit V4l2Publisher(const V4L2::Config& config);
 
     /**
      * @brief Destroy the V4l2Publisher object
