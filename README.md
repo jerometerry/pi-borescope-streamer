@@ -176,6 +176,11 @@ sudo systemctl start v4l2-borescope@video7.service
 systemctl status v4l2-borescope@video7.service
 ```
 
+### Stop `v4l2-borescope-daemon` Daemon
+```bash
+sudo systemctl stop v4l2-borescope@video7.service
+```
+
 ### Testing `v4l2-borescope-daemon` Daemon
 
 Once the daemon is running, you can use ffmpeg to take a snapshot of the video feed. 

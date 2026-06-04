@@ -10,13 +10,13 @@ The official Raspberry Pi [Debug Probe](https://www.raspberrypi.com/products/deb
 
 With the USB to TTL Serial Cable attached, I use minicom to connect to the Raspberry PI. 
 
-```
+```bash
 minicom -D /dev/cu.PL2303G-USBtoUART1220 -b 115200
 ```
 
 ## Install Necessary Libraries
 
-```
+```bash
 sudo apt install git bc bison flex libssl-dev make libc6-dev libncurses5-dev libelf-dev dwarves
 ```
 
@@ -24,7 +24,7 @@ sudo apt install git bc bison flex libssl-dev make libc6-dev libncurses5-dev lib
 
 Clone using depth=1 to only pull down the necessary files. The repo is quite large. 
 
-```
+```bash
 git clone --depth=1 https://github.com/raspberrypi/linux
 cd linux
 ```
@@ -36,7 +36,7 @@ The branch for the latest kernel version is checked out by default. The latest b
 ## Make Kernel Config
 
 **Raspberry Pi 5 64-bit OS**
-```
+```bash
 KERNEL=kernel_2712
 make bcm2712_defconfig
 ```
@@ -45,11 +45,15 @@ make bcm2712_defconfig
 
 You can use the built in config editor wizard via:
 
-```
+```bash
 make menuconfig
 ```
 
 This opens up a console application that lets you tweak settings in a safer way than editing the config file directly. You can still edit the .config file manually if you want. 
+
+It's a good idea to customize local version to include something to identify your custom kernel version: e.g. `-bpf`.
+
+- General setup -> Local version - append to kernel release. 
 
 ## Configuring BTF Support
 
@@ -67,20 +71,25 @@ If you want to run BPF / linux perf on custom applications you are building, ens
 ## Build the kernel, modules, and device trees
 
 **Raspberry Pi 5 64-bit OS**
-```
+```bash
 make -j6 Image.gz modules dtbs
 ```
 
 ## Install modules
 
-```
+```bash
 sudo make -j6 modules_install
+```
+
+## Backup Current kernel image
+
+```bash
+sudo cp /boot/firmware/$KERNEL.img /boot/firmware/$KERNEL-backup.img
 ```
 
 ## Copy the new kernel and DTBs to the boot partition
 
-```
-sudo cp /boot/firmware/$KERNEL.img /boot/firmware/$KERNEL-backup.img
+```bash
 sudo cp arch/arm64/boot/Image.gz /boot/firmware/$KERNEL.img
 sudo cp arch/arm64/boot/dts/broadcom/*.dtb /boot/firmware/
 sudo cp arch/arm64/boot/dts/overlays/*.dtb* /boot/firmware/overlays/
@@ -89,6 +98,6 @@ sudo cp arch/arm64/boot/dts/overlays/README /boot/firmware/overlays/
 
 ## Reboot
 
-```
+```bash
 sudo reboot
 ```
