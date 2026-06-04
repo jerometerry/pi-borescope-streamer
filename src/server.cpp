@@ -18,7 +18,8 @@
 #include <limits>
 #include <string>
 #include <vector>
-#include "application_context.hpp"
+#include <chrono>
+#include <thread>
 #include "device_info.hpp"
 #include "mjpeg_frame_decoder.hpp"
 #include "mjpeg_server.hpp"
@@ -108,7 +109,9 @@ int main(int argc, const char* argv[]) {
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
         SharedFramePipeline pipeline;
+
         MjpegServer server(port, globalRunning, pipeline);
+
         MjpegFrameDecoder decoder([&pipeline](const std::vector<uint8_t>& frame) {
             auto buffer = pipeline.checkoutBuffer();
             if (buffer) {
@@ -116,18 +119,29 @@ int main(int argc, const char* argv[]) {
                 pipeline.updateFrame(std::move(buffer));
             }
         });
-        UsbCaptureEngine captureEngine(
-            [&decoder](std::span<const uint8_t> data) {
-                decoder.processIncomingCameraData(data);
-            }, 
-            globalRunning
-        );
-        ApplicationContext app(server, captureEngine, globalRunning);
 
-        app.run(camera);
+        UsbCaptureEngine captureEngine([&decoder](std::span<const uint8_t> data) {
+            decoder.processIncomingCameraData(data);
+        }, globalRunning);
+
+
+        std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
+
+        captureEngine.start(camera);
+        server.start();
+
+        std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
+        
+        while (globalRunning.load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
+
+        captureEngine.stop();
         
     } catch (const std::exception& e) {
-        std::cerr << "[Fatal] Unhandled exception in application context: " << e.what() << "\n";
+        std::cerr << "[Fatal] Unhandled exception in application core: " << e.what() << "\n";
         return EXIT_FAILURE;
     }
 
