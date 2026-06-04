@@ -1,3 +1,4 @@
+#include <utility>
 #include "usb_capture_engine.hpp"
 
 UsbCaptureEngine::UsbCaptureEngine(std::function<void(std::span<const uint8_t>)> dataSink)

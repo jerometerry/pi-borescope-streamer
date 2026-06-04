@@ -61,7 +61,7 @@ private:
                 transferPool_.push_back(transfer);
             }
 
-            while (running_.load(std::memory_order_relaxed)) {
+            while (running_->load(std::memory_order_relaxed)) {
                 int error = libusb_handle_events(camera_->getContext());
                 if (error != LIBUSB_SUCCESS) break;
             }

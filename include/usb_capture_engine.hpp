@@ -1,9 +1,7 @@
 #pragma once
-#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <span>
-#include <vector>
 
 enum class UsbTransferStatus :std::uint8_t {
     Completed,
