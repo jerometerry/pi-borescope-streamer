@@ -146,6 +146,14 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
     return cameras;
 }
 
+[[nodiscard]] libusb_device_handle* UsbCamera::getRawHandle() const { 
+    return deviceHandle; 
+}
+
+[[nodiscard]] libusb_context* UsbCamera::getContext() const { 
+    return context; 
+}
+
 int UsbCamera::read(std::vector<uint8_t> &buffer) {
     int numBytes = 0;
     return read(ENDPOINT_1, buffer, ServerConstants::FOUR_KILOBYTES, numBytes);

@@ -86,18 +86,14 @@ public:
      * 
      * @return libusb_device_handle* 
      */
-    [[nodiscard]] libusb_device_handle* getRawHandle() const { 
-        return deviceHandle; 
-    }
+    [[nodiscard]] libusb_device_handle* getRawHandle() const;
 
     /**
      * @brief Get the Context object
      * 
      * @return libusb_context* 
      */
-    [[nodiscard]] libusb_context* getContext() const { 
-        return context; 
-    }
+    [[nodiscard]] libusb_context* getContext() const;
 
     /**
      * @brief Pull the latest chunk of raw data from the main USB cable into a dynamic buffer.
