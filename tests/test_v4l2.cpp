@@ -1,10 +1,9 @@
 #include <gtest/gtest.h>
+#include <stddef.h>
 #include <algorithm>
 #include <iterator>
 #include <string>
 #include <vector>
-#include "device_finder.hpp"
-#include "device_info.hpp"
 #include "v4l2.hpp"
 #include "argument_parser.hpp"
 

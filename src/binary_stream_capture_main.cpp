@@ -10,12 +10,9 @@
  * recording of the glitch, which they can then analyze later to figure out what went wrong.
  */
 
-#include <libusb.h>
 #include <csignal>
-#include <cstdint>
 #include <cstdlib>
 #include <exception>
-#include <fstream>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -24,8 +21,6 @@
 #include "binary_stream_capture.hpp"
 #include "device_finder.hpp"
 #include "device_info.hpp"
-#include "server_constants.hpp"
-#include "usb_camera.hpp"
 
 namespace {
     static std::atomic<bool> keepRunning{true};

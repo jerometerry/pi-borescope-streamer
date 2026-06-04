@@ -10,17 +10,13 @@
  * turned into a standalone command-line tool.
  */
 
-#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
-#include "data_structures.hpp"
-#include "server_constants.hpp"
 #include "frame_extractor.hpp"
 
 int main(int argc, const char* argv[]) {
