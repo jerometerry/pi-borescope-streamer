@@ -4,11 +4,11 @@ A high-performance, asynchronous, zero-allocation MJPEG streaming server designe
 
 This project evolved from a simple synchronous USB-polling script into a robust, multi-client C++ streaming engine. It completely decouples the hardware ingestion thread from the network layer, allowing you to serve real-time video to multiple browser dashboards and VLC clients simultaneously with near-zero CPU overhead.
 
-![Pi Borescope Streamer streaming to 4 tabs](pi-borescope-streamer.png)
+![Pi Borescope Streamer streaming to 4 tabs. eBPF profiling shows user-space allocations are eliminated, leaving only the baseline kernel USB interrupts.](pi-borescope-streamer.png)
 
 ## 🚀 Features
 
-* **Zero-Heap-Allocation Hot Path:** Built for long-running stability. After initial startup, the video pipeline and streaming multiplexer operate without a single call to `malloc` or `free`, entirely eliminating heap fragmentation and garbage-collection latency.
+* **Zero User-Space Memory Churn:** Built for long-running stability. The C++ video pipeline, HTTP header generation, and `uWebSockets` streaming multiplexer operate completely free of dynamic memory allocation. By pre-allocating persistent memory pools and utilizing zero-copy `std::span` payload views, the architecture completely eliminates user-space heap fragmentation. *(Note: The pipeline is so heavily optimized that eBPF profiling reveals the only remaining allocations on the entire hot path are the unavoidable `calloc` calls triggered by the underlying Linux `usbfs` kernel driver wrapping hardware URBs).*
 * **Asynchronous Network Stack:** Powered by `uWebSockets` (an ultra-fast C++ `epoll` engine). A slow client on a bad Wi-Fi connection will never block the hardware camera thread.
 * **Zero-Copy Broadcasting:** Video frames are streamed directly from pre-allocated memory pools with hardware-level efficiency, bypassing intermediate deep copies.
 * **Multi-Client Support:** Stream to multiple browser tabs or VLC instances simultaneously with aggressive backpressure handling (automatically evicts lagging clients to protect server memory).
