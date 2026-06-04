@@ -4,6 +4,8 @@ A high-performance, asynchronous, zero-allocation MJPEG streaming server designe
 
 This project evolved from a simple synchronous USB-polling script into a robust, multi-client C++ streaming engine. It completely decouples the hardware ingestion thread from the network layer, allowing you to serve real-time video to multiple browser dashboards and VLC clients simultaneously with near-zero CPU overhead.
 
+![Pi Borescope Streamer streaming to 4 tabs](pi-borescope-streamer.png)
+
 ## 🚀 Features
 
 * **Zero-Heap-Allocation Hot Path:** Built for long-running stability. After initial startup, the video pipeline and streaming multiplexer operate without a single call to `malloc` or `free`, entirely eliminating heap fragmentation and garbage-collection latency.
