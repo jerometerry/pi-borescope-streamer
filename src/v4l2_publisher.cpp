@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <string>
-#include "v4l2_config.hpp"
+#include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
 
 V4l2Publisher::V4l2Publisher(const V4L2::Config& config) 

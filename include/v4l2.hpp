@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 #include <string>
 #include <cstddef>
 #include "argument_parser.hpp"

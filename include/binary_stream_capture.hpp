@@ -1,6 +1,6 @@
 #pragma once
 #include <atomic>
-#include "device_info.hpp"
+struct DeviceInfo;
 
 namespace BinaryStreamCapture {
 	int capture(const std::atomic<bool> running, const DeviceInfo& cameraInfo);

@@ -2,15 +2,11 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
-#include <exception>
 #include <fstream>
 #include <iostream>
-#include <limits>
-#include <string>
 #include <vector>
 #include <atomic>
 #include "binary_stream_capture.hpp"
-#include "device_finder.hpp"
 #include "device_info.hpp"
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
