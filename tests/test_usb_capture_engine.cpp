@@ -6,29 +6,35 @@
 #include <vector>
 
 #include "usb_capture_engine.hpp"
-#include "shared_frame_pipeline.hpp"
-#include "mjpeg_frame_decoder.hpp"
 #include "device_info.hpp"
 
 class UsbCaptureEngineTest : public ::testing::Test {
 public:
-    SharedFramePipeline& getPipeline() { return realPipeline; }
     std::unique_ptr<UsbCaptureEngine>& getEngine() { return engine; }
     std::atomic<bool>& getIsRunning() { return isRunning; }
+    const std::vector<uint8_t>& getInterceptedData() const { return interceptedData; }
 
 private:
-    SharedFramePipeline realPipeline;
     std::atomic<bool> isRunning{true};
     std::unique_ptr<UsbCaptureEngine> engine;
+    std::vector<uint8_t> interceptedData;
 
 protected:
     void SetUp() override {
         isRunning = true;
-        engine = std::make_unique<UsbCaptureEngine>(realPipeline, isRunning);
+        interceptedData.clear();
+
+        auto testDataSink = [this](std::span<const uint8_t> data) {
+            interceptedData.assign(data.begin(), data.end());
+        };
+        
+        engine = std::make_unique<UsbCaptureEngine>(testDataSink, isRunning);
     }
 
     void TearDown() override {
-        engine->stop();
+        if (engine) {
+            engine->stop();
+        }
     }
 };
 
@@ -43,10 +49,6 @@ TEST_F(UsbCaptureEngineTest, StartsAndStopsCleanlyWithoutHardware) {
 }
 
 TEST_F(UsbCaptureEngineTest, HandlesSuccessfulTransfer) {
-    getEngine()->decoder_ = std::make_unique<MjpegFrameDecoder>(
-        [](const std::vector<uint8_t>&) {}
-    );
-
     std::vector<uint8_t> fakeCameraData = { 0xBB, 0xAA, 0x01, 0x02 };
     
     libusb_transfer fakeTransfer{};
@@ -54,14 +56,12 @@ TEST_F(UsbCaptureEngineTest, HandlesSuccessfulTransfer) {
     fakeTransfer.buffer = fakeCameraData.data();
     fakeTransfer.actual_length = static_cast<int>(fakeCameraData.size());
 
-    // 3. Set running to false so the engine doesn't try to submit the fake transfer back to the OS
     getIsRunning() = false; 
-    
-    // 4. Fire the transfer. If the engine correctly spans the memory and the decoder digests it
-    //    without a segfault or underflow, the data pipeline is rock solid.
+
     getEngine()->handleIncomingTransfer(&fakeTransfer);
-    
-    SUCCEED();
+
+    EXPECT_EQ(getInterceptedData(), fakeCameraData) 
+        << "The engine failed to correctly route the USB payload to the data sink.";
 }
 
 TEST_F(UsbCaptureEngineTest, HandlesDeviceDisconnect) {    

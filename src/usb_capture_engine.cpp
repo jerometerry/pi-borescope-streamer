@@ -13,8 +13,10 @@
 #include "usb_capture_engine.hpp"
 #include "mjpeg_frame_decoder.hpp"
 
-UsbCaptureEngine::UsbCaptureEngine(SharedFramePipeline& pipeline, std::atomic<bool>& running)
-        : pipeline_(pipeline), running_(running) {}
+UsbCaptureEngine::UsbCaptureEngine(
+    std::function<void(std::span<const uint8_t>)> dataSink, 
+    std::atomic<bool>& running)
+        : dataSink_(std::move(dataSink)), running_(running) {}
 
 UsbCaptureEngine::~UsbCaptureEngine() { stop(); }
 
@@ -39,7 +41,9 @@ void UsbCaptureEngine::handleIncomingTransfer(struct libusb_transfer* transfer) 
             transfer->buffer, 
             static_cast<size_t>(transfer->actual_length)
         };
-        decoder_->processIncomingCameraData(payloadView);
+        if (dataSink_) {
+            dataSink_(payloadView);
+        }
     } else if (transfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
         running_ = false;
         return;
@@ -53,15 +57,6 @@ void UsbCaptureEngine::handleIncomingTransfer(struct libusb_transfer* transfer) 
 void UsbCaptureEngine::loop(const DeviceInfo& target) {
     try {
         camera_ = std::make_unique<UsbCamera>(target);
-        decoder_ = std::make_unique<MjpegFrameDecoder>(
-            [this](const std::vector<uint8_t>& frame) { 
-                auto buffer = pipeline_.checkoutBuffer();
-                if (buffer) {
-                    buffer->assign(frame.begin(), frame.end());
-                    pipeline_.updateFrame(std::move(buffer)); 
-                }
-            }        
-        );
 
         transferBuffers_.assign(ServerConstants::POOL_SIZE, std::vector<uint8_t>(ServerConstants::CHUNK_SIZE));
 

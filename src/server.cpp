@@ -20,6 +20,7 @@
 #include <vector>
 #include "application_context.hpp"
 #include "device_info.hpp"
+#include "mjpeg_frame_decoder.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "usb_camera.hpp"
@@ -108,7 +109,19 @@ int main(int argc, const char* argv[]) {
 
         SharedFramePipeline pipeline;
         MjpegServer server(port, globalRunning, pipeline);
-        UsbCaptureEngine captureEngine(pipeline, globalRunning);
+        MjpegFrameDecoder decoder([&pipeline](const std::vector<uint8_t>& frame) {
+            auto buffer = pipeline.checkoutBuffer();
+            if (buffer) {
+                buffer->assign(frame.begin(), frame.end());
+                pipeline.updateFrame(std::move(buffer));
+            }
+        });
+        UsbCaptureEngine captureEngine(
+            [&decoder](std::span<const uint8_t> data) {
+                decoder.processIncomingCameraData(data);
+            }, 
+            globalRunning
+        );
         ApplicationContext app(server, captureEngine, globalRunning);
 
         app.run(camera);

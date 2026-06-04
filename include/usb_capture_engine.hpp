@@ -3,7 +3,10 @@
 #include <libusb.h>
 #include <stdint.h>
 #include <atomic>
+#include <cstdint>
+#include <functional>
 #include <memory>
+#include <span>
 #include <thread>
 #include <vector>
 
@@ -32,7 +35,7 @@ public:
      * @param running The master emergency stop switch that keeps the background thread alive.
      */
     UsbCaptureEngine(
-        SharedFramePipeline& pipeline, 
+        std::function<void(std::span<const uint8_t>)> dataSink,
         std::atomic<bool>& running
     );
 
@@ -65,14 +68,9 @@ private:
     std::unique_ptr<UsbCamera> camera_;
 
     /**
-     * @brief The sorting facility that turns the raw data hose into usable JPEG pictures.
+     * @brief
      */
-    std::unique_ptr<MjpegFrameDecoder> decoder_;
-
-    /**
-     * @brief The memory exchange zone where this engine drops finished pictures.
-     */
-    SharedFramePipeline& pipeline_;
+    std::function<void(std::span<const uint8_t>)> dataSink_;
 
     /**
      * @brief The global kill switch that keeps the infinite pumping loop running.
