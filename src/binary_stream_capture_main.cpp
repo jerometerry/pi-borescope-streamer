@@ -82,7 +82,7 @@ int main() {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(cameraInfo.bus)
                   << " Address " << static_cast<int>(cameraInfo.address) << "...\n";
 
-        return BinaryStreamCapture::capture(cameraInfo);
+        return BinaryStreamCapture::capture(keepRunning, cameraInfo);
 
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";

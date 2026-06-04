@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <vector>
-#include "v4l2.hpp"
+namespace V4L2 { struct Config; }
 
 /**
  * @brief Bridges raw MJPEG frames into the Linux Kernel's Video4Linux subsystem.

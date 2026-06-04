@@ -1,5 +1,4 @@
 #include <libusb.h>
-#include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -7,11 +6,10 @@
 #include <vector>
 #include <atomic>
 #include "binary_stream_capture.hpp"
-#include "device_info.hpp"
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
 
-int BinaryStreamCapture::capture(const std::atomic<bool> running, const DeviceInfo& cameraInfo) {
+int BinaryStreamCapture::capture(const std::atomic<bool>& running, const DeviceInfo& cameraInfo) {
 	std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
 	if (!outFile.is_open()) {
 		std::cerr << "[Fatal] Could not open output file for writing.\n";
