@@ -1,0 +1,52 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+    printf("Monitoring pi-borescope-streamer... Hit Ctrl-C to exit.\n");
+    printf("=================================================================================\n");
+    printf("%-12s %-15s %-15s %-15s %-15s\n", "TIME", "MALLOCS/sec", "FREES/sec", "SENDS/sec", "BANDWIDTH");
+    printf("=================================================================================\n");
+}
+
+uprobe:libc:malloc,
+uprobe:libc:calloc,
+uprobe:libc:realloc
+/comm == "pi-borescope-st"/ {
+    @allocs++;
+}
+
+uprobe:libc:free
+/comm == "pi-borescope-st"/ {
+    @frees++;
+}
+
+tracepoint:syscalls:sys_enter_sendto
+/comm == "pi-borescope-st"/ {
+    @sends++;
+    @bytes_per_sec += args->len;
+    @total_bytes += args->len;
+}
+
+interval:s:1 {
+    $mbps = (@bytes_per_sec * 8) / 1000000;
+    
+    time("%H:%M:%S    ");
+    printf("%-15d %-15d %-15d %d Mbps\n", @allocs, @frees, @sends, $mbps);
+    
+    // Reset the per-second accumulators
+    @allocs = 0;
+    @frees = 0;
+    @sends = 0;
+    @bytes_per_sec = 0;
+}
+
+END {
+    $total_mb = @total_bytes / 1024 / 1024;
+    printf("\n--- Session Complete ---\nTotal Data Transferred: %d MB\n", $total_mb);
+    
+    // Clean up global variables
+    clear(@allocs);
+    clear(@frees);
+    clear(@sends);
+    clear(@bytes_per_sec);
+    clear(@total_bytes);
+}

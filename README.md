@@ -67,7 +67,7 @@ cmake --build --preset debug
 
 **For building docs**
 ```bash
-cmake . --preset debug
+cmake . --preset debug --fresh
 cmake --build --preset docs-debug
 ```
 
@@ -81,7 +81,7 @@ mkdir -p coverage && gcovr -r . --object-directory out/build/debug --filter "src
 
 **For production deployment (Optimized with -O2, LTO, and Pi 5 Cortex-A76 core tuning):**
 ```bash
-cmake . --preset release
+cmake . --preset release --fresh
 cmake --build --preset release
 ```
 
