@@ -6,21 +6,21 @@
 #include "mjpeg_server.hpp"
 #include "usb_capture_engine.hpp"
 
-ApplicationContext::ApplicationContext(SharedFramePipeline& pipeline, 
-                         MjpegServer& server,
-                         std::atomic<bool>& running)
-    : pipeline_(pipeline), 
-      server_(server), 
-      running_(running),
-      captureEngine_(pipeline, running) {}
+ApplicationContext::ApplicationContext(MjpegServer& server,
+                                       UsbCaptureEngine& captureEngine,
+                                       std::atomic<bool>& running)
+    : server_(server), 
+      captureEngine_(captureEngine),
+      running_(running) {}
 
 int ApplicationContext::run(const DeviceInfo& target) {
     auto& serverRef = server_.get();
+    auto& captureEngineRef = captureEngine_.get();
     auto& runningRef = running_.get();
 
     std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 
-    captureEngine_.start(target);
+    captureEngineRef.start(target);
     serverRef.start();
 
     std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
@@ -30,7 +30,7 @@ int ApplicationContext::run(const DeviceInfo& target) {
 
     std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
 
-    captureEngine_.stop();
+    captureEngineRef.stop();
     
     return EXIT_SUCCESS;
 }

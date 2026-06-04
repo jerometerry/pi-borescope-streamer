@@ -3,6 +3,7 @@
 #include <thread>
 #include <vector>
 #include <memory>
+#include <unordered_set>
 
 #include "shared_frame_pipeline.hpp"
 #include "server_constants.hpp"
@@ -27,19 +28,33 @@ TEST(SharedFramePipelineTest, InitializesWithCorrectBufferState) {
     EXPECT_EQ(buf4, nullptr);
 }
 
-// TEST(SharedFramePipelineTest, RecyclesExactMemoryAddresses) {
-//     SharedFramePipeline pipeline;
+TEST(SharedFramePipelineTest, RecyclesExactMemoryAddresses) {
+    SharedFramePipeline pipeline;
+    std::unordered_set<void*> originalAddresses;
+    std::vector<decltype(pipeline.checkoutBuffer())> checkedOutBuffers;
 
-//     auto originalBuffer = pipeline.checkoutBuffer();
-//     ASSERT_NE(originalBuffer, nullptr);
-//     auto rawAddress = originalBuffer.get();
+    while (auto buf = pipeline.checkoutBuffer()) {
+        originalAddresses.insert(buf.get()); 
+        checkedOutBuffers.push_back(std::move(buf));
+    }
 
-//     pipeline.returnBuffer(std::move(originalBuffer));
+    ASSERT_FALSE(originalAddresses.empty());
 
-//     auto recycledBuffer = pipeline.checkoutBuffer();
-//     EXPECT_EQ(recycledBuffer.get(), rawAddress) 
-//         << "The pipeline dynamically allocated a new vector instead of recycling!";
-// }
+    for (auto& buf : checkedOutBuffers) {
+        pipeline.returnBuffer(std::move(buf)); 
+    }
+    checkedOutBuffers.clear();
+
+    int recycledCount = 0;
+    while (auto buf = pipeline.checkoutBuffer()) {
+        EXPECT_TRUE(originalAddresses.contains(buf.get())) 
+            << "Unrecognized memory address! The pipeline allocated new memory.";
+        checkedOutBuffers.push_back(std::move(buf));
+        recycledCount++;
+    }
+
+    EXPECT_EQ(recycledCount, originalAddresses.size());
+}
 
 TEST(SharedFramePipelineTest, UpdateFrameRecyclesOldActiveFrame) {
     SharedFramePipeline pipeline;
@@ -87,8 +102,9 @@ TEST(SharedFramePipelineTest, SafelyRejectsNullAndEmptyFrames) {
 
 TEST(SharedFramePipelineTest, ConcurrentProducersAndConsumers) {
     SharedFramePipeline pipeline;
-    std::atomic<bool> running{true};
+    std::atomic<bool> producerDone{false};
     std::atomic<int> framesProduced{0};
+    std::atomic<int> totalFramesConsumed{0};
     constexpr int TARGET_FRAMES = 5000;
 
     std::thread producer([&]() {
@@ -97,33 +113,43 @@ TEST(SharedFramePipelineTest, ConcurrentProducersAndConsumers) {
             if (buf) {
                 buf->push_back(0xAA); 
                 pipeline.updateFrame(std::move(buf));
-                framesProduced.fetch_add(1, std::memory_order_release);
+                framesProduced.fetch_add(1, std::memory_order_relaxed);
             } else {
                 std::this_thread::sleep_for(std::chrono::microseconds(10));
             }
         }
-        running.store(false, std::memory_order_release);
+        producerDone.store(true, std::memory_order_release);
     });
 
     auto consumerFunc = [&]() {
         uint32_t lastSeenId = 0;
-        while (running.load(std::memory_order_acquire)) {
+        int localConsumed = 0;
 
-            {
-                uint32_t currentId = 0;
-                auto frame = pipeline.getCurrentFrame(currentId);
-                if (frame) {
-                    EXPECT_GE(currentId, lastSeenId);
+        while (!producerDone.load(std::memory_order_acquire) || lastSeenId < TARGET_FRAMES) {
+            
+            uint32_t currentId = 0;
+            auto frame = pipeline.getCurrentFrame(currentId);
+            
+            if (frame) {
+                EXPECT_GE(currentId, lastSeenId);
+                if (currentId > lastSeenId) {
+                    localConsumed++;
                     lastSeenId = currentId;
                 }
             }
-            
+
+            if (producerDone.load(std::memory_order_acquire) && lastSeenId >= TARGET_FRAMES) {
+                break;
+            }
+
             std::this_thread::yield(); 
         }
+
+        totalFramesConsumed.fetch_add(localConsumed, std::memory_order_relaxed);
     };
 
-    std::vector<std::thread> consumers;
     const int NUM_CONSUMERS = 4;
+    std::vector<std::thread> consumers;
     consumers.reserve(NUM_CONSUMERS); 
     for (int i = 0; i < NUM_CONSUMERS; ++i) {
         consumers.emplace_back(consumerFunc);
@@ -139,5 +165,6 @@ TEST(SharedFramePipelineTest, ConcurrentProducersAndConsumers) {
         }
     }
 
-    EXPECT_EQ(framesProduced.load(std::memory_order_acquire), TARGET_FRAMES);
+    EXPECT_GT(totalFramesConsumed.load(std::memory_order_relaxed), 0) 
+        << "Consumers starved or pipeline failed to serve frames.";
 }

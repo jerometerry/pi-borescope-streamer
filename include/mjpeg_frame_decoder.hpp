@@ -14,7 +14,7 @@
  * up into hundreds of tiny chunks, slaps a custom "shipping label" on each one, and fires 
  * them down the wire. To make matters worse, buggy camera hardware sometimes inserts 
  * broken or "ghost" labels into the data stream.
- * 
+ *
  * MjpegFrameDecoder acts as the sorting facility. It takes the raw firehose of data from 
  * the transport layer, throws out the glitches, and carefully stitches the valid chunks back 
  * together into standard JPEG images. Once it successfully builds a complete picture, 
@@ -30,7 +30,7 @@ public:
      */
     explicit MjpegFrameDecoder(std::function<void(const std::vector<uint8_t>&)> broadcastHandler);
 
-    virtual ~MjpegFrameDecoder() = default;
+    ~MjpegFrameDecoder() = default;
 
     /**
      * @brief Pour new raw data from the camera cable into the decoder.
@@ -39,7 +39,7 @@ public:
      * if a picture is completed or a button press is detected.
      * @param data A raw slice of bytes directly from the hardware.
      */
-    virtual void processIncomingCameraData(std::span<const uint8_t> data);
+    void processIncomingCameraData(std::span<const uint8_t> data);
 
 private:
 
@@ -95,29 +95,4 @@ private:
      * into the `broadcastHandler`.
      */
     void trimAndEmitFrame();
-
-    /**
-     * @brief Check if the chunk actually contains video data.
-     * @details The camera sometimes sends empty "heartbeat" chunks. This tells us if 
-     * we should bother trying to stitch this chunk into the picture.
-     * @param metadata The hidden status report for the chunk.
-     * @return True if the chunk contains real picture data.
-     */
-    static bool fromVideoFeed(CameraPacketHeader metadata);
-
-     /**
-     * @brief Safety check to prevent mixing pictures from different camera lenses.
-     * @param first The status report of the picture currently on the workbench.
-     * @param second The status report of the new chunk we just received.
-     * @return True if both belong to the exact same physical lens.
-     */
-    static bool forSameCamera(CameraPacketHeader first, CameraPacketHeader second);
-
-    /**
-     * @brief Safety check to prevent mixing chunks from two different moments in time.
-     * @param first The status report of the picture currently on the workbench.
-     * @param second The status report of the new chunk we just received.
-     * @return True if both belong to the exact same frame ID and lens.
-     */
-    static bool forSameCameraAndFrame(CameraPacketHeader first, CameraPacketHeader second);
 };

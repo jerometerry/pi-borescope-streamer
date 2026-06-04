@@ -2,10 +2,9 @@
 
 #include <atomic>
 #include <functional>
-#include "usb_capture_engine.hpp"
 
-class SharedFramePipeline;
 class MjpegServer;
+class UsbCaptureEngine;
 struct DeviceInfo;
 
 /**
@@ -25,12 +24,12 @@ public:
      * @details This does not turn the system on; it simply establishes the connections 
      * between the camera, the memory pipeline, and the network broadcaster so data can 
      * flow once the power is flipped.
-     * @param pipeline The shared memory zone where the camera will drop finished pictures.
      * @param server The network engine that will broadcast the pictures over Wi-Fi.
+     * @param captureEngine 
      * @param running The master emergency stop switch that keeps the background threads alive.
      */
-    ApplicationContext(SharedFramePipeline& pipeline, 
-                       MjpegServer& server,
+    ApplicationContext(MjpegServer& server,
+                       UsbCaptureEngine& captureEngine,
                        std::atomic<bool>& running);
 
     /**
@@ -69,24 +68,17 @@ public:
 
 private:
     /**
-     * @brief A borrowed reference to the memory pipeline.
-     */
-    std::reference_wrapper<SharedFramePipeline> pipeline_;
-
-    /**
      * @brief A borrowed reference to the network broadcasting engine.
      */
     std::reference_wrapper<MjpegServer> server_;
 
     /**
+     * @brief 
+     */
+    std::reference_wrapper<UsbCaptureEngine> captureEngine_;
+
+    /**
      * @brief A borrowed reference to the global emergency stop switch.
      */
     std::reference_wrapper<std::atomic<bool>> running_;
-
-    /**
-     * @brief The engine responsible for hijacking the USB port and decoding the video.
-     * @details Unlike the other components which are borrowed (`reference_wrapper`), 
-     * this engine is physically owned and managed by the motherboard.
-     */
-    UsbCaptureEngine captureEngine_;
 };

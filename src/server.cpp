@@ -20,9 +20,10 @@
 #include <vector>
 #include "application_context.hpp"
 #include "device_info.hpp"
-#include "usb_camera.hpp"
-#include "shared_frame_pipeline.hpp"
 #include "mjpeg_server.hpp"
+#include "shared_frame_pipeline.hpp"
+#include "usb_camera.hpp"
+#include "usb_capture_engine.hpp"
 
 namespace {
     constexpr int DEFAULT_PORT = 8080;
@@ -107,7 +108,8 @@ int main(int argc, const char* argv[]) {
 
         SharedFramePipeline pipeline;
         MjpegServer server(port, globalRunning, pipeline);
-        ApplicationContext app(pipeline, server, globalRunning);
+        UsbCaptureEngine captureEngine(pipeline, globalRunning);
+        ApplicationContext app(server, captureEngine, globalRunning);
 
         app.run(camera);
         
