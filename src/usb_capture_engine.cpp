@@ -1,7 +1,6 @@
 #include <libusb.h>
-#include <array>
+#include <sys/time.h>
 #include <atomic>
-#include <cstdint>
 #include <cstdlib>
 #include <memory>
 #include <span>

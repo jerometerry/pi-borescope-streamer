@@ -1,5 +1,6 @@
 #pragma once
 #include <libusb.h>
+#include <stdint.h>
 #include <atomic>
 #include <memory>
 #include <thread>
