@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <algorithm>
 #include <cstddef>
 #include <iterator>
@@ -7,6 +8,8 @@
 #include <vector>
 #include "v4l2.hpp"
 #include "argument_parser.hpp"
+
+using ::testing::ThrowsMessage;
 
 class V42LTest : public ::testing::Test {
 private:
@@ -109,11 +112,10 @@ TEST_F(V42LTest, ParseBusLargerThan255) {
 	};
 	addArguments(args);
 
-	try {
-		parseArguments();
-	} catch (std::out_of_range& ex) {
-		EXPECT_STREQ(ex.what(), "bus exceeds uint8_t max range: 512");
-	}
+	EXPECT_THAT(
+		[this]() { parseArguments(); }, 
+		ThrowsMessage<std::out_of_range>("bus exceeds uint8_t max range: 512")
+	);
 }
 
 TEST_F(V42LTest, ParseAddress) {	
@@ -157,11 +159,10 @@ TEST_F(V42LTest, ParseAddressLargerThan255) {
 		"131072"
 	};
 	addArguments(args);
-	try {
-		parseArguments();
-	} catch (std::out_of_range& ex) {
-		EXPECT_STREQ(ex.what(), "address exceeds uint8_t max range: 512");
-	}
+	EXPECT_THAT(
+		[this]() { parseArguments(); }, 
+		ThrowsMessage<std::out_of_range>("address exceeds uint8_t max range: 512")
+	);
 }
 
 TEST_F(V42LTest, ParseWidth) {	
@@ -249,16 +250,15 @@ TEST_F(V42LTest, ParseHelp) {
 }
 
 TEST_F(V42LTest, ParseUnknownArgument) {	
-	std::vector<std::string> args = {
-		"./v4l2-borescope-daemon",
-		"--unknown",
-		"N/A"
-	};
-	addArguments(args);
-	try {
-		parseArguments();
-	}
-	catch (const std::invalid_argument& e) {
-        EXPECT_STREQ(e.what(), "Unknown argument: --unknown");
-    }
+    std::vector<std::string> args = {
+        "./v4l2-borescope-daemon",
+        "--unknown",
+        "N/A"
+    };
+    addArguments(args);
+
+    EXPECT_THAT(
+		[this]() { parseArguments(); }, 
+		ThrowsMessage<std::invalid_argument>("Unknown argument: --unknown")
+	);
 }
