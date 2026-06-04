@@ -1,0 +1,36 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+    printf("Monitoring CPU Scheduler for pi-borescope-streamer...\n");
+    printf("===============================================================\n");
+    printf("%-12s %-20s %-20s\n", "TIME", "VOLUNTARY_CSW/sec", "INVOLUNTARY_CSW/sec");
+    printf("===============================================================\n");
+}
+
+/* * The sched_switch tracepoint fires every time a thread leaves the CPU.
+ * args->prev_state == 0 means the thread was forcibly preempted (Involuntary).
+ * args->prev_state > 0 means the thread went to sleep/blocked (Voluntary).
+ */
+tracepoint:sched:sched_switch
+/args->prev_comm == "pi-borescope-st"/
+{
+    if (args->prev_state == 0) {
+        @involuntary++;
+    } else {
+        @voluntary++;
+    }
+}
+
+interval:s:1 {
+    time("%H:%M:%S    ");
+    printf("%-20d %-20d\n", @voluntary, @involuntary);
+    
+    // Reset accumulators
+    @voluntary = 0;
+    @involuntary = 0;
+}
+
+END {
+    clear(@voluntary);
+    clear(@involuntary);
+}
