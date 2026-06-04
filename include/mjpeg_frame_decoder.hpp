@@ -28,7 +28,7 @@ public:
      * @param broadcastHandler The function we call to hand off a finished, clean JPEG picture. 
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
      */
-    explicit MjpegFrameDecoder(std::function<void(const std::vector<uint8_t>&)> broadcastHandler);
+    explicit MjpegFrameDecoder(std::function<void(const std::vector<uint8_t>&)> frameSink);
 
     ~MjpegFrameDecoder() = default;
 
@@ -86,13 +86,13 @@ private:
     /**
      * @brief Where to send finished video pictures.
      */
-    std::function<void(const std::vector<uint8_t>&)> broadcastHandler;
+    std::function<void(const std::vector<uint8_t>&)> frameSink;
 
     /**
      * @brief Snip out the exact picture and send it off.
      * @details Standard JPEG files have strict start (`FF D8`) and end (`FF D9`) markers. 
      * This function scans the workbench, cuts out the perfect JPEG file, and fires it 
-     * into the `broadcastHandler`.
+     * into the `frameSink`.
      */
     void trimAndEmitFrame();
 };

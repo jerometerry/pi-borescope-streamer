@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib> 
 #include <iostream>
+#include <span>
 #include <string>
 #include <memory>
 #include <thread>
@@ -11,6 +12,7 @@
 #include "argument_parser.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
+#include "mjpeg_frame_decoder.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "usb_capture_engine.hpp"
 #include "v4l2.hpp"
@@ -61,8 +63,20 @@ int main(int argc, const char* argv[]) {
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
     SharedFramePipeline pipeline;
-    UsbCaptureEngine captureEngine(pipeline, running);
+
     V4l2Publisher publisher(config);
+
+    MjpegFrameDecoder decoder([&pipeline](const std::vector<uint8_t>& frame) {
+        auto buffer = pipeline.checkoutBuffer();
+        if (buffer) {
+            buffer->assign(frame.begin(), frame.end());
+            pipeline.updateFrame(std::move(buffer));
+        }
+    });
+
+    UsbCaptureEngine captureEngine([&decoder](std::span<const uint8_t> data) {
+        decoder.processIncomingCameraData(data);
+    }, running);
 
     captureEngine.start(camera);
 
@@ -83,6 +97,7 @@ int main(int argc, const char* argv[]) {
     }
 
     captureEngine.stop();
+    
     std::cout << "[System Termination] V4L2 daemon exited cleanly.\n";
     return EXIT_SUCCESS;
 }

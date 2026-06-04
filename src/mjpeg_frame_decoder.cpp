@@ -8,8 +8,8 @@
 #include "server_constants.hpp"
 
 MjpegFrameDecoder::MjpegFrameDecoder(
-    std::function<void(const std::vector<uint8_t>&)> broadcastHandler) 
-    : broadcastHandler(std::move(broadcastHandler)) {
+    std::function<void(const std::vector<uint8_t>&)> frameSink) 
+    : frameSink(std::move(frameSink)) {
         frameBuffer.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         streamBuffer.reserve(ServerConstants::EIGHT_KILOBYTES);
         emitBuffer.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
@@ -111,7 +111,7 @@ void MjpegFrameDecoder::trimAndEmitFrame() {
         }
     }
 
-    // If we have valid boundaries, slice the pure JPEG and broadcast
+    // If we have valid boundaries, slice the pure JPEG and fire it off
     if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
         size_t frameSize = eoiOffset - soiOffset;
         emitBuffer.clear();
@@ -122,8 +122,8 @@ void MjpegFrameDecoder::trimAndEmitFrame() {
 
         emitBuffer.insert(emitBuffer.end(), frameBuffer.begin() + soiOffset, frameBuffer.begin() + eoiOffset);
 
-        if (broadcastHandler) {
-            broadcastHandler(emitBuffer);
+        if (frameSink) {
+            frameSink(emitBuffer);
         }
     }
     
