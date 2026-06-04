@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include <stddef.h>
 #include <algorithm>
+#include <cstddef>
 #include <iterator>
 #include <string>
 #include <vector>
