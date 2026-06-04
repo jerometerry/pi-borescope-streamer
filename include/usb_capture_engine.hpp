@@ -1,4 +1,5 @@
 #pragma once
+#include <gtest/gtest_prod.h>
 #include <libusb.h>
 #include <stdint.h>
 #include <atomic>
@@ -55,6 +56,9 @@ public:
     void stop();
 
 private:
+    FRIEND_TEST(UsbCaptureEngineTest, HandlesSuccessfulTransfer);
+    FRIEND_TEST(UsbCaptureEngineTest, HandlesDeviceDisconnect);
+
     /**
      * @brief The direct, low-level connection to the physical endoscope hardware.
      */

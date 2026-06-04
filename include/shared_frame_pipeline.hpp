@@ -27,6 +27,8 @@ public:
      */
     SharedFramePipeline();
 
+    virtual ~SharedFramePipeline() = default;
+
     /**
      * @brief Replace the picture currently in the display window with a fresh one.
      * @param newFrame The finished video picture straight from the hardware decoder.
@@ -34,7 +36,7 @@ public:
      * for the camera to reuse later. If the user recently clicked the hardware snapshot 
      * button, a copy of this frame is safely tucked away before the display window updates.
      */
-    void updateFrame(std::shared_ptr<std::vector<uint8_t>> newFrame);
+    virtual void updateFrame(std::shared_ptr<std::vector<uint8_t>> newFrame);
 
     /**
      * @brief Grab an empty canvas from the recycling pile.
@@ -43,7 +45,7 @@ public:
      * video picture. Because it just recycles existing memory, this operation is 
      * virtually instantaneous.
      */
-    std::shared_ptr<std::vector<uint8_t>> checkoutBuffer();
+    virtual std::shared_ptr<std::vector<uint8_t>> checkoutBuffer();
 
     /**
      * @brief Throw a canvas back into the recycling pile without showing it to anyone.

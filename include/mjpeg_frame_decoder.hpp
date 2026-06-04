@@ -30,6 +30,8 @@ public:
      */
     explicit MjpegFrameDecoder(std::function<void(const std::vector<uint8_t>&)> broadcastHandler);
 
+    virtual ~MjpegFrameDecoder() = default;
+
     /**
      * @brief Pour new raw data from the camera cable into the decoder.
      * @details This is where the raw data enters the sorting facility. The decoder will 
@@ -37,7 +39,7 @@ public:
      * if a picture is completed or a button press is detected.
      * @param data A raw slice of bytes directly from the hardware.
      */
-    void processIncomingCameraData(std::span<const uint8_t> data);
+    virtual void processIncomingCameraData(std::span<const uint8_t> data);
 
 private:
 

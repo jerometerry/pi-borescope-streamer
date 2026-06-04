@@ -140,6 +140,7 @@ target_link_libraries(borescope_core
         uNetworking
     PRIVATE 
         project_warnings
+        GTest::gtest
 )
 
 add_executable(pi-borescope-streamer 
@@ -236,10 +237,14 @@ if(BUILD_TESTING)
     target_compile_options(gmock PRIVATE -w)
     target_compile_options(gmock_main PRIVATE -w)
 
+    target_link_libraries(borescope_core INTERFACE gtest)
+
     add_executable(run_project_tests 
         tests/test_device_finder.cpp
         tests/test_mjpeg_frame_decoder.cpp
         tests/test_mjpeg_server.cpp
+        tests/test_shared_frame_pipeline.cpp
+        tests/test_usb_capture_engine.cpp
         tests/test_v4l2.cpp
     )
 
@@ -249,8 +254,8 @@ if(BUILD_TESTING)
         PRIVATE 
             borescope_core
             project_warnings
-            GTest::gtest_main
-            GTest::gmock
+            gtest_main
+            gmock
     )
 
     include(GoogleTest)
