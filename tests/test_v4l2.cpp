@@ -18,7 +18,7 @@ private:
 
 protected:
     void SetUp() override {
-
+		config_.reset();
 	}
 
 	void addArguments(std::vector<std::string> args) {
@@ -45,6 +45,48 @@ protected:
 		return config_;
 	}
 };
+
+TEST_F(V42LTest, ResetDevicePath) {	
+	V4L2::Config config{};
+	config.devicePath = "/dev/video1234";
+	config.reset();
+	EXPECT_EQ(config.devicePath, "/dev/video7");
+}
+
+TEST_F(V42LTest, ResetBus) {	
+	V4L2::Config config{};
+	config.bus = 123;
+	config.reset();
+	EXPECT_EQ(config.bus, 0);
+}
+
+TEST_F(V42LTest, ResetAddress) {	
+	V4L2::Config config{};
+	config.address = 123;
+	config.reset();
+	EXPECT_EQ(config.address, 0);
+}
+
+TEST_F(V42LTest, ResetWidth) {	
+	V4L2::Config config{};
+	config.width = 1024;
+	config.reset();
+	EXPECT_EQ(config.width, 640);
+}
+
+TEST_F(V42LTest, ResetHeight) {	
+	V4L2::Config config{};
+	config.height = 768;
+	config.reset();
+	EXPECT_EQ(config.height, 480);
+}
+
+TEST_F(V42LTest, ResetSize) {	
+	V4L2::Config config{};
+	config.sizeImage = 123456;
+	config.reset();
+	EXPECT_EQ(config.sizeImage, 131072);
+}
 
 TEST_F(V42LTest, ParseDevicePath) {	
 	std::vector<std::string> args = {

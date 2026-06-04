@@ -16,6 +16,18 @@ namespace V4L2 {
         int width{640};
         int height{480};
         size_t sizeImage{ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES};
+
+        /**
+         * @brief Reset config values back to defaults
+         */
+        void reset() {
+            devicePath = "/dev/video7";
+            bus = 0;
+            address = 0;
+            width = 640;
+            height = 480;
+            sizeImage = ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES;
+        }
     };
 
     /**
