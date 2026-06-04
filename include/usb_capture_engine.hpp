@@ -6,9 +6,9 @@
 #include <thread>
 #include <vector>
 
+class MjpegFrameDecoder;
 class SharedFramePipeline;
 class UsbCamera;
-class MjpegFrameDecoder;
 struct DeviceInfo;
 
 /**
