@@ -1,0 +1,112 @@
+#pragma once
+#include <libusb.h>
+#include <atomic>
+#include <memory>
+#include <thread>
+#include <vector>
+#include <span>
+#include "device_info.hpp"
+#include "usb_camera.hpp"
+#include "server_constants.hpp"
+#include "usb_capture_engine.hpp" // Just for the UsbTransferStatus enum
+
+/**
+ * @brief A zero-cost template wrapper that manages the libusb event loop.
+ * @tparam FrameProcessor A class implementing `bool processTransfer(UsbTransferStatus, std::span<const uint8_t>)`
+ */
+template <typename FrameProcessor>
+class LibusbAsyncDriver {
+public:
+    LibusbAsyncDriver(FrameProcessor& processor, std::atomic<bool>* running)
+        : processor_(processor), running_(running) {}
+
+    ~LibusbAsyncDriver() { stop(); }
+
+    void start(const DeviceInfo& target) {
+        workerThread_ = std::thread(&LibusbAsyncDriver::loop, this, target);
+    }
+
+    void stop() {
+        if (workerThread_.joinable()) {
+            workerThread_.join();
+        }
+    }
+
+private:
+    FrameProcessor& processor_;
+    std::atomic<bool>* running_;
+    std::unique_ptr<UsbCamera> camera_;
+    std::thread workerThread_;
+    std::vector<libusb_transfer*> transferPool_;
+    std::vector<std::vector<uint8_t>> transferBuffers_;
+
+    void loop(const DeviceInfo& target) {
+        try {
+            camera_ = std::make_unique<UsbCamera>(target);
+            transferBuffers_.assign(ServerConstants::POOL_SIZE, std::vector<uint8_t>(ServerConstants::CHUNK_SIZE));
+
+            for (int i = 0; i < ServerConstants::POOL_SIZE; ++i) {
+                libusb_transfer* transfer = libusb_alloc_transfer(0);
+                libusb_fill_bulk_transfer(
+                    transfer,
+                    camera_->getRawHandle(),
+                    1 | LIBUSB_ENDPOINT_IN,
+                    transferBuffers_[i].data(),
+                    ServerConstants::CHUNK_SIZE,
+                    transferCallback,
+                    this,
+                    ServerConstants::USB_TIMEOUT
+                );
+                libusb_submit_transfer(transfer);
+                transferPool_.push_back(transfer);
+            }
+
+            while (running_.load(std::memory_order_relaxed)) {
+                int error = libusb_handle_events(camera_->getContext());
+                if (error != LIBUSB_SUCCESS) break;
+            }
+
+            for (auto* transfer : transferPool_) {
+                libusb_cancel_transfer(transfer);
+            }
+
+            struct timeval tv = {0, ServerConstants::ONE_HUNDRED_MILLISECONDS};
+            for (int i = 0; i < ServerConstants::POOL_SIZE; ++i) {
+                libusb_handle_events_timeout(camera_->getContext(), &tv);
+            }
+
+            for (auto* transfer : transferPool_) {
+                libusb_free_transfer(transfer);
+            }
+            transferPool_.clear();
+            transferBuffers_.clear();
+
+        } catch (...) {
+            running_ = false;
+        }
+    }
+
+    static void LIBUSB_CALL transferCallback(struct libusb_transfer* transfer) {
+        auto* driver = static_cast<LibusbAsyncDriver*>(transfer->user_data);
+        
+        UsbTransferStatus status = UsbTransferStatus::Error;
+        if (transfer->status == LIBUSB_TRANSFER_COMPLETED) {
+            status = UsbTransferStatus::Completed;
+        } else if (transfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
+            status = UsbTransferStatus::Disconnected;
+        }
+
+        std::span<const uint8_t> payload;
+        if (status == UsbTransferStatus::Completed && transfer->actual_length > 0) {
+            payload = std::span<const uint8_t>(transfer->buffer, transfer->actual_length);
+        }
+
+        bool shouldResubmit = driver->processor_.processTransfer(status, payload);
+
+        if (!shouldResubmit) {
+            driver->running_->store(false, std::memory_order_release);
+        } else if (driver->running_->load(std::memory_order_relaxed)) {
+            libusb_submit_transfer(transfer);
+        }
+    }
+};

@@ -1,7 +1,6 @@
 #include <format>
-#include <string>
-#include <exception>
 #include <iostream>
+#include <string>
 #include <stdexcept>
 #include "argument_parser.hpp"
 #include "v4l2.hpp"

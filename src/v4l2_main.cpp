@@ -3,11 +3,13 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdlib> 
+#include <functional>
 #include <iostream>
 #include <span>
 #include <string>
 #include <memory>
 #include <thread>
+#include <utility>
 #include <vector>
 #include "argument_parser.hpp"
 #include "device_info.hpp"

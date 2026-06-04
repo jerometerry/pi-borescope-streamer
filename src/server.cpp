@@ -10,17 +10,23 @@
  * a different port number when you launch the program from the terminal.
  */
 
+#include <stdint.h>
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdlib>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <span>
 #include <string>
-#include <vector>
-#include <chrono>
 #include <thread>
+#include <utility>
+#include <vector>
 #include "device_info.hpp"
+#include "libusb_async_driver.hpp"
 #include "mjpeg_frame_decoder.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_pipeline.hpp"
@@ -124,12 +130,13 @@ int main(int argc, const char* argv[]) {
 
         UsbCaptureEngine captureEngine([&decoder](std::span<const uint8_t> data) {
             decoder.processIncomingCameraData(data);
-        }, globalRunning);
+        });
 
+        LibusbAsyncDriver<UsbCaptureEngine> usbDriver(captureEngine, &globalRunning);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 
-        captureEngine.start(camera);
+        usbDriver.start(camera);
         server.start();
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
@@ -140,7 +147,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
 
-        captureEngine.stop();
+        usbDriver.stop();
         
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception in application core: " << e.what() << "\n";
