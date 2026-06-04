@@ -82,7 +82,9 @@ private:
             transferBuffers_.clear();
 
         } catch (...) {
-            running_ = false;
+            if (running_) {
+                running_->store(false, std::memory_order_release);
+            }
         }
     }
 
