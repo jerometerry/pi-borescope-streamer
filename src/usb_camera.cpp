@@ -6,7 +6,7 @@
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
-#include "server_constants.hpp"
+#include "constants.hpp"
 #include "usb_camera.hpp"
 
 UsbCamera::UsbCamera(const DeviceInfo& target) {
@@ -19,14 +19,14 @@ UsbCamera::UsbCamera(const DeviceInfo& target) {
         throw std::runtime_error("Specified Borescope hardware device not found on USB bus");
     }
 
-    for (int iface : {ServerConstants::INTERFACE_A_NUMBER, ServerConstants::INTERFACE_B_NUMBER}) {
+    for (int iface : {UsbProtocol::INTERFACE_A_NUMBER, UsbProtocol::INTERFACE_B_NUMBER}) {
         if (libusb_kernel_driver_active(deviceHandle_, iface) == 1) {
             libusb_detach_kernel_driver(deviceHandle_, iface);
         }
     }
 
-    if (libusb_claim_interface(deviceHandle_, ServerConstants::INTERFACE_A_NUMBER) < 0 ||
-        libusb_claim_interface(deviceHandle_, ServerConstants::INTERFACE_B_NUMBER) < 0) {
+    if (libusb_claim_interface(deviceHandle_, UsbProtocol::INTERFACE_A_NUMBER) < 0 ||
+        libusb_claim_interface(deviceHandle_, UsbProtocol::INTERFACE_B_NUMBER) < 0) {
         throw std::runtime_error("Failed to claim USB hardware interfaces");
     }
 
@@ -39,24 +39,24 @@ UsbCamera::UsbCamera(const DeviceInfo& target) {
         libusb_bulk_transfer(deviceHandle_, LIBUSB_ENDPOINT_IN | 0x02, drainBuf, sizeof(drainBuf), &drainBytes, 100);
     }
 
-    if (libusb_set_interface_alt_setting(deviceHandle_, ServerConstants::INTERFACE_B_NUMBER, ServerConstants::INTERFACE_B_ALTERNATE_SETTING) < 0) {
+    if (libusb_set_interface_alt_setting(deviceHandle_, UsbProtocol::INTERFACE_B_NUMBER, UsbProtocol::INTERFACE_B_ALTERNATE_SETTING) < 0) {
         throw std::runtime_error("libusb_set_interface_alt_setting failed");
     }
 
-    libusb_clear_halt(deviceHandle_, ServerConstants::ENDPOINT_1);
+    libusb_clear_halt(deviceHandle_, UsbProtocol::ENDPOINT_1);
 
     int numBytes = 0;
     write(
-        ServerConstants::ENDPOINT_2, 
-        ServerConstants::INITIALIZATION_TOKENS, 
-        sizeof(ServerConstants::INITIALIZATION_TOKENS), 
+        UsbProtocol::ENDPOINT_2, 
+        UsbProtocol::INITIALIZATION_TOKENS, 
+        sizeof(UsbProtocol::INITIALIZATION_TOKENS), 
         numBytes
     );
 
     write(
-        ServerConstants::ENDPOINT_1, 
-        ServerConstants::START_STREAM_TOKENS, 
-        sizeof(ServerConstants::START_STREAM_TOKENS), 
+        UsbProtocol::ENDPOINT_1, 
+        UsbProtocol::START_STREAM_TOKENS, 
+        sizeof(UsbProtocol::START_STREAM_TOKENS), 
         numBytes
     );
 }
@@ -113,7 +113,7 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
         
         if (libusb_get_device_descriptor(device, &desc) < 0) continue;
 
-        bool isSupported = std::ranges::any_of(ServerConstants::VENDOR_PRODUCT_ID_LIST,
+        bool isSupported = std::ranges::any_of(UsbProtocol::VENDOR_PRODUCT_ID_LIST,
             [&desc](const auto& vp) {
                 return desc.idVendor == vp.first && desc.idProduct == vp.second;
             });
@@ -164,11 +164,11 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
 
 int UsbCamera::read(std::vector<uint8_t> &buffer) {
     int numBytes = 0;
-    return read(ServerConstants::ENDPOINT_1, buffer, ServerConstants::FOUR_KILOBYTES, numBytes);
+    return read(UsbProtocol::ENDPOINT_1, buffer, Units::FOUR_KILOBYTES, numBytes);
 }
 
 int UsbCamera::read(uint8_t* buffer, size_t maxSize, int& numBytes) {
-    return read(ServerConstants::ENDPOINT_1, buffer, maxSize, numBytes);
+    return read(UsbProtocol::ENDPOINT_1, buffer, maxSize, numBytes);
 }
 
 int UsbCamera::read(unsigned char endpoint, uint8_t* buffer, size_t maxSize, int& numBytes) {
@@ -178,7 +178,7 @@ int UsbCamera::read(unsigned char endpoint, uint8_t* buffer, size_t maxSize, int
         buffer, 
         maxSize, 
         &numBytes, 
-        ServerConstants::USB_TIMEOUT
+        UsbConfig::USB_TIMEOUT
     );
 }
 
@@ -191,7 +191,7 @@ int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t
         buffer.data(), 
         maxSize, 
         &numBytes, 
-        ServerConstants::USB_TIMEOUT
+        UsbConfig::USB_TIMEOUT
     );
 
     if (error != 0) {
@@ -209,6 +209,6 @@ int UsbCamera::write(unsigned char endpoint, const uint8_t* buffer, size_t lengt
         const_cast<unsigned char*>(buffer), 
         length, 
         &numBytes, 
-        ServerConstants::USB_TIMEOUT
+        UsbConfig::USB_TIMEOUT
     );
 }

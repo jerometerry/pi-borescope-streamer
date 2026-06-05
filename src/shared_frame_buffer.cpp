@@ -4,13 +4,13 @@
 #include <span>
 #include <utility>
 #include <vector>
+#include "constants.hpp"
 #include "shared_frame_buffer.hpp"
-#include "server_constants.hpp"
 
 SharedFrameBuffer::SharedFrameBuffer() {
-    for (int i = 0; i < ServerConstants::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
+    for (int i = 0; i < SharedFrameBufferConfig::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
         auto buffer = std::make_unique<std::vector<uint8_t>>();
-        buffer->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         freePool_.push_back(std::move(buffer));
     }
 }
@@ -51,7 +51,7 @@ std::shared_ptr<std::vector<uint8_t>> SharedFrameBuffer::checkoutBuffer() {
 
     if (!buffer) {
         buffer = std::make_unique<std::vector<uint8_t>>();
-        buffer->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }
 
     auto weakThis = weak_from_this();
@@ -65,7 +65,7 @@ std::shared_ptr<std::vector<uint8_t>> SharedFrameBuffer::checkoutBuffer() {
 
 void SharedFrameBuffer::returnBuffer(std::unique_ptr<std::vector<uint8_t>> buffer) {
     std::scoped_lock lock(poolMutex_);
-    if (freePool_.size() < ServerConstants::MAX_SHARED_FRAME_POOL_SIZE) {
+    if (freePool_.size() < SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE) {
         freePool_.push_back(std::move(buffer));
     }
 }

@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
-#include "argument_parser.hpp"
+#include "data_structures.hpp"
 #include "v4l2.hpp"
 
 namespace V4L2 {

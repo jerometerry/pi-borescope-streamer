@@ -42,17 +42,6 @@ public:
     void send(std::span<const uint8_t> data);
 
 private:
-
-    /**
-     * @brief The exact byte size of the camera's custom shipping label.
-     */
-    static constexpr size_t USB_PACKET_HEADER_LENGTH = sizeof(UsbPacketHeader);
-
-    /**
-     * @brief The exact byte size of the camera's hidden status report.
-     */
-    static constexpr size_t CHUNK_METADATA_LENGTH = sizeof(CameraPacketHeader);
-
     /**
      * @brief The waiting room for raw bytes that haven't been sorted yet.
      */
@@ -74,7 +63,7 @@ private:
      * data is coming from, so we don't accidentally stitch chunks from two different 
      * pictures together.
      */
-    CameraPacketHeader metadata_{};
+    USB::CameraPacketHeader metadata_{};
 
     /**
      * @brief A bookmark tracking how far we've read into the stream buffer.

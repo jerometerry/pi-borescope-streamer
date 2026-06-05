@@ -7,7 +7,7 @@
 #include <thread>
 #include <vector>
 #include <memory>
-#include "server_constants.hpp"
+#include "constants.hpp"
 #include "shared_frame_buffer.hpp"
 
 TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
@@ -138,5 +138,5 @@ TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
 
     size_t currentPoolSize = frameBuffer->getFreePoolSize();
     
-    EXPECT_EQ(currentPoolSize, ServerConstants::MAX_SHARED_FRAME_POOL_SIZE);
+    EXPECT_EQ(currentPoolSize, SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE);
 }

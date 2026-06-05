@@ -6,8 +6,8 @@
 #include <memory>
 #include <thread>
 #include <vector>
+#include "data_structures.hpp"
 
-namespace uWS { template <bool SSL> struct HttpResponse; }
 struct us_listen_socket_t;
 struct us_timer_t;
 
@@ -30,15 +30,6 @@ public:
     void start();
 
 private:
-    struct ViewerState {
-        uWS::HttpResponse<false>* res{};
-        uint32_t lastSentFrameId{0};
-        bool isClosed{false};
-
-        bool isLagging{false};
-        uint32_t lagStartFrameId{0};
-    };
-
     const int port_;
     const std::atomic<bool>& running_;
     FrameSource frameSource_;
@@ -46,7 +37,7 @@ private:
     std::thread networkThread_;
     us_listen_socket_t* listenSocket_{nullptr};
 
-    std::vector<ViewerState> activeViewers_;
+    std::vector<Web::ViewerState> activeViewers_;
     uint32_t lastBroadcastedFrameId_{0};
 
     static void onTimer(us_timer_t *t);

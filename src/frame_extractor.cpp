@@ -6,9 +6,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include "constants.hpp"
 #include "data_structures.hpp"
 #include "frame_extractor.hpp"
-#include "server_constants.hpp"
 
 void FrameExtractor::printPaddingDump(const std::vector<uint8_t>& data, Padding padding) {
     size_t start = padding.start;
@@ -142,19 +142,21 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
 
     size_t i = 0;
     std::vector<uint8_t> currentFrame;
-    currentFrame.reserve(ServerConstants::TWO_HUNDRED_FIFTY_SIX_KILOBYTES); // Pre-allocate 256KB buffer for safety
+    currentFrame.reserve(Units::TWO_HUNDRED_FIFTY_SIX_KILOBYTES); // Pre-allocate 256KB buffer for safety
     
     int frameCount = 0;
     int lastFrameId = -1;
 
-    const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader);
-    const uint16_t MAGIC_NUMBER = 0xBBAA; 
+    const size_t TOTAL_HEADER_SIZE = USB::tPktSz;
+    const uint16_t USB_PACKET_HEADER = 0xBBAA; 
 
     while (i + TOTAL_HEADER_SIZE <= fileData.size()) {
 
-        const UsbPacketHeader* header = reinterpret_cast<const UsbPacketHeader*>(&fileData[i]);
+        const USB::UsbPacketHeader* header = reinterpret_cast<const USB::UsbPacketHeader*>(&fileData[i]);
 
-        if (header->getHeader() != MAGIC_NUMBER || (header->getCameraId() != 0x0B && header->getCameraId() != 0x07)) {
+        if (header->getHeader() != USB_PACKET_HEADER || 
+            (header->getCameraId() != UsbProtocol::VIDEO_CAMERA_ID && 
+             header->getCameraId() != UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
             i++;
             continue;
         }
@@ -180,13 +182,16 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
             continue;
         }
 
-        size_t chunkTotalSize = sizeof(UsbPacketHeader) + header->getLength();
+        size_t chunkTotalSize = USB::uPktSz + header->getLength();
         if (i + chunkTotalSize > fileData.size()) {
             std::cout << "Reached incomplete hardware block at end of file. Stopping.\n";
             break; 
         }
 
-        const CameraPacketHeader* meta = reinterpret_cast<const CameraPacketHeader*>(&fileData[i + sizeof(UsbPacketHeader)]);
+        const USB::CameraPacketHeader* meta = 
+            reinterpret_cast<const USB::CameraPacketHeader*>(
+                &fileData[i + USB::uPktSz]
+            );
 
         if (lastFrameId != -1 && meta->getFrameId() != lastFrameId) {
             if (!currentFrame.empty()) {

@@ -6,8 +6,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "data_structures.hpp"
 #include "v4l2.hpp"
-#include "argument_parser.hpp"
 
 using ::testing::ThrowsMessage;
 

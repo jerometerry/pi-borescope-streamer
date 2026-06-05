@@ -6,7 +6,7 @@
 #include <vector>
 #include <atomic>
 #include "binary_stream_capture.hpp"
-#include "server_constants.hpp"
+#include "constants.hpp"
 #include "usb_camera.hpp"
 
 int BinaryStreamCapture::capture(const std::atomic<bool>& running, const DeviceInfo& cameraInfo) {
@@ -16,7 +16,7 @@ int BinaryStreamCapture::capture(const std::atomic<bool>& running, const DeviceI
 		return EXIT_FAILURE;
 	}
 
-	const size_t PACKET_PAGE_SIZE = ServerConstants::FOUR_KILOBYTES; 
+	const size_t PACKET_PAGE_SIZE = Units::FOUR_KILOBYTES; 
 	std::vector<uint8_t> buffer;
 	buffer.reserve(PACKET_PAGE_SIZE); 
 

@@ -2,8 +2,8 @@
 #include <stdint.h>
 #include <string>
 #include <cstddef>
-#include "argument_parser.hpp"
-#include "server_constants.hpp"
+#include "constants.hpp"
+#include "data_structures.hpp"
 
 namespace V4L2 {
     /**
@@ -15,7 +15,7 @@ namespace V4L2 {
         uint8_t address{0};
         int width{640};
         int height{480};
-        size_t sizeImage{ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES};
+        size_t sizeImage{Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES};
 
         /**
          * @brief Reset config values back to defaults
@@ -26,7 +26,7 @@ namespace V4L2 {
             address = 0;
             width = 640;
             height = 480;
-            sizeImage = ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES;
+            sizeImage = Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES;
         }
     };
 

@@ -9,8 +9,21 @@
 #include <span>
 #include <string>
 #include <vector>
+#include "constants.hpp"
 #include "data_structures.hpp"
 #include "mjpeg_stream.hpp"
+
+inline constexpr size_t uPktSz = USB::uPktSz;
+inline constexpr size_t cPktSz = USB::cPktSz;
+inline constexpr size_t tPktSz = USB::tPktSz;
+inline constexpr uint16_t PACKET_HEADER = USB::PACKET_HEADER;
+inline constexpr uint8_t HEADER_A = USB::HEADER_A;
+inline constexpr uint8_t HEADER_B = USB::HEADER_B;
+inline constexpr uint8_t BOUNDARY_MARKER = USB::BOUNDARY_MARKER;
+inline constexpr uint8_t START_MARKER = USB::START_MARKER;
+inline constexpr uint8_t END_MARKER = USB::END_MARKER;
+inline constexpr uint8_t CAM_11 = UsbProtocol::VIDEO_CAMERA_ID;
+inline constexpr uint8_t CAM_7 = UsbProtocol::GRAVITY_SENSOR_CAMERA_ID;
 
 class MockHandlers {
 public:
@@ -25,7 +38,9 @@ private:
 protected:
     void SetUp() override {
         stream_ = std::make_unique<MjpegStream>(
-            [this](const std::vector<uint8_t>& data) { handler_.output(data); }
+            [this](const std::vector<uint8_t>& data) { 
+                handler_.output(data); 
+            }
         );
     }
 
@@ -34,27 +49,44 @@ protected:
 };
 
 TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
-    size_t headerSize = sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader);
     std::vector<uint8_t> hardwarePacket(1024, 0xDD); 
     
-    auto* usb = reinterpret_cast<UsbPacketHeader*>(hardwarePacket.data());
-    usb->setHeader(0xBBAA); usb->setCameraId(11); usb->setLength( 939);
+    auto* usb = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            hardwarePacket.data()
+        );
 
-    auto* chunk = reinterpret_cast<CameraPacketHeader*>(hardwarePacket.data() + sizeof(UsbPacketHeader));
-    chunk->setFrameId(2); chunk->setCameraNumber(0); chunk->setFlags(0); chunk->setGravitySensor(0);    
+    usb->setHeader(PACKET_HEADER);
+    usb->setCameraId(CAM_11);
+    usb->setLength( 939);
 
-    hardwarePacket[headerSize] = 0xFF;
-    hardwarePacket[headerSize + 1] = 0xD8;
-    hardwarePacket[sizeof(UsbPacketHeader) + usb->getLength() - 2] = 0xFF;
-    hardwarePacket[sizeof(UsbPacketHeader) + usb->getLength() - 1] = 0xD9;
+    auto* chunk = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            hardwarePacket.data() + uPktSz
+        );
+
+    chunk->setFrameId(2); 
+    chunk->setCameraNumber(0); 
+    chunk->setFlags(0); 
+    chunk->setGravitySensor(0);    
+
+    hardwarePacket[tPktSz] = BOUNDARY_MARKER;
+    hardwarePacket[tPktSz + 1] = START_MARKER;
+    hardwarePacket[uPktSz + usb->getLength() - 2] = BOUNDARY_MARKER;
+    hardwarePacket[uPktSz + usb->getLength() - 1] = END_MARKER;
 
     std::vector<uint8_t> triggerFrame = hardwarePacket; 
-    auto* triggerChunk = reinterpret_cast<CameraPacketHeader*>(triggerFrame.data() + sizeof(UsbPacketHeader));
+
+    auto* triggerChunk = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            triggerFrame.data() + uPktSz
+        );
+
     triggerChunk->setFrameId(3);
 
     std::vector<uint8_t> expectedPayload(
-        hardwarePacket.begin() + sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader),
-        hardwarePacket.begin() + sizeof(UsbPacketHeader) + usb->getLength()
+        hardwarePacket.begin() + uPktSz + cPktSz,
+        hardwarePacket.begin() + uPktSz + usb->getLength()
     );
     EXPECT_CALL(GetOutputHandler(), output(expectedPayload)).Times(1);
 
@@ -64,32 +96,49 @@ TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
 
 TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
     std::vector<uint8_t> validHeader(1024, 0x00);
-    auto* usb = reinterpret_cast<UsbPacketHeader*>(validHeader.data());
-    usb->setHeader(0xBBAA); usb->setCameraId(11); usb->setLength(1024 - sizeof(UsbPacketHeader));
 
-    auto* chunk = reinterpret_cast<CameraPacketHeader*>(validHeader.data() + sizeof(UsbPacketHeader));
-    chunk->setFrameId(1); chunk->setCameraNumber(0); chunk->setFlags(0); chunk->setGravitySensor(0);    
+    auto* usb = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            validHeader.data()
+    );
+ 
+    usb->setHeader(PACKET_HEADER);
+    usb->setCameraId(CAM_11);
+    usb->setLength(1024 - uPktSz);
 
-    size_t payloadOffset = sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader);
-    validHeader[payloadOffset] = 0xFF;
-    validHeader[payloadOffset + 1] = 0xD8;
-    validHeader[validHeader.size() - 2] = 0xFF;
-    validHeader[validHeader.size() - 1] = 0xD9;
+    auto* chunk = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            validHeader.data() + uPktSz
+        );
 
-    std::vector<uint8_t> shortPacketTail(80, 0xFF);
+    chunk->setFrameId(1);
+    chunk->setCameraNumber(0);
+    chunk->setFlags(0); 
+    chunk->setGravitySensor(0);    
 
+    validHeader[tPktSz] = BOUNDARY_MARKER;
+    validHeader[tPktSz + 1] = START_MARKER;
+    validHeader[validHeader.size() - 2] = BOUNDARY_MARKER;
+    validHeader[validHeader.size() - 1] = END_MARKER;
+
+    std::vector<uint8_t> shortPacketTail(80, BOUNDARY_MARKER);
     std::vector<uint8_t> triggerFrame = validHeader;
-    auto* triggerChunk = reinterpret_cast<CameraPacketHeader*>(triggerFrame.data() + sizeof(UsbPacketHeader));
+
+    auto* triggerChunk = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            triggerFrame.data() + uPktSz
+        );
+
     triggerChunk->setFrameId(2);   
 
     std::vector<uint8_t> expectedPayload(
-        validHeader.begin() + payloadOffset,
+        validHeader.begin() + tPktSz,
         validHeader.end()
     );
     EXPECT_CALL(GetOutputHandler(), output(expectedPayload)).Times(1);
 
     GetStream().send(validHeader);
-    GetStream().send(shortPacketTail); // Should be safely ignored
+    GetStream().send(shortPacketTail);
     GetStream().send(triggerFrame);
 }
 
@@ -97,34 +146,72 @@ TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
 TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
     std::vector<uint8_t> expectedPayload;
 
-    auto buildPacket = [](uint8_t frameId, const std::vector<uint8_t>& payload) {
-        std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader) + payload.size(), 0x00);
-        
-        auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-        usb->setHeader(0xBBAA);
-        usb->setCameraId(11);
-        usb->setLength(sizeof(CameraPacketHeader) + payload.size());
+    auto buildPacket = [](
+            uint8_t frameId, 
+            const std::vector<uint8_t>& payload) {
 
-        auto* chunk = reinterpret_cast<CameraPacketHeader*>(packet.data() + sizeof(UsbPacketHeader));
+        std::vector<uint8_t> packet(
+            uPktSz + cPktSz + payload.size(), 
+            0x00
+        );
+        
+        auto* usb = 
+            reinterpret_cast<USB::UsbPacketHeader*>(
+                packet.data()
+            );
+
+        usb->setHeader(PACKET_HEADER);
+        usb->setCameraId(CAM_11);
+        usb->setLength(cPktSz + payload.size());
+
+        auto* chunk = 
+            reinterpret_cast<USB::CameraPacketHeader*>(
+                packet.data() + uPktSz
+            );
+
         chunk->setFrameId(frameId);
         chunk->setCameraNumber(0);
         chunk->setFlags(0);
         chunk->setGravitySensor(0);
         
-        std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader));
+        std::copy(
+            payload.begin(), 
+            payload.end(), 
+            packet.begin() + uPktSz + cPktSz);
         
         return packet;
     };
 
-    std::vector<uint8_t> payload1 = {0xFF, 0xD8, 0x01, 0x02};
-    expectedPayload.insert(expectedPayload.end(), payload1.begin(), payload1.end());
-    auto packet1 = buildPacket(1, payload1);
+    std::vector<uint8_t> payload1 = {BOUNDARY_MARKER, START_MARKER, 0x01, 0x02};
 
-    std::vector<uint8_t> payload2 = {0x03, 0x04, 0x05, 0x06, 0xFF, 0xD9};
-    expectedPayload.insert(expectedPayload.end(), payload2.begin(), payload2.end());
-    auto packet2 = buildPacket(1, payload2);
+    expectedPayload.insert(
+        expectedPayload.end(), 
+        payload1.begin(), 
+        payload1.end()
+    );
+    
+    auto packet1 = buildPacket(
+        1, 
+        payload1
+    );
 
-    auto packet3 = buildPacket(2, {0xFF, 0xD8, 0xAA, 0xBB});
+    std::vector<uint8_t> payload2 = {0x03, 0x04, 0x05, 0x06, BOUNDARY_MARKER, END_MARKER};
+
+    expectedPayload.insert(
+        expectedPayload.end(), 
+        payload2.begin(), 
+        payload2.end()
+    );
+    
+    auto packet2 = buildPacket(
+        1, 
+        payload2
+    );
+
+    auto packet3 = buildPacket(
+        2, 
+        {BOUNDARY_MARKER, START_MARKER, HEADER_A, HEADER_B}
+    );
 
     EXPECT_CALL(GetOutputHandler(), output(expectedPayload)).Times(1);
 
@@ -134,42 +221,79 @@ TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
 }
 
 TEST_F(MjpegStreamTest, TriggersButtonHandlerOnHardwareFlag) {
-    auto buildPacket = [](uint8_t frameId, bool isButtonPressed, const std::vector<uint8_t>& payload) {
-        std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader) + payload.size(), 0x00);
-        
-        auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-        usb->setHeader(0xBBAA);
-        usb->setCameraId(11);
-        usb->setLength(sizeof(CameraPacketHeader) + payload.size());
+    auto buildPacket = [](
+            uint8_t frameId, 
+            bool isButtonPressed, 
+            const std::vector<uint8_t>& payload) {
 
-        auto* chunk = reinterpret_cast<CameraPacketHeader*>(packet.data() + sizeof(UsbPacketHeader));
+        std::vector<uint8_t> packet(
+            uPktSz + cPktSz + payload.size(), 
+            0x00
+        );
+        
+        auto* usb = 
+            reinterpret_cast<USB::UsbPacketHeader*>(
+                packet.data()
+            );
+
+        usb->setHeader(PACKET_HEADER);
+        usb->setCameraId(CAM_11);
+        usb->setLength(cPktSz + payload.size());
+
+        auto* chunk = 
+            reinterpret_cast<USB::CameraPacketHeader*>(
+                packet.data() + uPktSz
+            );
+
         chunk->setFrameId(frameId);
         chunk->setCameraNumber(0);
         chunk->setFlags(0);
         chunk->setGravitySensor(0);
         chunk->setButtonPressed(isButtonPressed);
         
-        std::copy(payload.begin(), payload.end(), packet.begin() + sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader));
+        std::copy(
+            payload.begin(), 
+            payload.end(), 
+            packet.begin() + uPktSz + cPktSz
+        );
         
         return packet;
     };
 
-    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(::testing::AnyNumber());
+    EXPECT_CALL(
+        GetOutputHandler(), 
+        output(::testing::_)
+    )
+    .Times(
+        ::testing::AnyNumber()
+    );
 
-    auto packet1 = buildPacket(1, false, {0xFF, 0xD8, 0x01});
+    auto packet1 = buildPacket(
+        1, 
+        false, 
+        {BOUNDARY_MARKER, START_MARKER, 0x01}
+    );
     GetStream().send(packet1);
 
-    auto packet2 = buildPacket(1, true, {0x02, 0x03, 0x04});
+    auto packet2 = buildPacket(
+        1, 
+        true, 
+        {0x02, 0x03, 0x04}
+    );
     GetStream().send(packet2);
 
-    auto packet3 = buildPacket(1, false, {0x05, 0xFF, 0xD9});
+    auto packet3 = buildPacket(
+        1, 
+        false, 
+        {0x05, BOUNDARY_MARKER, END_MARKER}
+    );
     GetStream().send(packet3);
 }
 
 TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
     EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
 
-    std::vector<uint8_t> const short_buffer = {0xAA, 0xBB};
+    std::vector<uint8_t> const short_buffer = {HEADER_A, HEADER_B};
     GetStream().send(short_buffer);
 
     std::vector<uint8_t> const bad_magic_buffer(100, 0x00);
@@ -179,12 +303,19 @@ TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
 TEST_F(MjpegStreamTest, TriggersButtonHandlerOnFlag) {
     std::vector<uint8_t> packet(128, 0x00);
 
-    auto* usb_hdr = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb_hdr->setHeader(0xBBAA);
-    usb_hdr->setCameraId(7);
+    auto* usb_hdr = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            packet.data()
+        );
+
+    usb_hdr->setHeader(PACKET_HEADER);
+    usb_hdr->setCameraId(CAM_7);
     usb_hdr->setLength(64);
 
-    auto* chunk = reinterpret_cast<CameraPacketHeader*>(packet.data() + sizeof(UsbPacketHeader));
+    auto* chunk = 
+        reinterpret_cast<USB::CameraPacketHeader*>(packet.data() + 
+            uPktSz);
+
     chunk->setFrameId(101);
     chunk->setCameraNumber(0);
     chunk->setFlags(0);
@@ -196,32 +327,78 @@ TEST_F(MjpegStreamTest, TriggersButtonHandlerOnFlag) {
 
 TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     std::vector<uint8_t> packet1(100, 0x00);
-    auto* usb1 = reinterpret_cast<UsbPacketHeader*>(packet1.data());
-    usb1->setHeader(0xBBAA); usb1->setCameraId(11); usb1->setLength(50); 
 
-    auto* chunk1 = reinterpret_cast<CameraPacketHeader*>(packet1.data() + sizeof(UsbPacketHeader));
-    chunk1->setFrameId(1); chunk1->setCameraNumber(0); chunk1->setGravitySensor(0);
+    auto* usb1 = 
+        reinterpret_cast<USB::UsbPacketHeader*>(packet1.data());
 
-    size_t const payload_offset = sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader);
-    std::fill(packet1.begin() + payload_offset, packet1.begin() + usb1->getLength(), 0xDE);
-    packet1[payload_offset] = 0xFF;      // SOI
-    packet1[payload_offset + 1] = 0xD8;
-    packet1[sizeof(UsbPacketHeader) + usb1->getLength() - 2] = 0xFF; // EOI
-    packet1[sizeof(UsbPacketHeader) + usb1->getLength() - 1] = 0xD9;
+    usb1->setHeader(PACKET_HEADER);
+    usb1->setCameraId(CAM_11);
+    usb1->setLength(50); 
+
+    auto* chunk1 = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            packet1.data() + uPktSz
+        );
+
+    chunk1->setFrameId(1);
+    chunk1->setCameraNumber(0);
+    chunk1->setGravitySensor(0);;
+
+    std::fill(
+        packet1.begin() + tPktSz, 
+        packet1.begin() + usb1->getLength(), 
+        0xDE
+    );
+
+    packet1[tPktSz] = BOUNDARY_MARKER;
+    packet1[tPktSz + 1] = START_MARKER;
+
+    packet1[uPktSz + usb1->getLength() - 2] = BOUNDARY_MARKER;
+    packet1[uPktSz + usb1->getLength() - 1] = END_MARKER;
 
     std::vector<uint8_t> packet2(100, 0x00);
-    auto* usb2 = reinterpret_cast<UsbPacketHeader*>(packet2.data());
-    usb2->setHeader(0xBBAA); usb2->setCameraId(11); usb2->setLength(50);
 
-    auto* chunk2 = reinterpret_cast<CameraPacketHeader*>(packet2.data() + sizeof(UsbPacketHeader));
-    chunk2->setFrameId(2); chunk2->setCameraNumber(0); chunk2->setGravitySensor(0);
-    std::fill(packet2.begin() + payload_offset, packet2.begin() + usb2->getLength(), 0xAA);
+    auto* usb2 = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            packet2.data()
+        );
 
-    EXPECT_CALL(GetOutputHandler(), output(::testing::Property(&std::vector<uint8_t>::empty, false)))
-        .WillOnce(::testing::Invoke([](const std::vector<uint8_t>& frameBuffer) {
+    usb2->setHeader(PACKET_HEADER);
+    usb2->setCameraId(CAM_11);
+    usb2->setLength(50);
+
+    auto* chunk2 = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            packet2.data() + uPktSz
+        );
+
+    chunk2->setFrameId(2);
+    chunk2->setCameraNumber(0);
+    chunk2->setGravitySensor(0);
+
+    std::fill(
+        packet2.begin() + tPktSz, 
+        packet2.begin() + usb2->getLength(), 
+        HEADER_A
+    );
+
+    EXPECT_CALL(
+        GetOutputHandler(), 
+        output(
+            ::testing::Property(
+                &std::vector<uint8_t>::empty, 
+                false
+            )
+        )
+    )
+    .WillOnce(
+        ::testing::Invoke([](
+            const std::vector<uint8_t>& frameBuffer
+        ) {
             ASSERT_FALSE(frameBuffer.empty());
-            EXPECT_EQ(frameBuffer.front(), 0xFF); // Front byte is now the verified SOI marker
-        }));
+            EXPECT_EQ(frameBuffer.front(), BOUNDARY_MARKER);
+        }
+    ));
 
     GetStream().send(packet1);
     GetStream().send(packet2);
@@ -229,8 +406,13 @@ TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
 
 TEST_F(MjpegStreamTest, IgnoresInvalidCameraId) {
     std::vector<uint8_t> packet(20, 0x00);
-    auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb->setHeader(0xBBAA);
+
+    auto* usb = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            packet.data()
+        );
+
+    usb->setHeader(PACKET_HEADER);
     usb->setCameraId(99);
     usb->setLength(15);
 
@@ -240,9 +422,14 @@ TEST_F(MjpegStreamTest, IgnoresInvalidCameraId) {
 
 TEST_F(MjpegStreamTest, IgnoresPayloadExceedingBufferSize) {
     std::vector<uint8_t> packet(10, 0x00); 
-    auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb->setHeader(0xBBAA);
-    usb->setCameraId(11);
+
+    auto* usb = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            packet.data()
+        );
+
+    usb->setHeader(PACKET_HEADER);
+    usb->setCameraId(CAM_11);
     usb->setLength(50); 
 
     EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
@@ -251,9 +438,14 @@ TEST_F(MjpegStreamTest, IgnoresPayloadExceedingBufferSize) {
 
 TEST_F(MjpegStreamTest, IgnoresTruncatedMetadata) {
     std::vector<uint8_t> packet(10, 0x00); 
-    auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb->setHeader(0xBBAA);
-    usb->setCameraId(11);
+
+    auto* usb = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            packet.data()
+        );
+
+    usb->setHeader(PACKET_HEADER);
+    usb->setCameraId(CAM_11);
     usb->setLength(5); 
     
     EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
@@ -262,12 +454,21 @@ TEST_F(MjpegStreamTest, IgnoresTruncatedMetadata) {
 
 TEST_F(MjpegStreamTest, IgnoresUnsupportedCameraConfiguration) {
     std::vector<uint8_t> packet(20, 0x00);
-    auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
-    usb->setHeader(0xBBAA);
-    usb->setCameraId(11);
+
+    auto* usb = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            packet.data()
+        );
+
+    usb->setHeader(PACKET_HEADER);
+    usb->setCameraId(CAM_11);
     usb->setLength(15);
 
-    auto* chunk = reinterpret_cast<CameraPacketHeader*>(packet.data() + sizeof(UsbPacketHeader));
+    auto* chunk = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            packet.data() + uPktSz
+        );
+
     chunk->setFrameId(1);
     chunk->setCameraNumber(5);
     chunk->setFlags(0);
@@ -279,11 +480,18 @@ TEST_F(MjpegStreamTest, IgnoresUnsupportedCameraConfiguration) {
 
 TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     std::vector<uint8_t> packet1(20, 0x00);
-    auto* usb1 = reinterpret_cast<UsbPacketHeader*>(packet1.data());
-    usb1->setHeader(0xBBAA);
-    usb1->setCameraId(11);
+    auto* usb1 = 
+        reinterpret_cast<USB::UsbPacketHeader*>(packet1.data());
+
+    usb1->setHeader(PACKET_HEADER);
+    usb1->setCameraId(CAM_11);
     usb1->setLength(15);
-    auto* chunk1 = reinterpret_cast<CameraPacketHeader*>(packet1.data() + sizeof(UsbPacketHeader));
+
+    auto* chunk1 = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            packet1.data() + uPktSz
+        );
+
     chunk1->setFrameId(1);
     chunk1->setCameraNumber(0);
     chunk1->setGravitySensor(0);
@@ -291,11 +499,21 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     GetStream().send(packet1);
 
     std::vector<uint8_t> packet2(20, 0x00);
-    auto* usb2 = reinterpret_cast<UsbPacketHeader*>(packet2.data());
-    usb2->setHeader(0xBBAA);
-    usb2->setCameraId(11);
+
+    auto* usb2 = 
+        reinterpret_cast<USB::UsbPacketHeader*>(
+            packet2.data()
+        );
+    
+    usb2->setHeader(PACKET_HEADER);
+    usb2->setCameraId(CAM_11);
     usb2->setLength(15);
-    auto* chunk2 = reinterpret_cast<CameraPacketHeader*>(packet2.data() + sizeof(UsbPacketHeader));
+    
+    auto* chunk2 = 
+        reinterpret_cast<USB::CameraPacketHeader*>(
+            packet2.data() + uPktSz
+        );
+
     chunk2->setFrameId(1);
     chunk2->setCameraNumber(1);
     chunk2->setGravitySensor(0);

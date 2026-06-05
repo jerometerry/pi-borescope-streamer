@@ -11,11 +11,10 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include "constants.hpp"
 #include "device_finder.hpp"
-#include "http_headers.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
-#include "server_constants.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameSource frameSource)
     : port_(port), running_(running), frameSource_(std::move(frameSource)) {}
@@ -62,7 +61,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
                 continue;
             }
 
-            if (res->getWriteOffset() > ServerConstants::TWO_MEGABYTES) {
+            if (res->getWriteOffset() > Units::TWO_MEGABYTES) {
                 std::cerr << "[Network Core] Evicting lagging viewer on /stream.\n";
                 res->end();
                 server->activeViewers_.erase(server->activeViewers_.begin() + i);
@@ -83,8 +82,14 @@ void MjpegServer::onTimer(us_timer_t *t) {
                     res->cork([&]() {
                         res->write(HttpHeaders::MJPEG_CHUNK_PREFIX);
                         
-                        char headerBuf[ServerConstants::STACK_BUF_SIZE];
-                        auto result = std::to_chars(headerBuf, headerBuf + ServerConstants::STACK_BUF_SIZE, currentFrame->size());
+                        char headerBuf[WebServerConfig::HEADER_BUFFER_SIZE];
+
+                        auto result = std::to_chars(
+                            headerBuf, 
+                            headerBuf + WebServerConfig::HEADER_BUFFER_SIZE, 
+                            currentFrame->size()
+                        );
+
                         res->write(std::string_view(headerBuf, result.ptr - headerBuf));
                         
                         res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
@@ -135,7 +140,7 @@ void MjpegServer::start() {
         });
 
         app.get("/stream", [this](auto *res, auto *) {
-            if (activeViewers_.size() >= ServerConstants::MAX_CLIENTS) {
+            if (activeViewers_.size() >= WebServerConfig::MAX_CLIENTS) {
                 res->writeStatus("503 Service Unavailable")->end("Server Capacity Reached");
                 return;
             }
@@ -150,7 +155,7 @@ void MjpegServer::start() {
 
             res->onAborted([this, res]() {
                 auto it = std::find_if(activeViewers_.begin(), activeViewers_.end(),
-                    [res](const ViewerState& v) { return v.res == res; });
+                    [res](const Web::ViewerState& v) { return v.res == res; });
                     
                 if (it != activeViewers_.end()) {
                     it->isClosed = true;

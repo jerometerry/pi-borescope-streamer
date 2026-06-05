@@ -7,17 +7,10 @@
 #include <thread>
 #include <vector>
 #include <span>
+#include "constants.hpp"
+#include "data_structures.hpp"
 #include "device_info.hpp"
 #include "usb_camera.hpp"
-#include "server_constants.hpp"
-
-namespace USB {
-    enum class TransferStatus :std::uint8_t {
-        Completed,
-        Disconnected,
-        Error
-    };
-}
 
 /**
  * @brief A zero-cost template wrapper that manages the libusb event loop.
@@ -53,21 +46,21 @@ private:
         try {
             camera_ = std::make_unique<UsbCamera>(target);
             transferBuffers_.assign(
-                ServerConstants::USB_TRANSFER_BUFFER_POOL_SIZE, 
-                std::vector<uint8_t>(ServerConstants::CHUNK_SIZE)
+                UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE, 
+                std::vector<uint8_t>(UsbConfig::CHUNK_SIZE)
             );
 
-            for (int i = 0; i < ServerConstants::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
+            for (int i = 0; i < UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
                 libusb_transfer* transfer = libusb_alloc_transfer(0);
                 libusb_fill_bulk_transfer(
                     transfer,
                     camera_->getRawHandle(),
                     1 | LIBUSB_ENDPOINT_IN,
                     transferBuffers_[i].data(),
-                    ServerConstants::CHUNK_SIZE,
+                    UsbConfig::CHUNK_SIZE,
                     transferCallback,
                     this,
-                    ServerConstants::USB_TIMEOUT
+                    UsbConfig::USB_TIMEOUT
                 );
                 libusb_submit_transfer(transfer);
                 transferPool_.push_back(transfer);
@@ -85,8 +78,8 @@ private:
                 libusb_cancel_transfer(transfer);
             }
 
-            struct timeval tv = {0, ServerConstants::ONE_HUNDRED_MILLISECONDS};
-            for (int i = 0; i < ServerConstants::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
+            struct timeval tv = {0, Units::ONE_HUNDRED_MILLISECONDS};
+            for (int i = 0; i < UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
                 libusb_handle_events_timeout(camera_->getContext(), &tv);
             }
 

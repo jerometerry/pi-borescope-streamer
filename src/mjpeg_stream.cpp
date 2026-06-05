@@ -4,28 +4,28 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "constants.hpp"
+#include "data_structures.hpp"
 #include "mjpeg_stream.hpp"
-#include "server_constants.hpp"
 
 MjpegStream::MjpegStream(
     std::function<void(const std::vector<uint8_t>&)> output) 
     : output_(std::move(output)) {
-        frameBuffer_.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        streamBuffer_.reserve(ServerConstants::EIGHT_KILOBYTES);
-        emitBuffer_.reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        frameBuffer_.reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        streamBuffer_.reserve(Units::EIGHT_KILOBYTES);
+        emitBuffer_.reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {
     streamBuffer_.insert(streamBuffer_.end(), data.begin(), data.end());
 
     size_t i = readOffset_;
-    const size_t TOTAL_HEADER_SIZE = sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader);
 
-    while (i + TOTAL_HEADER_SIZE <= streamBuffer_.size()) {
-        UsbPacketHeader header{};
-        std::memcpy(&header, &streamBuffer_[i], sizeof(UsbPacketHeader));
+    while (i + USB::tPktSz <= streamBuffer_.size()) {
+        USB::UsbPacketHeader header{};
+        std::memcpy(&header, &streamBuffer_[i], USB::uPktSz);
 
-        if (header.getHeader() != ServerConstants::USB_FRAME_HEADER || 
+        if (header.getHeader() != UsbProtocol::USB_FRAME_HEADER || 
            (header.getCameraId() != 0x0B && header.getCameraId() != 0x07)) {
             i++;
             continue;
@@ -50,14 +50,18 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             continue;
         }
 
-        size_t chunkTotalSize = sizeof(UsbPacketHeader) + header.getLength();
+        size_t chunkTotalSize = USB::uPktSz + header.getLength();
 
         if (i + chunkTotalSize > streamBuffer_.size()) {
             break;
         }
 
-        CameraPacketHeader meta{};
-        std::memcpy(&meta, &streamBuffer_[i + sizeof(UsbPacketHeader)], sizeof(CameraPacketHeader));
+        USB::CameraPacketHeader meta{};
+        std::memcpy(
+            &meta, 
+            &streamBuffer_[i + USB::uPktSz], 
+            USB::cPktSz
+        );
 
         if (!frameBuffer_.empty() && metadata_.getFrameId() != meta.getFrameId()) {
             trimAndEmitFrame();
@@ -65,8 +69,8 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         metadata_ = meta;
 
         if (!meta.hasGravitySensor() && meta.getOtherFlags() == 0 && meta.getCameraNumber() < 2) {
-            size_t payloadStart = i + TOTAL_HEADER_SIZE;
-            size_t payloadSize = chunkTotalSize - TOTAL_HEADER_SIZE;
+            size_t payloadStart = i + USB::tPktSz;
+            size_t payloadSize = chunkTotalSize - USB::tPktSz;
             
             frameBuffer_.insert(frameBuffer_.end(), 
                                streamBuffer_.begin() + payloadStart, 
@@ -81,7 +85,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
     if (readOffset_ == streamBuffer_.size()) {
         streamBuffer_.clear();
         readOffset_ = 0;
-    } else if (readOffset_ > ServerConstants::FOUR_KILOBYTES) {
+    } else if (readOffset_ > Units::FOUR_KILOBYTES) {
         streamBuffer_.erase(streamBuffer_.begin(), streamBuffer_.begin() + readOffset_);
         readOffset_ = 0;
     }
