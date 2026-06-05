@@ -120,7 +120,7 @@ add_library(borescope_core STATIC
     src/frame_extractor.cpp
     src/binary_stream_capture.cpp
     src/usb_camera.cpp 
-    src/mjpeg_frame_decoder.cpp
+    src/mjpeg_stream.cpp
     src/mjpeg_server.cpp
     src/v4l2.cpp
     ${GENERATED_HPP}
@@ -240,7 +240,7 @@ if(BUILD_TESTING)
     add_executable(run_project_tests 
         tests/test_device_finder.cpp
         tests/test_shared_frame_buffer.cpp
-        tests/test_mjpeg_frame_decoder.cpp
+        tests/test_mjpeg_stream.cpp
         tests/test_mjpeg_server.cpp
         tests/test_v4l2.cpp
     )

@@ -15,22 +15,22 @@
  * them down the wire. To make matters worse, buggy camera hardware sometimes inserts 
  * broken or "ghost" labels into the data stream.
  *
- * MjpegFrameDecoder acts as the sorting facility. It takes the raw firehose of data from 
+ * MjpegStream acts as the sorting facility. It takes the raw firehose of data from 
  * the transport layer, throws out the glitches, and carefully stitches the valid chunks back 
  * together into standard JPEG images. Once it successfully builds a complete picture, 
  * it hands it off to be broadcast. It also actively scans the hidden status signals in 
  * the chunks and alerts the system whenever the user's finger is holding down the physical hardware button.
  */
-class MjpegFrameDecoder {
+class MjpegStream {
 public:
     /**
      * @brief Construct the decoder and wire up its output destinations.
-     * @param broadcastHandler The function we call to hand off a finished, clean JPEG picture. 
+     * @param output The function we call to hand off a finished, clean JPEG picture. 
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
      */
-    explicit MjpegFrameDecoder(std::function<void(const std::vector<uint8_t>&)> frameSink);
+    explicit MjpegStream(std::function<void(const std::vector<uint8_t>&)> output);
 
-    ~MjpegFrameDecoder() = default;
+    ~MjpegStream() = default;
 
     /**
      * @brief Pour new raw data from the camera cable into the decoder.
@@ -39,7 +39,7 @@ public:
      * if a picture is completed or a button press is detected.
      * @param data A raw slice of bytes directly from the hardware.
      */
-    void processIncomingCameraData(std::span<const uint8_t> data);
+    void send(std::span<const uint8_t> data);
 
 private:
 
@@ -56,17 +56,17 @@ private:
     /**
      * @brief The waiting room for raw bytes that haven't been sorted yet.
      */
-    std::vector<uint8_t> streamBuffer;
+    std::vector<uint8_t> streamBuffer_;
 
     /**
      * @brief The workbench where we are currently stitching the chunks into a picture.
      */
-    std::vector<uint8_t> frameBuffer;
+    std::vector<uint8_t> frameBuffer_;
 
     /**
      * @brief The staging area for a finished picture right before it gets broadcasted.
      */
-    std::vector<uint8_t> emitBuffer;
+    std::vector<uint8_t> emitBuffer_;
 
     /**
      * @brief The memory of what the current picture is supposed to look like.
@@ -81,12 +81,12 @@ private:
      * @details Prevents us from having to constantly shift memory around or re-read 
      * data we've already processed, keeping the decoder lightning fast.
      */
-    size_t readOffset{0};
+    size_t readOffset_{0};
     
     /**
      * @brief Where to send finished video pictures.
      */
-    std::function<void(const std::vector<uint8_t>&)> frameSink;
+    std::function<void(const std::vector<uint8_t>&)> output_;
 
     /**
      * @brief Snip out the exact picture and send it off.

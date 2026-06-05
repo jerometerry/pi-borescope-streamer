@@ -42,5 +42,5 @@ private:
     /**
      * @brief The raw C-pointer to the underlying libusb environment.
      */
-    libusb_context* context{nullptr};
+    libusb_context* context_{nullptr};
 };

@@ -153,43 +153,12 @@ public:
 
 private:
     /**
-     * @brief The primary control interface of the USB device.
-     */
-    static constexpr int INTERFACE_A_NUMBER = 0;
-
-    /**
-     * @brief The secondary data interface of the USB device.
-     */
-    static constexpr int INTERFACE_B_NUMBER = 1;
-
-    /**
-     * @brief The alternate setting required to activate the video stream on Interface B.
-     */
-    static constexpr int INTERFACE_B_ALTERNATE_SETTING = 1;
-
-    /**
-     * @brief The primary USB channel where the heavy video data flows in.
-     */
-    static constexpr unsigned char ENDPOINT_1 = 1;
-
-    /**
-     * @brief A secondary USB channel used for camera state or hardware button presses.
-     */
-    static constexpr unsigned char ENDPOINT_2 = 2;
-
-    /**
-     * @brief The maximum time (in milliseconds) we will wait for the camera to respond 
-     * before assuming the cable is disconnected or the camera has crashed.
-     */
-    static constexpr unsigned int USB_TIMEOUT = 1000;
-
-    /**
      * @brief The global libusb environment our connection lives inside.
      */
-    libusb_context *context = nullptr;
+    libusb_context *context_ = nullptr;
 
     /**
      * @brief The direct handle to the physical hardware device.
      */
-    libusb_device_handle *deviceHandle = nullptr;
+    libusb_device_handle *deviceHandle_ = nullptr;
 };

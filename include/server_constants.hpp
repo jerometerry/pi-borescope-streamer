@@ -69,6 +69,35 @@ namespace ServerConstants {
     inline constexpr unsigned int USB_TIMEOUT = 1000;
 
     /**
+     * @brief The primary control interface of the USB device.
+     */
+    inline constexpr int INTERFACE_A_NUMBER = 0;
+
+    /**
+     * @brief The secondary data interface of the USB device.
+     */
+    inline constexpr int INTERFACE_B_NUMBER = 1;
+
+    /**
+     * @brief The alternate setting required to activate the video stream on Interface B.
+     */
+    inline constexpr int INTERFACE_B_ALTERNATE_SETTING = 1;
+
+    /**
+     * @brief The primary USB channel where the heavy video data flows in.
+     */
+    inline constexpr unsigned char ENDPOINT_1 = 1;
+
+    /**
+     * @brief A secondary USB channel used for camera state or hardware button presses.
+     */
+    inline constexpr unsigned char ENDPOINT_2 = 2;
+
+    inline constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
+
+    inline constexpr uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
+
+    /**
      * @brief 
      */
     inline constexpr int INITIAL_SHARED_FRAME_POOL_SIZE = 4;

@@ -27,7 +27,7 @@
 #include "device_info.hpp"
 #include "shared_frame_buffer.hpp"
 #include "libusb_async_driver.hpp"
-#include "mjpeg_frame_decoder.hpp"
+#include "mjpeg_stream.hpp"
 #include "mjpeg_server.hpp"
 #include "usb_camera.hpp"
 
@@ -119,14 +119,14 @@ int main(int argc, const char* argv[]) {
             return frameBuffer->getLatestFrame(id);
         });
 
-        MjpegFrameDecoder decoder([&frameBuffer](const std::vector<uint8_t>& frame) {
+        MjpegStream mjpegStream([&frameBuffer](const std::vector<uint8_t>& frame) {
             frameBuffer->push(frame);
         });
 
-        auto usbRouter = [&decoder](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
+        auto usbRouter = [&mjpegStream](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
             if (status == USB::TransferStatus::Completed) {
                 if (!payload.empty()) {
-                    decoder.processIncomingCameraData(payload);
+                    mjpegStream.send(payload);
                 }
                 return true;
             }

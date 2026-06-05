@@ -10,30 +10,30 @@
 #include <string>
 #include <vector>
 #include "data_structures.hpp"
-#include "mjpeg_frame_decoder.hpp"
+#include "mjpeg_stream.hpp"
 
 class MockHandlers {
 public:
-    MOCK_METHOD(void, OnBroadcast, (const std::vector<uint8_t>& frameData));
+    MOCK_METHOD(void, output, (const std::vector<uint8_t>& output));
 };
 
-class MjpegFrameDecoderTest : public ::testing::Test {
+class MjpegStreamTest : public ::testing::Test {
 private:
-    MockHandlers mock_handlers_;
-    std::unique_ptr<MjpegFrameDecoder> decoder_;
+    MockHandlers handler_;
+    std::unique_ptr<MjpegStream> stream_;
 
 protected:
     void SetUp() override {
-        decoder_ = std::make_unique<MjpegFrameDecoder>(
-            [this](const std::vector<uint8_t>& data) { mock_handlers_.OnBroadcast(data); }
+        stream_ = std::make_unique<MjpegStream>(
+            [this](const std::vector<uint8_t>& data) { handler_.output(data); }
         );
     }
 
-    MockHandlers& GetMock() { return mock_handlers_; }
-    MjpegFrameDecoder& GetDecoder() { return *decoder_; }
+    MockHandlers& GetOutputHandler() { return handler_; }
+    MjpegStream& GetStream() { return *stream_; }
 };
 
-TEST_F(MjpegFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
+TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     size_t headerSize = sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader);
     std::vector<uint8_t> hardwarePacket(1024, 0xDD); 
     
@@ -56,13 +56,13 @@ TEST_F(MjpegFrameDecoderTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
         hardwarePacket.begin() + sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader),
         hardwarePacket.begin() + sizeof(UsbPacketHeader) + usb->getLength()
     );
-    EXPECT_CALL(GetMock(), OnBroadcast(expectedPayload)).Times(1);
+    EXPECT_CALL(GetOutputHandler(), output(expectedPayload)).Times(1);
 
-    GetDecoder().processIncomingCameraData(hardwarePacket);
-    GetDecoder().processIncomingCameraData(triggerFrame);
+    GetStream().send(hardwarePacket);
+    GetStream().send(triggerFrame);
 }
 
-TEST_F(MjpegFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
+TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
     std::vector<uint8_t> validHeader(1024, 0x00);
     auto* usb = reinterpret_cast<UsbPacketHeader*>(validHeader.data());
     usb->setHeader(0xBBAA); usb->setCameraId(11); usb->setLength(1024 - sizeof(UsbPacketHeader));
@@ -86,15 +86,15 @@ TEST_F(MjpegFrameDecoderTest, SafelyIgnoresHardwareTailChunks) {
         validHeader.begin() + payloadOffset,
         validHeader.end()
     );
-    EXPECT_CALL(GetMock(), OnBroadcast(expectedPayload)).Times(1);
+    EXPECT_CALL(GetOutputHandler(), output(expectedPayload)).Times(1);
 
-    GetDecoder().processIncomingCameraData(validHeader);
-    GetDecoder().processIncomingCameraData(shortPacketTail); // Should be safely ignored
-    GetDecoder().processIncomingCameraData(triggerFrame);
+    GetStream().send(validHeader);
+    GetStream().send(shortPacketTail); // Should be safely ignored
+    GetStream().send(triggerFrame);
 }
 
 
-TEST_F(MjpegFrameDecoderTest, ReassemblesMultiChunkMjpegStream) {
+TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
     std::vector<uint8_t> expectedPayload;
 
     auto buildPacket = [](uint8_t frameId, const std::vector<uint8_t>& payload) {
@@ -126,14 +126,14 @@ TEST_F(MjpegFrameDecoderTest, ReassemblesMultiChunkMjpegStream) {
 
     auto packet3 = buildPacket(2, {0xFF, 0xD8, 0xAA, 0xBB});
 
-    EXPECT_CALL(GetMock(), OnBroadcast(expectedPayload)).Times(1);
+    EXPECT_CALL(GetOutputHandler(), output(expectedPayload)).Times(1);
 
-    GetDecoder().processIncomingCameraData(packet1);
-    GetDecoder().processIncomingCameraData(packet2);
-    GetDecoder().processIncomingCameraData(packet3);
+    GetStream().send(packet1);
+    GetStream().send(packet2);
+    GetStream().send(packet3);
 }
 
-TEST_F(MjpegFrameDecoderTest, TriggersButtonHandlerOnHardwareFlag) {
+TEST_F(MjpegStreamTest, TriggersButtonHandlerOnHardwareFlag) {
     auto buildPacket = [](uint8_t frameId, bool isButtonPressed, const std::vector<uint8_t>& payload) {
         std::vector<uint8_t> packet(sizeof(UsbPacketHeader) + sizeof(CameraPacketHeader) + payload.size(), 0x00);
         
@@ -154,29 +154,29 @@ TEST_F(MjpegFrameDecoderTest, TriggersButtonHandlerOnHardwareFlag) {
         return packet;
     };
 
-    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(::testing::AnyNumber());
+    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(::testing::AnyNumber());
 
     auto packet1 = buildPacket(1, false, {0xFF, 0xD8, 0x01});
-    GetDecoder().processIncomingCameraData(packet1);
+    GetStream().send(packet1);
 
     auto packet2 = buildPacket(1, true, {0x02, 0x03, 0x04});
-    GetDecoder().processIncomingCameraData(packet2);
+    GetStream().send(packet2);
 
     auto packet3 = buildPacket(1, false, {0x05, 0xFF, 0xD9});
-    GetDecoder().processIncomingCameraData(packet3);
+    GetStream().send(packet3);
 }
 
-TEST_F(MjpegFrameDecoderTest, IgnoresInvalidHeaderOrShortBuffer) {
-    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
+TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
+    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
 
     std::vector<uint8_t> const short_buffer = {0xAA, 0xBB};
-    GetDecoder().processIncomingCameraData(short_buffer);
+    GetStream().send(short_buffer);
 
     std::vector<uint8_t> const bad_magic_buffer(100, 0x00);
-    GetDecoder().processIncomingCameraData(bad_magic_buffer);
+    GetStream().send(bad_magic_buffer);
 }
 
-TEST_F(MjpegFrameDecoderTest, TriggersButtonHandlerOnFlag) {
+TEST_F(MjpegStreamTest, TriggersButtonHandlerOnFlag) {
     std::vector<uint8_t> packet(128, 0x00);
 
     auto* usb_hdr = reinterpret_cast<UsbPacketHeader*>(packet.data());
@@ -191,10 +191,10 @@ TEST_F(MjpegFrameDecoderTest, TriggersButtonHandlerOnFlag) {
     chunk->setGravitySensor(0);
     chunk->setButtonPressed(true);
 
-    GetDecoder().processIncomingCameraData(packet);
+    GetStream().send(packet);
 }
 
-TEST_F(MjpegFrameDecoderTest, AccumulatesDataAndEmitsOnFrameIdChange) {
+TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     std::vector<uint8_t> packet1(100, 0x00);
     auto* usb1 = reinterpret_cast<UsbPacketHeader*>(packet1.data());
     usb1->setHeader(0xBBAA); usb1->setCameraId(11); usb1->setLength(50); 
@@ -217,50 +217,50 @@ TEST_F(MjpegFrameDecoderTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     chunk2->setFrameId(2); chunk2->setCameraNumber(0); chunk2->setGravitySensor(0);
     std::fill(packet2.begin() + payload_offset, packet2.begin() + usb2->getLength(), 0xAA);
 
-    EXPECT_CALL(GetMock(), OnBroadcast(::testing::Property(&std::vector<uint8_t>::empty, false)))
+    EXPECT_CALL(GetOutputHandler(), output(::testing::Property(&std::vector<uint8_t>::empty, false)))
         .WillOnce(::testing::Invoke([](const std::vector<uint8_t>& frameBuffer) {
             ASSERT_FALSE(frameBuffer.empty());
             EXPECT_EQ(frameBuffer.front(), 0xFF); // Front byte is now the verified SOI marker
         }));
 
-    GetDecoder().processIncomingCameraData(packet1);
-    GetDecoder().processIncomingCameraData(packet2);
+    GetStream().send(packet1);
+    GetStream().send(packet2);
 }
 
-TEST_F(MjpegFrameDecoderTest, IgnoresInvalidCameraId) {
+TEST_F(MjpegStreamTest, IgnoresInvalidCameraId) {
     std::vector<uint8_t> packet(20, 0x00);
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
     usb->setHeader(0xBBAA);
     usb->setCameraId(99);
     usb->setLength(15);
 
-    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
-    GetDecoder().processIncomingCameraData(packet);
+    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
+    GetStream().send(packet);
 }
 
-TEST_F(MjpegFrameDecoderTest, IgnoresPayloadExceedingBufferSize) {
+TEST_F(MjpegStreamTest, IgnoresPayloadExceedingBufferSize) {
     std::vector<uint8_t> packet(10, 0x00); 
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
     usb->setHeader(0xBBAA);
     usb->setCameraId(11);
     usb->setLength(50); 
 
-    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
-    GetDecoder().processIncomingCameraData(packet);
+    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
+    GetStream().send(packet);
 }
 
-TEST_F(MjpegFrameDecoderTest, IgnoresTruncatedMetadata) {
+TEST_F(MjpegStreamTest, IgnoresTruncatedMetadata) {
     std::vector<uint8_t> packet(10, 0x00); 
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
     usb->setHeader(0xBBAA);
     usb->setCameraId(11);
     usb->setLength(5); 
     
-    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
-    GetDecoder().processIncomingCameraData(packet);
+    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
+    GetStream().send(packet);
 }
 
-TEST_F(MjpegFrameDecoderTest, IgnoresUnsupportedCameraConfiguration) {
+TEST_F(MjpegStreamTest, IgnoresUnsupportedCameraConfiguration) {
     std::vector<uint8_t> packet(20, 0x00);
     auto* usb = reinterpret_cast<UsbPacketHeader*>(packet.data());
     usb->setHeader(0xBBAA);
@@ -273,11 +273,11 @@ TEST_F(MjpegFrameDecoderTest, IgnoresUnsupportedCameraConfiguration) {
     chunk->setFlags(0);
     chunk->setGravitySensor(0);
 
-    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
-    GetDecoder().processIncomingCameraData(packet);
+    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
+    GetStream().send(packet);
 }
 
-TEST_F(MjpegFrameDecoderTest, AbortsOnMidFrameCameraShift) {
+TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     std::vector<uint8_t> packet1(20, 0x00);
     auto* usb1 = reinterpret_cast<UsbPacketHeader*>(packet1.data());
     usb1->setHeader(0xBBAA);
@@ -288,7 +288,7 @@ TEST_F(MjpegFrameDecoderTest, AbortsOnMidFrameCameraShift) {
     chunk1->setCameraNumber(0);
     chunk1->setGravitySensor(0);
     
-    GetDecoder().processIncomingCameraData(packet1);
+    GetStream().send(packet1);
 
     std::vector<uint8_t> packet2(20, 0x00);
     auto* usb2 = reinterpret_cast<UsbPacketHeader*>(packet2.data());
@@ -300,12 +300,12 @@ TEST_F(MjpegFrameDecoderTest, AbortsOnMidFrameCameraShift) {
     chunk2->setCameraNumber(1);
     chunk2->setGravitySensor(0);
 
-    EXPECT_CALL(GetMock(), OnBroadcast(::testing::_)).Times(0);
-    GetDecoder().processIncomingCameraData(packet2);
+    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
+    GetStream().send(packet2);
 }
 
 TEST(UsbFrameDecoderEdgeTest, HandlesNullCallbacksSafely) {
-    MjpegFrameDecoder silentDecoder(nullptr);
+    MjpegStream silentDecoder(nullptr);
     std::vector<uint8_t> packet(100, 0x00);
-    ASSERT_NO_THROW(silentDecoder.processIncomingCameraData(packet));
+    ASSERT_NO_THROW(silentDecoder.send(packet));
 }

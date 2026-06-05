@@ -6,7 +6,7 @@
  * scan the raw byte data, find the hidden camera headers, strip them away, stitch the 
  * video chunks back together, and save perfect `.jpg` image files to your hard drive. 
  * 
- * It is essentially the `MjpegFrameDecoder` class pulled out of the live server and 
+ * It is essentially the `MjpegStream` class pulled out of the live server and 
  * turned into a standalone command-line tool.
  */
 

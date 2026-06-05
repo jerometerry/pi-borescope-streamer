@@ -9,27 +9,24 @@
 #include "server_constants.hpp"
 #include "usb_camera.hpp"
 
-static constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
-static constexpr uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
-
 UsbCamera::UsbCamera(const DeviceInfo& target) {
-    if (libusb_init(&context) < 0) {
+    if (libusb_init(&context_) < 0) {
         throw std::runtime_error("libusb_init failed");
     }
 
-    deviceHandle = open(context, target);
-    if (!deviceHandle) {
+    deviceHandle_ = open(context_, target);
+    if (!deviceHandle_) {
         throw std::runtime_error("Specified Borescope hardware device not found on USB bus");
     }
 
-    for (int iface : {INTERFACE_A_NUMBER, INTERFACE_B_NUMBER}) {
-        if (libusb_kernel_driver_active(deviceHandle, iface) == 1) {
-            libusb_detach_kernel_driver(deviceHandle, iface);
+    for (int iface : {ServerConstants::INTERFACE_A_NUMBER, ServerConstants::INTERFACE_B_NUMBER}) {
+        if (libusb_kernel_driver_active(deviceHandle_, iface) == 1) {
+            libusb_detach_kernel_driver(deviceHandle_, iface);
         }
     }
 
-    if (libusb_claim_interface(deviceHandle, INTERFACE_A_NUMBER) < 0 ||
-        libusb_claim_interface(deviceHandle, INTERFACE_B_NUMBER) < 0) {
+    if (libusb_claim_interface(deviceHandle_, ServerConstants::INTERFACE_A_NUMBER) < 0 ||
+        libusb_claim_interface(deviceHandle_, ServerConstants::INTERFACE_B_NUMBER) < 0) {
         throw std::runtime_error("Failed to claim USB hardware interfaces");
     }
 
@@ -39,26 +36,37 @@ UsbCamera::UsbCamera(const DeviceInfo& target) {
     unsigned char drainBuf[512];
     for (int i = 0; i < 30; ++i) {
         // 0x02 is the iAP IN endpoint (LIBUSB_ENDPOINT_IN adds the 0x80 bit to make it 0x82)
-        libusb_bulk_transfer(deviceHandle, LIBUSB_ENDPOINT_IN | 0x02, drainBuf, sizeof(drainBuf), &drainBytes, 100);
+        libusb_bulk_transfer(deviceHandle_, LIBUSB_ENDPOINT_IN | 0x02, drainBuf, sizeof(drainBuf), &drainBytes, 100);
     }
 
-    if (libusb_set_interface_alt_setting(deviceHandle, INTERFACE_B_NUMBER, INTERFACE_B_ALTERNATE_SETTING) < 0) {
+    if (libusb_set_interface_alt_setting(deviceHandle_, ServerConstants::INTERFACE_B_NUMBER, ServerConstants::INTERFACE_B_ALTERNATE_SETTING) < 0) {
         throw std::runtime_error("libusb_set_interface_alt_setting failed");
     }
 
-    libusb_clear_halt(deviceHandle, ENDPOINT_1);
+    libusb_clear_halt(deviceHandle_, ServerConstants::ENDPOINT_1);
 
     int numBytes = 0;
-    write(ENDPOINT_2, INITIALIZATION_TOKENS, sizeof(INITIALIZATION_TOKENS), numBytes);
-    write(ENDPOINT_1, START_STREAM_TOKENS, sizeof(START_STREAM_TOKENS), numBytes);
+    write(
+        ServerConstants::ENDPOINT_2, 
+        ServerConstants::INITIALIZATION_TOKENS, 
+        sizeof(ServerConstants::INITIALIZATION_TOKENS), 
+        numBytes
+    );
+
+    write(
+        ServerConstants::ENDPOINT_1, 
+        ServerConstants::START_STREAM_TOKENS, 
+        sizeof(ServerConstants::START_STREAM_TOKENS), 
+        numBytes
+    );
 }
 
 UsbCamera::~UsbCamera() {
-    if (deviceHandle) {
-        libusb_close(deviceHandle);
+    if (deviceHandle_) {
+        libusb_close(deviceHandle_);
     }
-    if (context) {
-        libusb_exit(context);
+    if (context_) {
+        libusb_exit(context_);
     }
 }
 
@@ -147,30 +155,30 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
 }
 
 [[nodiscard]] libusb_device_handle* UsbCamera::getRawHandle() const { 
-    return deviceHandle; 
+    return deviceHandle_; 
 }
 
 [[nodiscard]] libusb_context* UsbCamera::getContext() const { 
-    return context; 
+    return context_; 
 }
 
 int UsbCamera::read(std::vector<uint8_t> &buffer) {
     int numBytes = 0;
-    return read(ENDPOINT_1, buffer, ServerConstants::FOUR_KILOBYTES, numBytes);
+    return read(ServerConstants::ENDPOINT_1, buffer, ServerConstants::FOUR_KILOBYTES, numBytes);
 }
 
 int UsbCamera::read(uint8_t* buffer, size_t maxSize, int& numBytes) {
-    return read(ENDPOINT_1, buffer, maxSize, numBytes);
+    return read(ServerConstants::ENDPOINT_1, buffer, maxSize, numBytes);
 }
 
 int UsbCamera::read(unsigned char endpoint, uint8_t* buffer, size_t maxSize, int& numBytes) {
     return libusb_bulk_transfer(
-        deviceHandle, 
+        deviceHandle_, 
         LIBUSB_ENDPOINT_IN | endpoint, 
         buffer, 
         maxSize, 
         &numBytes, 
-        USB_TIMEOUT
+        ServerConstants::USB_TIMEOUT
     );
 }
 
@@ -178,12 +186,12 @@ int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t
     buffer.resize(maxSize);
 
     int error = libusb_bulk_transfer(
-        deviceHandle, 
+        deviceHandle_, 
         LIBUSB_ENDPOINT_IN | endpoint, 
         buffer.data(), 
         maxSize, 
         &numBytes, 
-        USB_TIMEOUT
+        ServerConstants::USB_TIMEOUT
     );
 
     if (error != 0) {
@@ -196,11 +204,11 @@ int UsbCamera::read(unsigned char endpoint, std::vector<uint8_t> &buffer, size_t
 
 int UsbCamera::write(unsigned char endpoint, const uint8_t* buffer, size_t length, int& numBytes) {
     return libusb_bulk_transfer(
-        deviceHandle, 
+        deviceHandle_, 
         LIBUSB_ENDPOINT_OUT | endpoint, 
         const_cast<unsigned char*>(buffer), 
         length, 
         &numBytes, 
-        USB_TIMEOUT
+        ServerConstants::USB_TIMEOUT
     );
 }

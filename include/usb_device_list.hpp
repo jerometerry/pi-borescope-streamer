@@ -20,14 +20,14 @@ public:
      * @param context The active USB permit required to ask the OS for this list.
      */
     explicit UsbDeviceList(UsbContext& context) :
-        count(libusb_get_device_list(context.get(), &devices)) {}
+        count_(libusb_get_device_list(context.get(), &devices_)) {}
     
     /**
      * @brief Automatically throw away the snapshot and free the memory.
      */
     ~UsbDeviceList() {
-        if (devices) {
-            libusb_free_device_list(devices, 1);
+        if (devices_) {
+            libusb_free_device_list(devices_, 1);
         }
     }
 
@@ -46,18 +46,18 @@ public:
      * @return A modern C++ span (a safe viewing window) over the raw list of devices.
      */
     std::span<libusb_device*> get() const {
-        if (count <= 0 || !devices) return {};
-        return {devices, static_cast<size_t>(count)};
+        if (count_ <= 0 || !devices_) return {};
+        return {devices_, static_cast<size_t>(count_)};
     }
 
 private:
     /**
      * @brief The raw, dangerous C-array of hardware devices provided by the OS.
      */
-    libusb_device** devices{nullptr};
+    libusb_device** devices_{nullptr};
 
     /**
      * @brief Exactly how many devices were found plugged in.
      */
-    ssize_t count{0};
+    ssize_t count_{0};
 };
