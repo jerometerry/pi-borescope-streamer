@@ -14,9 +14,9 @@
 #include "argument_parser.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
+#include "frame_exchange.hpp"
 #include "libusb_async_driver.hpp"
 #include "mjpeg_frame_decoder.hpp"
-#include "shared_frame_pipeline.hpp"
 #include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
 
@@ -64,14 +64,10 @@ int main(int argc, const char* argv[]) {
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
-    SharedFramePipeline pipeline;
+    FrameExchange exchange;
 
-    MjpegFrameDecoder decoder([&pipeline](const std::vector<uint8_t>& frame) {
-        auto buffer = pipeline.checkoutBuffer();
-        if (buffer) {
-            buffer->assign(frame.begin(), frame.end());
-            pipeline.updateFrame(std::move(buffer));
-        }
+   MjpegFrameDecoder decoder([&exchange](const std::vector<uint8_t>& frame) {
+        exchange.publishFrame(frame);
     });
 
     auto usbRouter = [&decoder](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
@@ -95,7 +91,7 @@ int main(int argc, const char* argv[]) {
 
     while (running.load(std::memory_order_relaxed)) {
         uint32_t currentFrameId = 0;
-        auto currentFrame = pipeline.getCurrentFrame(currentFrameId);
+        auto currentFrame = pipeline.getLatestFrame(currentFrameId);
 
         if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
             publisher.writeFrame(*currentFrame);

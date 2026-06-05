@@ -26,10 +26,10 @@
 #include <utility>
 #include <vector>
 #include "device_info.hpp"
+#include "frame_exchange.hpp"
 #include "libusb_async_driver.hpp"
 #include "mjpeg_frame_decoder.hpp"
 #include "mjpeg_server.hpp"
-#include "shared_frame_pipeline.hpp"
 #include "usb_camera.hpp"
 
 namespace {
@@ -113,18 +113,15 @@ int main(int argc, const char* argv[]) {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-        SharedFramePipeline pipeline;
 
-        MjpegServer server(port, globalRunning, [&pipeline](uint32_t& id) {
-            return pipeline.getCurrentFrame(id);
+        FrameExchange exchange;
+
+        MjpegServer server(port, globalRunning, [&exchange](uint32_t& id) {
+            return exchange.getLatestFrame(id);
         });
 
-        MjpegFrameDecoder decoder([&pipeline](const std::vector<uint8_t>& frame) {
-            auto buffer = pipeline.checkoutBuffer();
-            if (buffer) {
-                buffer->assign(frame.begin(), frame.end());
-                pipeline.updateFrame(std::move(buffer));
-            }
+        MjpegFrameDecoder decoder([&exchange](const std::vector<uint8_t>& frame) {
+            exchange.publishFrame(frame);
         });
 
         auto usbRouter = [&decoder](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {

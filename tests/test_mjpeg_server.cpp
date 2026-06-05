@@ -15,8 +15,8 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include "frame_exchange.hpp"
 #include "mjpeg_server.hpp"
-#include "shared_frame_pipeline.hpp"
 
 namespace {
     constexpr int TEST_PORT = 18080; 
@@ -30,7 +30,7 @@ namespace {
 class MjpegServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
-    SharedFramePipeline pipeline_;
+    FrameExchange pipeline_;
     std::unique_ptr<MjpegServer> server_;
 
 protected:
@@ -39,7 +39,7 @@ protected:
             TEST_PORT, 
             running_, 
             [this](uint32_t& id) {
-                return pipeline_.getCurrentFrame(id);
+                return pipeline_.getLatestFrame(id);
             }
         );
         
@@ -53,11 +53,7 @@ protected:
     }
 
     void injectMockVideoFrame(const std::vector<uint8_t>& mockData) {
-        auto buffer = pipeline_.checkoutBuffer();
-        if (buffer) {
-            buffer->assign(mockData.begin(), mockData.end());
-            pipeline_.updateFrame(std::move(buffer));
-        }
+        pipeline_.publishFrame(mockData);
     }
 
     std::string fetchFromLocalhost(const std::string& route) {
