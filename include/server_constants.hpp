@@ -81,6 +81,11 @@ namespace ServerConstants {
     /**
      * @brief 
      */
+    inline constexpr int TEN_MILLISECONDS = 10000;
+
+    /**
+     * @brief 
+     */
     inline constexpr int ONE_HUNDRED_MILLISECONDS = 100000;
 
     /**

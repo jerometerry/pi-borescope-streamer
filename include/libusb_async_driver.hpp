@@ -70,7 +70,7 @@ private:
             }
 
             
-            struct timeval tvRunning = {0, 0};
+            struct timeval tvRunning = {0, ServerConstants::TEN_MILLISECONDS};
             while (running_->load(std::memory_order_relaxed)) {
                 int error = libusb_handle_events_timeout_completed(
                     camera_->getContext(), &tvRunning, nullptr);
