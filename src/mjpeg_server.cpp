@@ -12,6 +12,7 @@
 #include <string_view>
 #include <utility>
 #include "constants.hpp"
+#include "data_structures.hpp"
 #include "device_finder.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"

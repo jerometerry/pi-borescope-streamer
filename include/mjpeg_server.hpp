@@ -6,10 +6,11 @@
 #include <memory>
 #include <thread>
 #include <vector>
-#include "data_structures.hpp"
 
 struct us_listen_socket_t;
 struct us_timer_t;
+
+namespace Web { struct ViewerState; }
 
 /**
  * @brief The server that streams the USB camera video to your web browser or video player.

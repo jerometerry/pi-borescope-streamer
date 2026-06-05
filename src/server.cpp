@@ -24,6 +24,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "data_structures.hpp"
 #include "device_info.hpp"
 #include "shared_frame_buffer.hpp"
 #include "libusb_async_driver.hpp"
