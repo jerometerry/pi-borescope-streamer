@@ -19,11 +19,9 @@
 #include <functional>
 #include <iostream>
 #include <limits>
-#include <memory>
 #include <span>
 #include <string>
 #include <thread>
-#include <utility>
 #include <vector>
 #include "device_info.hpp"
 #include "frame_exchange.hpp"
