@@ -90,7 +90,7 @@ int main(int argc, const char* argv[]) {
 
     while (running.load(std::memory_order_relaxed)) {
         uint32_t currentFrameId = 0;
-        auto currentFrame = frameBuffer.getLatestFrame(currentFrameId);
+        auto currentFrame = frameBuffer->getLatestFrame(currentFrameId);
 
         if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
             publisher.writeFrame(*currentFrame);

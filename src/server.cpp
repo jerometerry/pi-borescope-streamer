@@ -19,6 +19,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <span>
 #include <string>
 #include <thread>
