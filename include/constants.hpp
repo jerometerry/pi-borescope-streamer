@@ -171,6 +171,20 @@ namespace WebServerConfig {
      */
     inline constexpr size_t HEADER_BUFFER_SIZE = 128;
 
+    /**
+     * @brief 
+     */
+    inline constexpr int TIMER_FALLTHROUGH = 0;
+
+    /**
+     * @brief 
+     */
+    inline constexpr int TIMER_INTERVAL_MS = 15;
+
+    /**
+     * @brief 
+     */
+    inline const size_t MAX_OUTGOING_CLIENT_BUFFER_SIZE = Units::TWO_MEGABYTES;
 }
 
 namespace HttpHeaders {

@@ -62,7 +62,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
                 continue;
             }
 
-            if (res->getWriteOffset() > Units::TWO_MEGABYTES) {
+            if (res->getWriteOffset() > WebServerConfig::MAX_OUTGOING_CLIENT_BUFFER_SIZE) {
                 std::cerr << "[Network Core] Evicting lagging viewer on /stream.\n";
                 res->end();
                 server->activeViewers_.erase(server->activeViewers_.begin() + i);
@@ -173,14 +173,20 @@ void MjpegServer::start() {
                 listenSocket_ = socket;
                 std::cout << "[Network Core] Asynchronous uWebSockets engine listening on port " << port_ << '\n';
 
-                constexpr int TIMER_FALLTHROUGH = 0;
-                constexpr int TIMER_INTERVAL_MS = 15;
-
                 auto *loop = reinterpret_cast<struct us_loop_t *>(uWS::Loop::get());
-                us_timer_t *timer = us_create_timer(loop, TIMER_FALLTHROUGH, sizeof(MjpegServer*));
+                us_timer_t *timer = us_create_timer(
+                    loop, 
+                    WebServerConfig::TIMER_FALLTHROUGH, 
+                    sizeof(MjpegServer*)
+                );
                 
                 *static_cast<MjpegServer**>(us_timer_ext(timer)) = this;
-                us_timer_set(timer, MjpegServer::onTimer, TIMER_INTERVAL_MS, TIMER_INTERVAL_MS);
+                us_timer_set(
+                    timer, 
+                    MjpegServer::onTimer, 
+                    WebServerConfig::TIMER_INTERVAL_MS, 
+                    WebServerConfig::TIMER_INTERVAL_MS
+                );
             } else {
                 std::cerr << "[Network Core Error] Failed to bind to port " << port_ << '\n';
             }
