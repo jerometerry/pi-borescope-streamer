@@ -31,7 +31,6 @@
 #include "mjpeg_server.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "usb_camera.hpp"
-#include "usb_capture_engine.hpp"
 
 namespace {
     constexpr int DEFAULT_PORT = 8080;
@@ -128,14 +127,14 @@ int main(int argc, const char* argv[]) {
             }
         });
 
-        auto usbRouter = [&decoder](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
-            if (status == UsbTransferStatus::Completed) {
+        auto usbRouter = [&decoder](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
+            if (status == USB::TransferStatus::Completed) {
                 if (!payload.empty()) {
                     decoder.processIncomingCameraData(payload);
                 }
                 return true;
             }
-            return status != UsbTransferStatus::Disconnected; 
+            return status != USB::TransferStatus::Disconnected; 
         };
 
         LibusbAsyncDriver<decltype(usbRouter)> usbDriver(usbRouter, &globalRunning);

@@ -1,6 +1,7 @@
 #pragma once
 #include <libusb.h>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -8,11 +9,18 @@
 #include "device_info.hpp"
 #include "usb_camera.hpp"
 #include "server_constants.hpp"
-#include "usb_capture_engine.hpp"
+
+namespace USB {
+    enum class TransferStatus :std::uint8_t {
+        Completed,
+        Disconnected,
+        Error
+    };
+}
 
 /**
  * @brief A zero-cost template wrapper that manages the libusb event loop.
- * @tparam FrameProcessor A class implementing `bool processTransfer(UsbTransferStatus, std::span<const uint8_t>)`
+ * @tparam FrameProcessor A class implementing `bool processTransfer(USB::TransferStatus, std::span<const uint8_t>)`
  */
 template <typename Callable>
 class LibusbAsyncDriver {
@@ -91,15 +99,15 @@ private:
     static void LIBUSB_CALL transferCallback(struct libusb_transfer* transfer) {
         auto* driver = static_cast<LibusbAsyncDriver*>(transfer->user_data);
         
-        UsbTransferStatus status = UsbTransferStatus::Error;
+        USB::TransferStatus status = USB::TransferStatus::Error;
         if (transfer->status == LIBUSB_TRANSFER_COMPLETED) {
-            status = UsbTransferStatus::Completed;
+            status = USB::TransferStatus::Completed;
         } else if (transfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
-            status = UsbTransferStatus::Disconnected;
+            status = USB::TransferStatus::Disconnected;
         }
 
         std::span<const uint8_t> payload;
-        if (status == UsbTransferStatus::Completed && transfer->actual_length > 0) {
+        if (status == USB::TransferStatus::Completed && transfer->actual_length > 0) {
             payload = std::span<const uint8_t>(transfer->buffer, transfer->actual_length);
         }
 
