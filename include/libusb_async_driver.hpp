@@ -2,6 +2,7 @@
 #include <libusb.h>
 #include <atomic>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -71,7 +72,10 @@ private:
 
             while (running_->load(std::memory_order_relaxed)) {
                 int error = libusb_handle_events(camera_->getContext());
-                if (error != LIBUSB_SUCCESS) break;
+                if (error != LIBUSB_SUCCESS) {
+                    std::cerr << std::format("libusb_handle_events failed. Error: {}\n", error);
+                    break;
+                }
             }
 
             for (auto* transfer : transferPool_) {
@@ -89,7 +93,13 @@ private:
             transferPool_.clear();
             transferBuffers_.clear();
 
+        } catch (const std::exception& e) {
+            std::cerr << "[DRIVER ERROR] Terminated via standard exception: " << e.what() << '\n';
+            if (running_) {
+                running_->store(false, std::memory_order_release);
+            }
         } catch (...) {
+            std::cerr << "[DRIVER ERROR] Terminated via completely unhandled exception pattern!\n";
             if (running_) {
                 running_->store(false, std::memory_order_release);
             }
