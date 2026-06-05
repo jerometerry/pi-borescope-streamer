@@ -17,6 +17,7 @@ FrameExchange::FrameExchange() {
     freePool_.pop_back();
 }
 
+[[gnu::noinline]]
 void FrameExchange::publishFrame(std::span<const uint8_t> frameData) {
     if (frameData.empty()) { 
 		return;
