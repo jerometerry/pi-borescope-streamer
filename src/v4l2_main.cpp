@@ -14,6 +14,7 @@
 #include "argument_parser.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
+#include "libusb_async_driver.hpp"
 #include "mjpeg_frame_decoder.hpp"
 #include "shared_frame_pipeline.hpp"
 #include "usb_capture_engine.hpp"
@@ -66,8 +67,6 @@ int main(int argc, const char* argv[]) {
 
     SharedFramePipeline pipeline;
 
-    V4l2Publisher publisher(config);
-
     MjpegFrameDecoder decoder([&pipeline](const std::vector<uint8_t>& frame) {
         auto buffer = pipeline.checkoutBuffer();
         if (buffer) {
@@ -76,11 +75,20 @@ int main(int argc, const char* argv[]) {
         }
     });
 
-    UsbCaptureEngine captureEngine([&decoder](std::span<const uint8_t> data) {
-        decoder.processIncomingCameraData(data);
-    }, running);
+    auto usbRouter = [&decoder](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
+        if (status == UsbTransferStatus::Completed) {
+            if (!payload.empty()) {
+                decoder.processIncomingCameraData(payload);
+            }
+            return true;
+        }
+        return status != UsbTransferStatus::Disconnected; 
+    };
 
-    captureEngine.start(camera);
+    LibusbAsyncDriver<decltype(usbRouter)> usbDriver(usbRouter, &running);
+    usbDriver.start(camera);
+
+    V4l2Publisher publisher(config);
 
     std::cout << "[V4L2 Core] Streaming daemon active and routing frames.\n";
 
@@ -98,7 +106,7 @@ int main(int argc, const char* argv[]) {
         }
     }
 
-    captureEngine.stop();
+    usbDriver.stop();
     
     std::cout << "[System Termination] V4L2 daemon exited cleanly.\n";
     return EXIT_SUCCESS;

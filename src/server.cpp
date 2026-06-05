@@ -128,11 +128,17 @@ int main(int argc, const char* argv[]) {
             }
         });
 
-        UsbCaptureEngine captureEngine([&decoder](std::span<const uint8_t> data) {
-            decoder.processIncomingCameraData(data);
-        });
+        auto usbRouter = [&decoder](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
+            if (status == UsbTransferStatus::Completed) {
+                if (!payload.empty()) {
+                    decoder.processIncomingCameraData(payload);
+                }
+                return true;
+            }
+            return status != UsbTransferStatus::Disconnected; 
+        };
 
-        LibusbAsyncDriver<UsbCaptureEngine> usbDriver(captureEngine, &globalRunning);
+        LibusbAsyncDriver<decltype(usbRouter)> usbDriver(usbRouter, &globalRunning);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 

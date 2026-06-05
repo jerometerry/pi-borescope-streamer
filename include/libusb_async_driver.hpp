@@ -8,17 +8,17 @@
 #include "device_info.hpp"
 #include "usb_camera.hpp"
 #include "server_constants.hpp"
-#include "usb_capture_engine.hpp" // Just for the UsbTransferStatus enum
+#include "usb_capture_engine.hpp"
 
 /**
  * @brief A zero-cost template wrapper that manages the libusb event loop.
  * @tparam FrameProcessor A class implementing `bool processTransfer(UsbTransferStatus, std::span<const uint8_t>)`
  */
-template <typename FrameProcessor>
+template <typename Callable>
 class LibusbAsyncDriver {
 public:
-    LibusbAsyncDriver(FrameProcessor& processor, std::atomic<bool>* running)
-        : processor_(processor), running_(running) {}
+    LibusbAsyncDriver(Callable transferHandler, std::atomic<bool>* running)
+        : transferHandler_(std::move(transferHandler)), running_(running) {}
 
     ~LibusbAsyncDriver() { stop(); }
 
@@ -33,7 +33,7 @@ public:
     }
 
 private:
-    FrameProcessor& processor_;
+    Callable transferHandler_;
     std::atomic<bool>* running_;
     std::unique_ptr<UsbCamera> camera_;
     std::thread workerThread_;
@@ -103,7 +103,7 @@ private:
             payload = std::span<const uint8_t>(transfer->buffer, transfer->actual_length);
         }
 
-        bool shouldResubmit = driver->processor_.processTransfer(status, payload);
+        bool shouldResubmit = driver->transferHandler_(status, payload);
 
         if (!shouldResubmit) {
             driver->running_->store(false, std::memory_order_release);

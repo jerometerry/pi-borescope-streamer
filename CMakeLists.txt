@@ -122,7 +122,6 @@ add_library(borescope_core STATIC
     src/mjpeg_frame_decoder.cpp
     src/mjpeg_server.cpp
     src/shared_frame_pipeline.cpp
-    src/usb_capture_engine.cpp
     src/v4l2.cpp
     ${GENERATED_HPP}
 )
@@ -243,7 +242,6 @@ if(BUILD_TESTING)
         tests/test_mjpeg_frame_decoder.cpp
         tests/test_mjpeg_server.cpp
         tests/test_shared_frame_pipeline.cpp
-        tests/test_usb_capture_engine.cpp
         tests/test_v4l2.cpp
     )
 
