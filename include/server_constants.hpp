@@ -77,6 +77,11 @@ namespace ServerConstants {
      * @brief 
      */
     inline constexpr int MAX_SHARED_FRAME_POOL_SIZE = 8;
+
+    /**
+     * @brief 
+     */
+    inline constexpr int USB_TRANSFER_BUFFER_POOL_SIZE = 8;
     
     /**
      * @brief 

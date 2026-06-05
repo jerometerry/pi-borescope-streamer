@@ -52,9 +52,12 @@ private:
     void loop(const DeviceInfo& target) {
         try {
             camera_ = std::make_unique<UsbCamera>(target);
-            transferBuffers_.assign(ServerConstants::POOL_SIZE, std::vector<uint8_t>(ServerConstants::CHUNK_SIZE));
+            transferBuffers_.assign(
+                ServerConstants::USB_TRANSFER_BUFFER_POOL_SIZE, 
+                std::vector<uint8_t>(ServerConstants::CHUNK_SIZE)
+            );
 
-            for (int i = 0; i < ServerConstants::POOL_SIZE; ++i) {
+            for (int i = 0; i < ServerConstants::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
                 libusb_transfer* transfer = libusb_alloc_transfer(0);
                 libusb_fill_bulk_transfer(
                     transfer,
@@ -83,7 +86,7 @@ private:
             }
 
             struct timeval tv = {0, ServerConstants::ONE_HUNDRED_MILLISECONDS};
-            for (int i = 0; i < ServerConstants::POOL_SIZE; ++i) {
+            for (int i = 0; i < ServerConstants::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
                 libusb_handle_events_timeout(camera_->getContext(), &tv);
             }
 
