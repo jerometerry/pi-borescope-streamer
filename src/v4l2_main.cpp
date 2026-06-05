@@ -63,10 +63,10 @@ int main(int argc, const char* argv[]) {
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
-    SharedFrameBuffer frameBuffer;
+    auto frameBuffer = std::make_shared<SharedFrameBuffer>();
 
-   MjpegFrameDecoder decoder([&frameBuffer](const std::vector<uint8_t>& frame) {
-        frameBuffer.push(frame);
+    MjpegFrameDecoder decoder([&frameBuffer](const std::vector<uint8_t>& frame) {
+        frameBuffer->push(frame);
     });
 
     auto usbRouter = [&decoder](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
@@ -90,7 +90,7 @@ int main(int argc, const char* argv[]) {
 
     while (running.load(std::memory_order_relaxed)) {
         uint32_t currentFrameId = 0;
-        auto currentFrame = exchange.getLatestFrame(currentFrameId);
+        auto currentFrame = frameBuffer.getLatestFrame(currentFrameId);
 
         if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
             publisher.writeFrame(*currentFrame);

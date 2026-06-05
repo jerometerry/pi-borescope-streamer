@@ -71,7 +71,12 @@ namespace ServerConstants {
     /**
      * @brief 
      */
-    inline constexpr int POOL_SIZE = 8;
+    inline constexpr int INITIAL_SHARED_FRAME_POOL_SIZE = 4;
+
+    /**
+     * @brief 
+     */
+    inline constexpr int MAX_SHARED_FRAME_POOL_SIZE = 8;
     
     /**
      * @brief 

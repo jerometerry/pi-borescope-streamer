@@ -112,14 +112,14 @@ int main(int argc, const char* argv[]) {
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
 
-        SharedFrameBuffer frameBuffer;
+        auto frameBuffer = std::make_shared<SharedFrameBuffer>();
 
         MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
-            return frameBuffer.getLatestFrame(id);
+            return frameBuffer->getLatestFrame(id);
         });
 
         MjpegFrameDecoder decoder([&frameBuffer](const std::vector<uint8_t>& frame) {
-            frameBuffer.push(frame);
+            frameBuffer->push(frame);
         });
 
         auto usbRouter = [&decoder](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {

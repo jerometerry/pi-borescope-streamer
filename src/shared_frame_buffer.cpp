@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <utility>
@@ -7,14 +8,11 @@
 #include "server_constants.hpp"
 
 SharedFrameBuffer::SharedFrameBuffer() {
-    for (int i = 0; i < 4; ++i) {
-        auto buffer = std::make_shared<std::vector<uint8_t>>();
+    for (int i = 0; i < ServerConstants::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
+        auto buffer = std::make_unique<std::vector<uint8_t>>();
         buffer->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        freePool_.push_back(buffer);
+        freePool_.push_back(std::move(buffer));
     }
-
-    latestFrame_ = freePool_.back();
-    freePool_.pop_back();
 }
 
 [[gnu::noinline]]
@@ -23,28 +21,15 @@ void SharedFrameBuffer::push(std::span<const uint8_t> frame) {
 		return;
 	}
 
-    auto newCanvas = checkoutBuffer();
+    auto buffer = checkoutBuffer();
+    buffer->assign(frame.begin(), frame.end());
 
-    if (!newCanvas) {
-        newCanvas = std::make_shared<std::vector<uint8_t>>();
-        newCanvas->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-    }
-
-    newCanvas->assign(frame.begin(), frame.end());
-
-    std::shared_ptr<const std::vector<uint8_t>> oldActive;
-
+    std::shared_ptr<const std::vector<uint8_t>> oldFrame;
     {
         std::scoped_lock lock(activeMutex_);
         frameId_++;
-        oldActive = std::move(latestFrame_);
-        latestFrame_ = std::move(newCanvas);
-    }
-
-    if (oldActive) {
-        if (oldActive.use_count() == 1) {
-            returnBuffer(std::const_pointer_cast<std::vector<uint8_t>>(std::move(oldActive)));
-        }
+        oldFrame = std::move(latestFrame_);
+        latestFrame_ = std::move(buffer);
     }
 }
 
@@ -55,19 +40,32 @@ std::shared_ptr<const std::vector<uint8_t>> SharedFrameBuffer::getLatestFrame(ui
 }
 
 std::shared_ptr<std::vector<uint8_t>> SharedFrameBuffer::checkoutBuffer() {
-    std::scoped_lock lock(poolMutex_);
-    if (freePool_.empty()) {
-        return nullptr;
-    }    
-    auto buf = freePool_.back();
-    freePool_.pop_back();
-    return buf;
+    std::unique_ptr<std::vector<uint8_t>> buffer;
+    {
+        std::scoped_lock lock(poolMutex_);
+        if (!freePool_.empty()) {
+            buffer = std::move(freePool_.back());
+            freePool_.pop_back();
+        }
+    }
+
+    if (!buffer) {
+        buffer = std::make_unique<std::vector<uint8_t>>();
+        buffer->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+    }
+
+    auto weakThis = weak_from_this();
+    return {buffer.release(), [weakThis](std::vector<uint8_t>* ptr) {
+        std::unique_ptr<std::vector<uint8_t>> wrapper(ptr);
+        if (auto sharedThis = weakThis.lock()) {
+            sharedThis->returnBuffer(std::move(wrapper));
+        }
+    }};
 }
 
-void SharedFrameBuffer::returnBuffer(std::shared_ptr<std::vector<uint8_t>> buffer) {
-    if (!buffer) {
-        return;
-    }
+void SharedFrameBuffer::returnBuffer(std::unique_ptr<std::vector<uint8_t>> buffer) {
     std::scoped_lock lock(poolMutex_);
-    freePool_.push_back(std::move(buffer));
+    if (freePool_.size() < ServerConstants::MAX_SHARED_FRAME_POOL_SIZE) {
+        freePool_.push_back(std::move(buffer));
+    }
 }

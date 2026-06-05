@@ -30,16 +30,18 @@ namespace {
 class MjpegServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
-    SharedFrameBuffer frameBuffer_;
+    std::shared_ptr<SharedFrameBuffer> frameBuffer_; 
     std::unique_ptr<MjpegServer> server_;
 
 protected:
     void SetUp() override {
+        frameBuffer_ = std::make_shared<SharedFrameBuffer>();
+
         server_ = std::make_unique<MjpegServer>(
             TEST_PORT, 
             running_, 
             [this](uint32_t& id) {
-                return frameBuffer_.getLatestFrame(id);
+                return frameBuffer_->getLatestFrame(id); 
             }
         );
         
@@ -53,7 +55,7 @@ protected:
     }
 
     void injectMockVideoFrame(const std::vector<uint8_t>& frame) {
-        frameBuffer_.push(frame);
+        frameBuffer_->push(frame);
     }
 
     std::string fetchFromLocalhost(const std::string& route) {
