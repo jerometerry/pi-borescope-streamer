@@ -69,15 +69,9 @@ private:
                 transferPool_.push_back(transfer);
             }
 
-            
-            struct timeval tvRunning = {0, ServerConstants::TEN_MILLISECONDS};
             while (running_->load(std::memory_order_relaxed)) {
-                int error = libusb_handle_events_timeout_completed(
-                    camera_->getContext(), &tvRunning, nullptr);
-                if (error != LIBUSB_SUCCESS) { 
-                    break;
-                }
-                std::this_thread::yield();
+                int error = libusb_handle_events(camera_->getContext());
+                if (error != LIBUSB_SUCCESS) break;
             }
 
             for (auto* transfer : transferPool_) {
