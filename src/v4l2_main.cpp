@@ -13,7 +13,7 @@
 #include "argument_parser.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
-#include "frame_exchange.hpp"
+#include "shared_frame_buffer.hpp"
 #include "libusb_async_driver.hpp"
 #include "mjpeg_frame_decoder.hpp"
 #include "v4l2.hpp"
@@ -63,10 +63,10 @@ int main(int argc, const char* argv[]) {
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
-    FrameExchange exchange;
+    SharedFrameBuffer frameBuffer;
 
-   MjpegFrameDecoder decoder([&exchange](const std::vector<uint8_t>& frame) {
-        exchange.publishFrame(frame);
+   MjpegFrameDecoder decoder([&frameBuffer](const std::vector<uint8_t>& frame) {
+        frameBuffer.push(frame);
     });
 
     auto usbRouter = [&decoder](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {

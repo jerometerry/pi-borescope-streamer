@@ -116,7 +116,7 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 add_library(borescope_core STATIC 
     src/usb_context.cpp
     src/device_finder.cpp
-    src/frame_exchange.cpp
+    src/shared_frame_buffer.cpp
     src/frame_extractor.cpp
     src/binary_stream_capture.cpp
     src/usb_camera.cpp 
@@ -239,7 +239,7 @@ if(BUILD_TESTING)
 
     add_executable(run_project_tests 
         tests/test_device_finder.cpp
-        tests/test_frame_exchange.cpp
+        tests/test_shared_frame_buffer.cpp
         tests/test_mjpeg_frame_decoder.cpp
         tests/test_mjpeg_server.cpp
         tests/test_v4l2.cpp

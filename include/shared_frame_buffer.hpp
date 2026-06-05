@@ -6,11 +6,11 @@
 #include <span>
 #include <vector>
 
-class FrameExchange {
+class SharedFrameBuffer {
 public:
-    FrameExchange();
+    SharedFrameBuffer();
 
-    void publishFrame(std::span<const uint8_t> frameData);
+    void push(std::span<const uint8_t> frame);
 
     std::shared_ptr<const std::vector<uint8_t>> getLatestFrame(uint32_t& outFrameId) const;
 

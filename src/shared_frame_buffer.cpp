@@ -3,10 +3,10 @@
 #include <span>
 #include <utility>
 #include <vector>
-#include "frame_exchange.hpp"
+#include "shared_frame_buffer.hpp"
 #include "server_constants.hpp"
 
-FrameExchange::FrameExchange() {
+SharedFrameBuffer::SharedFrameBuffer() {
     for (int i = 0; i < 4; ++i) {
         auto buffer = std::make_shared<std::vector<uint8_t>>();
         buffer->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
@@ -18,8 +18,8 @@ FrameExchange::FrameExchange() {
 }
 
 [[gnu::noinline]]
-void FrameExchange::publishFrame(std::span<const uint8_t> frameData) {
-    if (frameData.empty()) { 
+void SharedFrameBuffer::push(std::span<const uint8_t> frame) {
+    if (frame.empty()) { 
 		return;
 	}
 
@@ -30,7 +30,7 @@ void FrameExchange::publishFrame(std::span<const uint8_t> frameData) {
         newCanvas->reserve(ServerConstants::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }
 
-    newCanvas->assign(frameData.begin(), frameData.end());
+    newCanvas->assign(frame.begin(), frame.end());
 
     std::shared_ptr<const std::vector<uint8_t>> oldActive;
 
@@ -48,13 +48,13 @@ void FrameExchange::publishFrame(std::span<const uint8_t> frameData) {
     }
 }
 
-std::shared_ptr<const std::vector<uint8_t>> FrameExchange::getLatestFrame(uint32_t& outFrameId) const {
+std::shared_ptr<const std::vector<uint8_t>> SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
     std::scoped_lock lock(activeMutex_);
     outFrameId = frameId_;
     return latestFrame_;
 }
 
-std::shared_ptr<std::vector<uint8_t>> FrameExchange::checkoutBuffer() {
+std::shared_ptr<std::vector<uint8_t>> SharedFrameBuffer::checkoutBuffer() {
     std::scoped_lock lock(poolMutex_);
     if (freePool_.empty()) {
         return nullptr;
@@ -64,7 +64,7 @@ std::shared_ptr<std::vector<uint8_t>> FrameExchange::checkoutBuffer() {
     return buf;
 }
 
-void FrameExchange::returnBuffer(std::shared_ptr<std::vector<uint8_t>> buffer) {
+void SharedFrameBuffer::returnBuffer(std::shared_ptr<std::vector<uint8_t>> buffer) {
     if (!buffer) {
         return;
     }

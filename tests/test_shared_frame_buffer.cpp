@@ -6,83 +6,74 @@
 #include <thread>
 #include <vector>
 #include <memory>
-#include "frame_exchange.hpp"
+#include "shared_frame_buffer.hpp"
 
 TEST(FrameExchangeTest, InitializesWithCorrectBufferState) {
-    FrameExchange exchange;
-    uint32_t frameId = 99; // Set to a garbage value to ensure it gets overwritten
+    SharedFrameBuffer frameBuffer;
+    uint32_t frameId = 99;
 
-    auto activeFrame = exchange.getLatestFrame(frameId);
+    auto activeFrame = frameBuffer.getLatestFrame(frameId);
     
     ASSERT_NE(activeFrame, nullptr);
     EXPECT_EQ(frameId, 0) << "Frame ID should start strictly at 0";
     EXPECT_TRUE(activeFrame->empty()) << "Initial frame should be an empty canvas";
 }
 
-TEST(FrameExchangeTest, PublishFrameUpdatesActiveFrame) {
-    FrameExchange exchange;
-    
-    // 1. Create a fake JPEG payload
-    std::vector<uint8_t> fakeCameraData = { 0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9 };
+TEST(FrameExchangeTest, frameBuffer) {
+    SharedFrameBuffer frameBuffer;
 
-    // 2. Publish it directly (FrameExchange handles the buffer pool internally)
-    exchange.publishFrame(fakeCameraData);
+    std::vector<uint8_t> frame = { 0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9 };
 
-    // 3. Verify the consumer gets the new data and an incremented ID
+    frameBuffer.push(frame);
+
     uint32_t currentId = 0;
-    auto currentFrame = exchange.getLatestFrame(currentId);
+    auto currentFrame = frameBuffer.getLatestFrame(currentId);
 
     EXPECT_EQ(currentId, 1);
     ASSERT_NE(currentFrame, nullptr);
-    EXPECT_EQ(currentFrame->size(), fakeCameraData.size());
-    EXPECT_EQ(*currentFrame, fakeCameraData);
+    EXPECT_EQ(currentFrame->size(), frame.size());
+    EXPECT_EQ(*currentFrame, frame);
 }
 
 TEST(FrameExchangeTest, SafelyRejectsEmptyFrames) {
-    FrameExchange exchange;
-    
-    // Setup a valid frame first
-    std::vector<uint8_t> validData = { 0x01, 0x02, 0x03 };
-    exchange.publishFrame(validData);
+    SharedFrameBuffer frameBuffer;
+
+    std::vector<uint8_t> frame = { 0x01, 0x02, 0x03 };
+    frameBuffer.push(frame);
     
     uint32_t initialId = 0;
-    auto initialFrame = exchange.getLatestFrame(initialId);
+    auto initialFrame = frameBuffer.getLatestFrame(initialId);
     EXPECT_EQ(initialId, 1);
 
-    // Attempt to publish an empty payload
-    std::vector<uint8_t> emptyData = {};
-    exchange.publishFrame(emptyData);
+    std::vector<uint8_t> emptyFrame = {};
+    frameBuffer.push(emptyFrame);
     
-    // Verify the active frame was NOT overwritten and the ID didn't increment
     uint32_t nextId = 0;
-    auto nextFrame = exchange.getLatestFrame(nextId);
+    auto nextFrame = frameBuffer.getLatestFrame(nextId);
     
     EXPECT_EQ(initialId, nextId) << "Frame ID should not increment for empty frames.";
     EXPECT_EQ(initialFrame.get(), nextFrame.get()) << "Active frame pointer should remain unchanged.";
 }
 
 TEST(FrameExchangeTest, ConcurrentProducersAndConsumers) {
-    FrameExchange exchange;
+    SharedFrameBuffer frameBuffer;
     std::atomic<bool> producerDone{false};
     std::atomic<int> framesProduced{0};
     std::atomic<int> totalFramesConsumed{0};
     constexpr int TARGET_FRAMES = 5000;
 
-    // THE PRODUCER: Just blindly publishes payloads as fast as possible
     std::thread producer([&]() {
-        std::vector<uint8_t> dummyFrame = { 0xAA, 0xBB, 0xCC };
+        std::vector<uint8_t> frame = { 0xAA, 0xBB, 0xCC };
         
         while (framesProduced.load(std::memory_order_relaxed) < TARGET_FRAMES) {
-            exchange.publishFrame(dummyFrame);
+            frameBuffer.push(frame);
             framesProduced.fetch_add(1, std::memory_order_relaxed);
-            
-            // Tiny yield to mimic camera hardware delay and let consumers read
+
             std::this_thread::yield(); 
         }
         producerDone.store(true, std::memory_order_release);
     });
 
-    // THE CONSUMERS: Constantly poll for the newest frame
     auto consumerFunc = [&]() {
         uint32_t lastSeenId = 0;
         int localConsumed = 0;
@@ -90,7 +81,7 @@ TEST(FrameExchangeTest, ConcurrentProducersAndConsumers) {
         while (!producerDone.load(std::memory_order_acquire) || lastSeenId < TARGET_FRAMES) {
             
             uint32_t currentId = 0;
-            auto frame = exchange.getLatestFrame(currentId);
+            auto frame = frameBuffer.getLatestFrame(currentId);
             
             if (frame && currentId > lastSeenId) {
                 localConsumed++;
@@ -107,7 +98,6 @@ TEST(FrameExchangeTest, ConcurrentProducersAndConsumers) {
         totalFramesConsumed.fetch_add(localConsumed, std::memory_order_relaxed);
     };
 
-    // Spin up 4 concurrent consumers reading the exact same data
     const int NUM_CONSUMERS = 4;
     std::vector<std::thread> consumers;
     consumers.reserve(NUM_CONSUMERS); 
@@ -125,7 +115,6 @@ TEST(FrameExchangeTest, ConcurrentProducersAndConsumers) {
         }
     }
 
-    // If the system works, the consumers read frames without deadlocking or segfaulting
     EXPECT_GT(totalFramesConsumed.load(std::memory_order_relaxed), 0) 
         << "Consumers starved or pipeline failed to serve frames.";
 }

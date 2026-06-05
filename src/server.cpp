@@ -24,7 +24,7 @@
 #include <thread>
 #include <vector>
 #include "device_info.hpp"
-#include "frame_exchange.hpp"
+#include "shared_frame_buffer.hpp"
 #include "libusb_async_driver.hpp"
 #include "mjpeg_frame_decoder.hpp"
 #include "mjpeg_server.hpp"
@@ -112,14 +112,14 @@ int main(int argc, const char* argv[]) {
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
 
-        FrameExchange exchange;
+        SharedFrameBuffer frameBuffer;
 
-        MjpegServer server(port, globalRunning, [&exchange](uint32_t& id) {
-            return exchange.getLatestFrame(id);
+        MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
+            return frameBuffer.getLatestFrame(id);
         });
 
-        MjpegFrameDecoder decoder([&exchange](const std::vector<uint8_t>& frame) {
-            exchange.publishFrame(frame);
+        MjpegFrameDecoder decoder([&frameBuffer](const std::vector<uint8_t>& frame) {
+            frameBuffer.push(frame);
         });
 
         auto usbRouter = [&decoder](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {

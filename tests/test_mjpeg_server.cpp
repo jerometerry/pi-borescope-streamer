@@ -15,7 +15,7 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "frame_exchange.hpp"
+#include "shared_frame_buffer.hpp"
 #include "mjpeg_server.hpp"
 
 namespace {
@@ -30,7 +30,7 @@ namespace {
 class MjpegServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
-    FrameExchange pipeline_;
+    SharedFrameBuffer frameBuffer_;
     std::unique_ptr<MjpegServer> server_;
 
 protected:
@@ -39,7 +39,7 @@ protected:
             TEST_PORT, 
             running_, 
             [this](uint32_t& id) {
-                return pipeline_.getLatestFrame(id);
+                return frameBuffer_.getLatestFrame(id);
             }
         );
         
@@ -52,8 +52,8 @@ protected:
         server_.reset(); 
     }
 
-    void injectMockVideoFrame(const std::vector<uint8_t>& mockData) {
-        pipeline_.publishFrame(mockData);
+    void injectMockVideoFrame(const std::vector<uint8_t>& frame) {
+        frameBuffer_.push(frame);
     }
 
     std::string fetchFromLocalhost(const std::string& route) {
