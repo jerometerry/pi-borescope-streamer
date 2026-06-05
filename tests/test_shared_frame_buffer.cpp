@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string>
