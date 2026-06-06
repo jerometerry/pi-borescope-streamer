@@ -15,7 +15,7 @@
 
 class MockHandlers {
 public:
-    MOCK_METHOD(void, output, (USB::FramePtr frame));
+    MOCK_METHOD(void, output, (Mjpeg::Frame frame));
 };
 
 class MjpegStreamTest : public ::testing::Test {
@@ -29,7 +29,7 @@ protected:
         bufferPool_ = BufferPool::create();
         stream_ = std::make_unique<MjpegStream>(
             bufferPool_,
-            [this](USB::FramePtr frame) { 
+            [this](Mjpeg::Frame frame) { 
                 handler_.output(std::move(frame)); 
             }
         );
@@ -50,9 +50,9 @@ protected:
 };
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members)
-MATCHER_P(FrameDataEq, expectedOutput, "FramePtr internal data matches expected output") {
+MATCHER_P(FrameDataEq, expectedOutput, "Frame internal data matches expected output") {
     if (!arg) {
-        *result_listener << "which is a null FramePtr";
+        *result_listener << "which is a null Frame";
         return false;
     }
 
@@ -63,9 +63,9 @@ MATCHER_P(FrameDataEq, expectedOutput, "FramePtr internal data matches expected 
     );
 }
 
-MATCHER_P(FrameStartsWith, expectedFront, "FramePtr internal data starts with expected byte") {
+MATCHER_P(FrameStartsWith, expectedFront, "Frame internal data starts with expected byte") {
     if (!arg) {
-        *result_listener << "which is a null FramePtr";
+        *result_listener << "which is a null Frame";
         return false;
     }
 

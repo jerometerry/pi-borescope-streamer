@@ -11,16 +11,16 @@
 #include "constants.hpp"
 #include "data_structures.hpp"
 #include "shared_frame_buffer.hpp"
+#include "mjpeg_data_structures.hpp"
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
-    USB::FramePtr frame = bp->acquire();
+    Mjpeg::Frame frame = bp->acquire();
     frame->insert(data);
     sfb.push(frame);
 };
 
 TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
-    auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer(bufferPool);
+    SharedFrameBuffer frameBuffer;
 
     uint32_t frameId = 99;
 
@@ -31,23 +31,21 @@ TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
 }
 
 TEST(SharedFrameBufferTest, SafelyHandlesImmediatePollingWithoutSegfault) {
-    auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer(bufferPool);
+    SharedFrameBuffer frameBuffer;
 
     uint32_t frameId = 0;
 
     auto activeFrame = frameBuffer.getLatestFrame(frameId);
 
-    ASSERT_FALSE(activeFrame) << "FramePtr should safely evaluate to false when empty.";
+    ASSERT_FALSE(activeFrame) << "Frame should safely evaluate to false when empty.";
 
     if (activeFrame) {
         FAIL() << "Execution should not reach this block. Guard check failed.";
     }
 }
 
-TEST(SharedFrameBufferTest, DereferencingEmptyFramePtrCausesDeath) {
-    auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer(bufferPool);
+TEST(SharedFrameBufferTest, DereferencingEmptyFrameCausesDeath) {
+    SharedFrameBuffer frameBuffer;
 
     uint32_t frameId = 0;
     auto activeFrame = frameBuffer.getLatestFrame(frameId);
@@ -59,7 +57,7 @@ TEST(SharedFrameBufferTest, DereferencingEmptyFramePtrCausesDeath) {
 
 TEST(SharedFrameBufferTest, frameBuffer) {
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer(bufferPool);
+    SharedFrameBuffer frameBuffer;
 
     std::vector<uint8_t> frame = { 0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9 };
     pushFrame(frameBuffer, bufferPool, frame);
@@ -75,7 +73,7 @@ TEST(SharedFrameBufferTest, frameBuffer) {
 
 TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer(bufferPool);
+    SharedFrameBuffer frameBuffer;
 
     std::vector<uint8_t> frameData = { 0x01, 0x02, 0x03 };
     pushFrame(frameBuffer, bufferPool, frameData);
@@ -99,7 +97,7 @@ TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
 
 TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer(bufferPool);
+    SharedFrameBuffer frameBuffer;
 
     std::atomic<bool> producerDone{false};
     std::atomic<int> framesProduced{0};
@@ -165,9 +163,9 @@ TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
 
 TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer(bufferPool);
+    SharedFrameBuffer frameBuffer;
 
-    std::vector<USB::FramePtr> slowConsumers;
+    std::vector<Mjpeg::Frame> slowConsumers;
     std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
 
     constexpr int SPIKE_SIZE = 10;
@@ -182,5 +180,5 @@ TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
 
     size_t currentPoolSize = bufferPool->getFreeBuffers();
     
-    EXPECT_EQ(currentPoolSize, SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE);
+    EXPECT_EQ(currentPoolSize, BufferPoolConfig::MAX_POOL_SIZE);
 }

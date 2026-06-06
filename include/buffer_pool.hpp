@@ -4,7 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <vector>
-#include "data_structures.hpp"
+#include "mjpeg_data_structures.hpp"
 
 class BufferPool : public std::enable_shared_from_this<BufferPool> {
 private:
@@ -15,9 +15,9 @@ public:
     
     static std::shared_ptr<BufferPool> create();
     
-    USB::FramePtr acquire();
+    Mjpeg::Frame acquire();
 
-    void returnToPool(USB::PooledFrame* frame);
+    void returnToPool(Mjpeg::Buffer* frame);
     
     size_t getFreeBuffers() const;
 
@@ -26,5 +26,5 @@ private:
     void release(std::unique_ptr<std::vector<uint8_t>> buffer);
     
     mutable std::mutex poolMutex_;
-    std::vector<std::unique_ptr<USB::PooledFrame>> pool_;
+    std::vector<std::unique_ptr<Mjpeg::Buffer>> pool_;
 };

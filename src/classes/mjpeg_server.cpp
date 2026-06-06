@@ -20,6 +20,7 @@
 #include "device_finder.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
+#include "mjpeg_data_structures.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameSource frameSource)
     : port_(port), running_(running), frameSource_(std::move(frameSource)) {}

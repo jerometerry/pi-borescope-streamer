@@ -19,6 +19,7 @@
 #include "data_structures.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_buffer.hpp"
+#include "mjpeg_data_structures.hpp"
 
 namespace {
     constexpr int TEST_PORT = 18080; 
@@ -39,7 +40,7 @@ private:
 protected:
     void SetUp() override {
         bufferPool_ = BufferPool::create();
-        frameBuffer_ = std::make_shared<SharedFrameBuffer>(bufferPool_);
+        frameBuffer_ = std::make_shared<SharedFrameBuffer>();
 
         server_ = std::make_unique<MjpegServer>(
             TEST_PORT, 
@@ -64,7 +65,7 @@ protected:
         frameBuffer_->push(frame);
     }
 
-    void injectMockVideoFrame(const USB::FramePtr& frame) {
+    void injectMockVideoFrame(const Mjpeg::Frame& frame) {
         frameBuffer_->push(frame);
     }
 

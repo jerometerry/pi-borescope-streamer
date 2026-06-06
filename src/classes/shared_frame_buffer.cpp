@@ -7,17 +7,14 @@
 #include "buffer_pool.hpp"
 #include "data_structures.hpp"
 #include "shared_frame_buffer.hpp"
+#include "mjpeg_data_structures.hpp"
 
-SharedFrameBuffer::SharedFrameBuffer(std::shared_ptr<BufferPool> bufferPool) : 
-    bufferPool_(std::move(bufferPool)) {
-}
-
-void SharedFrameBuffer::push(USB::FramePtr frame) {
+void SharedFrameBuffer::push(Mjpeg::Frame frame) {
     if (!frame || frame->empty()) { 
         return;
     }
 
-    USB::FramePtr previousFrame;
+    Mjpeg::Frame previousFrame;
     {
         std::scoped_lock lock(activeMutex_);
         frameId_++;
@@ -27,7 +24,7 @@ void SharedFrameBuffer::push(USB::FramePtr frame) {
     }
 }
 
-USB::FramePtr SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
+Mjpeg::Frame SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
     std::scoped_lock lock(activeMutex_);
     outFrameId = frameId_;
     return frame_;

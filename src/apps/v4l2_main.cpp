@@ -65,9 +65,9 @@ int main(int argc, const char* argv[]) {
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer(bufferPool);
+    SharedFrameBuffer frameBuffer;
 
-    MjpegStream mjpegStream(bufferPool, [&frameBuffer](USB::FramePtr frame) {
+    MjpegStream mjpegStream(bufferPool, [&frameBuffer](const Mjpeg::Frame& frame) {
         frameBuffer.push(frame);
     });
 

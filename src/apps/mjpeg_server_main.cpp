@@ -28,6 +28,7 @@
 #include "data_structures.hpp"
 #include "device_info.hpp"
 #include "shared_frame_buffer.hpp"
+#include "mjpeg_data_structures.hpp"
 #include "libusb_async_driver.hpp"
 #include "mjpeg_stream.hpp"
 #include "mjpeg_server.hpp"
@@ -114,15 +115,13 @@ int main(int argc, const char* argv[]) {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-
-        auto bufferPool = BufferPool::create();
-        SharedFrameBuffer frameBuffer(bufferPool);
-
+        SharedFrameBuffer frameBuffer;
         MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
             return frameBuffer.getLatestFrame(id);
         });
 
-        MjpegStream mjpegStream(bufferPool, [&frameBuffer](USB::FramePtr frame) {
+        auto bufferPool = BufferPool::create();
+        MjpegStream mjpegStream(bufferPool, [&frameBuffer](const Mjpeg::Frame& frame) {
             frameBuffer.push(frame);
         });
 

@@ -148,16 +148,16 @@ namespace Units {
     inline constexpr int ONE_HUNDRED_MILLISECONDS = 100000;
 }
 
-namespace SharedFrameBufferConfig {
+namespace BufferPoolConfig {
     /**
      * @brief 
      */
-    inline constexpr int INITIAL_SHARED_FRAME_POOL_SIZE = 4;
+    inline constexpr int INITIAL_POOL_SIZE = 4;
 
     /**
      * @brief 
      */
-    inline constexpr int MAX_SHARED_FRAME_POOL_SIZE = 8;
+    inline constexpr int MAX_POOL_SIZE = 8;
 }
 
 namespace UsbConfig {

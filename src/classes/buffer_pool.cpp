@@ -5,7 +5,7 @@
 #include <vector>
 #include "buffer_pool.hpp"
 #include "constants.hpp"
-#include "data_structures.hpp"
+#include "mjpeg_data_structures.hpp"
 
 std::shared_ptr<BufferPool> BufferPool::create() {
     auto instance = std::make_shared<BufferPool>(PrivateConstructTag{});
@@ -13,13 +13,13 @@ std::shared_ptr<BufferPool> BufferPool::create() {
     return instance;
 }
 
-static void recycleFrameBridge(void* context, USB::PooledFrame* frame) {
+static void recycleFrameBridge(void* context, Mjpeg::Buffer* frame) {
     auto* pool = static_cast<BufferPool*>(context);
     pool->returnToPool(frame);
 }
 
-USB::FramePtr BufferPool::acquire() {
-    std::unique_ptr<USB::PooledFrame> frame;
+Mjpeg::Frame BufferPool::acquire() {
+    std::unique_ptr<Mjpeg::Buffer> frame;
     {
         std::scoped_lock lock(poolMutex_);
         if (!pool_.empty()) {
@@ -29,13 +29,13 @@ USB::FramePtr BufferPool::acquire() {
     }
 
     if (!frame) {
-        frame = std::make_unique<USB::PooledFrame>();
+        frame = std::make_unique<Mjpeg::Buffer>();
         frame->data().reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         frame->poolContext = this;
         frame->returnCallback = recycleFrameBridge;
     }
 
-    return USB::FramePtr(frame.release());
+    return Mjpeg::Frame(frame.release());
 }
 
 size_t BufferPool::getFreeBuffers() const {
@@ -44,11 +44,11 @@ size_t BufferPool::getFreeBuffers() const {
 }
 
 void BufferPool::initialize() {
-    pool_.reserve(SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE);
+    pool_.reserve(BufferPoolConfig::MAX_POOL_SIZE);
     
-    for (int i = 0; i < SharedFrameBufferConfig::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
+    for (int i = 0; i < BufferPoolConfig::INITIAL_POOL_SIZE; ++i) {
 
-        auto frame = std::make_unique<USB::PooledFrame>();
+        auto frame = std::make_unique<Mjpeg::Buffer>();
         frame->data().reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
         frame->poolContext = this;
@@ -58,15 +58,15 @@ void BufferPool::initialize() {
     }
 }
 
-void BufferPool::returnToPool(USB::PooledFrame* frame) {
+void BufferPool::returnToPool(Mjpeg::Buffer* frame) {
     if (!frame) return;
 
     frame->clear(); 
 
     std::scoped_lock lock(poolMutex_);
-    if (pool_.size() < SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE) {
-        pool_.push_back(std::unique_ptr<USB::PooledFrame>(frame));
+    if (pool_.size() < BufferPoolConfig::MAX_POOL_SIZE) {
+        pool_.push_back(std::unique_ptr<Mjpeg::Buffer>(frame));
     } else {
-        std::unique_ptr<USB::PooledFrame> toDelete(frame);
+        std::unique_ptr<Mjpeg::Buffer> toDelete(frame);
     }
 }

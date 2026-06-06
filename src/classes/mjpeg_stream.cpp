@@ -13,7 +13,7 @@
 
 MjpegStream::MjpegStream(
     std::shared_ptr<BufferPool> bufferPool, 
-    std::function<void(USB::FramePtr)> onFrameReady)
+    std::function<void(Mjpeg::Frame)> onFrameReady)
     : bufferPool_(std::move(bufferPool)), 
       onFrameReady_(std::move(onFrameReady)) {
         inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
