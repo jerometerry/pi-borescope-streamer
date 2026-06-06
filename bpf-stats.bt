@@ -1,7 +1,7 @@
 #!/usr/bin/env bpftrace
 
 BEGIN {
-    printf("Monitoring pi-borescope-streamer... Hit Ctrl-C to exit.\n");
+    printf("Monitoring mjpeg_serverreamer... Hit Ctrl-C to exit.\n");
     printf("=================================================================================\n");
     printf("%-12s %-15s %-15s %-15s %-15s\n", "TIME", "MALLOCS/sec", "FREES/sec", "SENDS/sec", "BANDWIDTH");
     printf("=================================================================================\n");
@@ -10,17 +10,17 @@ BEGIN {
 uprobe:libc:malloc,
 uprobe:libc:calloc,
 uprobe:libc:realloc
-/comm == "pi-borescope-st"/ {
+/comm == "mjpeg_server"/ {
     @allocs++;
 }
 
 uprobe:libc:free
-/comm == "pi-borescope-st"/ {
+/comm == "mjpeg_server"/ {
     @frees++;
 }
 
 tracepoint:syscalls:sys_enter_sendto
-/comm == "pi-borescope-st"/ {
+/comm == "mjpeg_server"/ {
     @sends++;
     @bytes_per_sec += args->len;
     @total_bytes += args->len;
