@@ -46,7 +46,11 @@ private:
         try {
             camera_ = std::make_unique<UsbCamera>(target);
 
-            uint8_t* dmaBuffer = libusb_dev_mem_alloc(camera_->getContext(), UsbConfig::DMA_BUFFER_SIZE);
+            uint8_t* dmaBuffer = libusb_dev_mem_alloc(
+                camera_->getRawHandle(), 
+                UsbConfig::DMA_BUFFER_SIZE
+            );
+
             if (!dmaBuffer) {
                 std::cerr << "[DRIVER ERROR] Failed to initialize Direct Access Memory \n";
                 if (running_) {
@@ -101,7 +105,14 @@ private:
             }
             transferPool_.clear();
 
-            int freeResult = libusb_dev_mem_free(camera_->getContext(), dmaBuffer, UsbConfig::DMA_BUFFER_SIZE);
+            int freeResult = libusb_dev_mem_free(
+                camera_->getRawHandle(), 
+                dmaBuffer, 
+                UsbConfig::DMA_BUFFER_SIZE
+            );
+            if (!freeResult) {
+                std::cerr << std::format("[DRIVER ERROR] Failed to free DMA: {} \n", freeResult);
+            }
 
         } catch (const std::exception& e) {
             std::cerr << "[DRIVER ERROR] Terminated via standard exception: " << e.what() << '\n';
