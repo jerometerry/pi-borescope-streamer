@@ -37,18 +37,17 @@ public:
 private:
     Callable transferHandler_;
     std::atomic<bool>* running_;
+    std::atomic<int> activeTransfers_{0};
     std::unique_ptr<UsbCamera> camera_;
     std::thread workerThread_;
     std::vector<libusb_transfer*> transferPool_;
-    std::vector<std::vector<uint8_t>> transferBuffers_;
+    std::vector<uint8_t> transferMemory_;
 
     void loop(const DeviceInfo& target) {
         try {
             camera_ = std::make_unique<UsbCamera>(target);
-            transferBuffers_.assign(
-                UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE, 
-                std::vector<uint8_t>(UsbConfig::CHUNK_SIZE)
-            );
+
+            transferMemory_.resize(UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE * UsbConfig::CHUNK_SIZE);
 
             for (int i = 0; i < UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
                 libusb_transfer* transfer = libusb_alloc_transfer(0);
@@ -56,13 +55,14 @@ private:
                     transfer,
                     camera_->getRawHandle(),
                     1 | LIBUSB_ENDPOINT_IN,
-                    transferBuffers_[i].data(),
+                    transferMemory_.data() + (i * UsbConfig::CHUNK_SIZE),
                     UsbConfig::CHUNK_SIZE,
                     transferCallback,
                     this,
                     UsbConfig::USB_TIMEOUT
                 );
                 libusb_submit_transfer(transfer);
+                activeTransfers_.fetch_add(1, std::memory_order_relaxed);
                 transferPool_.push_back(transfer);
             }
 
@@ -78,16 +78,15 @@ private:
                 libusb_cancel_transfer(transfer);
             }
 
-            struct timeval tv = {0, Units::ONE_HUNDRED_MILLISECONDS};
-            for (int i = 0; i < UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
-                libusb_handle_events_timeout(camera_->getContext(), &tv);
+            struct timeval tv = {0, UsbConfig::SHUTDOWN_WAIT_TIMEOUT}; 
+            while (activeTransfers_.load(std::memory_order_acquire) > 0) {
+                libusb_handle_events_timeout_completed(camera_->getContext(), &tv, nullptr);
             }
 
             for (auto* transfer : transferPool_) {
                 libusb_free_transfer(transfer);
             }
             transferPool_.clear();
-            transferBuffers_.clear();
 
         } catch (const std::exception& e) {
             std::cerr << "[DRIVER ERROR] Terminated via standard exception: " << e.what() << '\n';
@@ -117,12 +116,21 @@ private:
             payload = std::span<const uint8_t>(transfer->buffer, transfer->actual_length);
         }
 
-        bool shouldResubmit = driver->transferHandler_(status, payload);
+        bool shouldResubmit = false;
 
-        if (!shouldResubmit) {
+        if (transfer->status != LIBUSB_TRANSFER_CANCELLED) {
+            shouldResubmit = driver->transferHandler_(status, payload);
+        }
+
+        if (!shouldResubmit || transfer->status == LIBUSB_TRANSFER_CANCELLED) {
             driver->running_->store(false, std::memory_order_release);
+            driver->activeTransfers_.fetch_sub(1, std::memory_order_release);
         } else if (driver->running_->load(std::memory_order_relaxed)) {
-            libusb_submit_transfer(transfer);
+            if (libusb_submit_transfer(transfer) != LIBUSB_SUCCESS) {
+                driver->activeTransfers_.fetch_sub(1, std::memory_order_release);
+            }
+        } else {
+            driver->activeTransfers_.fetch_sub(1, std::memory_order_release);
         }
     }
 };

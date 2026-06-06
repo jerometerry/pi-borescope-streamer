@@ -167,6 +167,11 @@ namespace UsbConfig {
     inline constexpr unsigned int USB_TIMEOUT = 1000;
 
     /**
+     * @brief How long (in ms) we will wait for the USB hardware to respond before assuming it disconnected.
+     */
+    inline constexpr unsigned int SHUTDOWN_WAIT_TIMEOUT = 50;
+
+    /**
      * @brief 
      */
     inline constexpr int USB_TRANSFER_BUFFER_POOL_SIZE = 8;
@@ -174,7 +179,7 @@ namespace UsbConfig {
     /**
      * @brief 
      */
-    inline constexpr int CHUNK_SIZE = Units::FOUR_KILOBYTES;
+    inline constexpr int CHUNK_SIZE = Units::SIXTY_FOUR_KILOBYTES;
 }
 
 namespace WebServerConfig {
