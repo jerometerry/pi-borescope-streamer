@@ -114,16 +114,16 @@ endif()
 target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 
 add_library(borescope_core STATIC 
-    src/usb_context.cpp
-    src/device_finder.cpp
-    src/buffer_pool.cpp
-    src/shared_frame_buffer.cpp
-    src/frame_extractor.cpp
-    src/binary_stream_capture.cpp
-    src/usb_camera.cpp 
-    src/mjpeg_stream.cpp
-    src/mjpeg_server.cpp
-    src/v4l2.cpp
+    src/classes/usb_context.cpp
+    src/classes/device_finder.cpp
+    src/classes/buffer_pool.cpp
+    src/classes/shared_frame_buffer.cpp
+    src/classes/frame_extractor.cpp
+    src/classes/binary_stream_capture.cpp
+    src/classes/usb_camera.cpp 
+    src/classes/mjpeg_stream.cpp
+    src/classes/mjpeg_server.cpp
+    src/classes/v4l2.cpp
     ${GENERATED_HPP}
 )
 add_library(Borescope::Core ALIAS borescope_core)
@@ -143,33 +143,33 @@ target_link_libraries(borescope_core
 )
 
 add_executable(pi-borescope-streamer 
-    src/server.cpp
+    src/apps/server.cpp
 )
 target_link_libraries(pi-borescope-streamer PRIVATE Borescope::Core project_warnings)
 
 add_executable(attached_usb_devices
-    src/attached_usb_devices.cpp
+    src/apps/attached_usb_devices.cpp
 )
 target_link_libraries(attached_usb_devices PRIVATE Borescope::Core project_warnings)
 
 add_executable(binary_stream_capture
-    src/binary_stream_capture.cpp
-    src/binary_stream_capture_main.cpp
+    src/classes/binary_stream_capture.cpp
+    src/apps/binary_stream_capture_main.cpp
 )
 target_link_libraries(binary_stream_capture PRIVATE Borescope::Core project_warnings)
 
 add_executable(frame_extractor
-    src/frame_extractor.cpp
-    src/frame_extractor_main.cpp
+    src/classes/frame_extractor.cpp
+    src/apps/frame_extractor_main.cpp
 )
 target_link_libraries(frame_extractor PRIVATE Borescope::Core project_warnings)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(borescope_core PRIVATE src/v4l2_publisher.cpp)
     add_executable(v4l2-borescope-daemon
-        src/v4l2.cpp
-        src/v4l2_publisher.cpp
-        src/v4l2_main.cpp
+        src/classes/v4l2.cpp
+        src/classes/v4l2_publisher.cpp
+        src/apps/v4l2_main.cpp
     )
     target_link_libraries(v4l2-borescope-daemon
         PRIVATE 
