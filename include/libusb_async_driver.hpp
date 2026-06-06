@@ -41,21 +41,27 @@ private:
     std::unique_ptr<UsbCamera> camera_;
     std::thread workerThread_;
     std::vector<libusb_transfer*> transferPool_;
-    std::vector<uint8_t> transferMemory_;
 
     void loop(const DeviceInfo& target) {
         try {
             camera_ = std::make_unique<UsbCamera>(target);
 
-            transferMemory_.resize(UsbConfig::BULK_TRANSFER_COUNT * UsbConfig::BULK_TRANSFER_SIZE);
+            uint8_t* dmaBuffer = libusb_dev_mem_alloc(camera_->getContext(), UsbConfig::DMA_BUFFER_SIZE);
+            if (!dmaBuffer) {
+                std::cerr << "[DRIVER ERROR] Failed to initialize Direct Access Memory \n";
+                if (running_) {
+                    running_->store(false, std::memory_order_release);
+                }
+                return;
+            }
 
-            for (int i = 0; i < UsbConfig::BULK_TRANSFER_COUNT; ++i) {
+            for (size_t i = 0; i < UsbConfig::BULK_TRANSFER_COUNT; ++i) {
                 libusb_transfer* transfer = libusb_alloc_transfer(0);
                 libusb_fill_bulk_transfer(
                     transfer,
                     camera_->getRawHandle(),
                     1 | LIBUSB_ENDPOINT_IN,
-                    transferMemory_.data() + (i * UsbConfig::BULK_TRANSFER_SIZE),
+                    dmaBuffer + (i * UsbConfig::BULK_TRANSFER_SIZE),
                     UsbConfig::BULK_TRANSFER_SIZE,
                     transferCallback,
                     this,
@@ -94,6 +100,8 @@ private:
                 libusb_free_transfer(transfer);
             }
             transferPool_.clear();
+
+            int freeResult = libusb_dev_mem_free(camera_->getContext(), dmaBuffer, UsbConfig::DMA_BUFFER_SIZE);
 
         } catch (const std::exception& e) {
             std::cerr << "[DRIVER ERROR] Terminated via standard exception: " << e.what() << '\n';

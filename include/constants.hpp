@@ -129,12 +129,14 @@ namespace UsbConfig {
     /**
      * @brief 
      */
-    inline constexpr int BULK_TRANSFER_COUNT = 8;
+    inline constexpr size_t BULK_TRANSFER_COUNT = 8;
 
     /**
      * @brief 
      */
-    inline constexpr int BULK_TRANSFER_SIZE = Units::SIXTEEN_KILOBYTES;
+    inline constexpr size_t BULK_TRANSFER_SIZE = Units::SIXTEEN_KILOBYTES;
+
+    inline constexpr size_t DMA_BUFFER_SIZE = BULK_TRANSFER_COUNT * BULK_TRANSFER_SIZE;
 }
 
 namespace WebServerConfig {
