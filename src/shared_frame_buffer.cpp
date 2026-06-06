@@ -7,45 +7,47 @@
 #include "constants.hpp"
 #include "shared_frame_buffer.hpp"
 
-SharedFrameBuffer::SharedFrameBuffer() {
-    for (int i = 0; i < SharedFrameBufferConfig::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
-        auto buffer = std::make_unique<std::vector<uint8_t>>();
-        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        freePool_.push_back(std::move(buffer));
-    }
+std::shared_ptr<SharedFrameBuffer> SharedFrameBuffer::create() {
+    auto instance = std::make_shared<SharedFrameBuffer>();
+    instance->initialize();
+    return instance;
 }
 
-[[gnu::noinline]]
 void SharedFrameBuffer::push(std::span<const uint8_t> frame) {
     if (frame.empty()) { 
 		return;
 	}
 
-    auto buffer = checkoutBuffer();
+    auto buffer = acquire();
     buffer->assign(frame.begin(), frame.end());
 
-    std::shared_ptr<const std::vector<uint8_t>> oldFrame;
+    std::shared_ptr<const std::vector<uint8_t>> previousFrame;
     {
         std::scoped_lock lock(activeMutex_);
         frameId_++;
-        oldFrame = std::move(latestFrame_);
-        latestFrame_ = std::move(buffer);
+        previousFrame = std::move(frame_);
+        frame_ = std::move(buffer);
     }
 }
 
 std::shared_ptr<const std::vector<uint8_t>> SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
     std::scoped_lock lock(activeMutex_);
     outFrameId = frameId_;
-    return latestFrame_;
+    return frame_;
 }
 
-std::shared_ptr<std::vector<uint8_t>> SharedFrameBuffer::checkoutBuffer() {
+size_t SharedFrameBuffer::getFreeBuffers() const {
+    std::scoped_lock lock(poolMutex_);
+    return bufferPool_.size();
+}
+
+std::shared_ptr<std::vector<uint8_t>> SharedFrameBuffer::acquire() {
     std::unique_ptr<std::vector<uint8_t>> buffer;
     {
         std::scoped_lock lock(poolMutex_);
-        if (!freePool_.empty()) {
-            buffer = std::move(freePool_.back());
-            freePool_.pop_back();
+        if (!bufferPool_.empty()) {
+            buffer = std::move(bufferPool_.back());
+            bufferPool_.pop_back();
         }
     }
 
@@ -55,17 +57,25 @@ std::shared_ptr<std::vector<uint8_t>> SharedFrameBuffer::checkoutBuffer() {
     }
 
     auto weakThis = weak_from_this();
-    return {buffer.release(), [weakThis](std::vector<uint8_t>* ptr) {
+    return {buffer.release(), [weakThis](std::vector<uint8_t>* ptr) {                           
         std::unique_ptr<std::vector<uint8_t>> wrapper(ptr);
         if (auto sharedThis = weakThis.lock()) {
-            sharedThis->returnBuffer(std::move(wrapper));
+            sharedThis->release(std::move(wrapper));
         }
     }};
 }
 
-void SharedFrameBuffer::returnBuffer(std::unique_ptr<std::vector<uint8_t>> buffer) {
+void SharedFrameBuffer::release(std::unique_ptr<std::vector<uint8_t>> buffer) {
     std::scoped_lock lock(poolMutex_);
-    if (freePool_.size() < SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE) {
-        freePool_.push_back(std::move(buffer));
+    if (bufferPool_.size() < SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE) {
+        bufferPool_.push_back(std::move(buffer));
+    }
+}
+
+void SharedFrameBuffer::initialize() {
+    for (int i = 0; i < SharedFrameBufferConfig::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
+        auto buffer = std::make_unique<std::vector<uint8_t>>();
+        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        bufferPool_.push_back(std::move(buffer));
     }
 }

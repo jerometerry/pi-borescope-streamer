@@ -38,13 +38,14 @@ void FrameExtractor::inspectPadding(const std::vector<uint8_t>& fileData) {
     std::cout << "Scanning for padding robustly...\n\n";
 
     while (i < fileData.size() - 1) {
-        if (fileData[i] == USB::BOUNDARY_MARKER && fileData[i+1] == USB::END_MARKER) {
+        if (fileData[i] == UsbProtocol::BOUNDARY_MARKER && fileData[i+1] == UsbProtocol::END_MARKER) {
             size_t eoiPos = i;
             size_t paddingStart = eoiPos + 2;
             size_t nextHeaderPos = 0;
 
             for (size_t j = paddingStart; j < fileData.size() - 1; ++j) {
-                if (fileData[j] == USB::HEADER_A && fileData[j+1] == USB::HEADER_B) {
+                if (fileData[j] == UsbProtocol::USB_FRAME_HEADER_A && 
+                    fileData[j+1] == UsbProtocol::USB_FRAME_HEADER_B) {
                     nextHeaderPos = j;
                     break;
                 }
@@ -107,11 +108,15 @@ void FrameExtractor::inspectFrameBoundary(const std::vector<uint8_t>& fileData) 
     size_t firstEoiMarker = 0;
 
     for (size_t i = 2; i < fileData.size() - 1; ++i) {
-        if (nextHeaderMarker == 0 && fileData[i] == USB::HEADER_A && fileData[i+1] == USB::HEADER_B) {
+        if (nextHeaderMarker == 0 && 
+                fileData[i] == UsbProtocol::USB_FRAME_HEADER_A && 
+                fileData[i+1] == UsbProtocol::USB_FRAME_HEADER_B) {
             nextHeaderMarker = i;
         }
 
-        if (firstEoiMarker == 0 && fileData[i] == USB::BOUNDARY_MARKER && fileData[i+1] == USB::END_MARKER) {
+        if (firstEoiMarker == 0 && 
+                fileData[i] == UsbProtocol::BOUNDARY_MARKER && 
+                fileData[i+1] == UsbProtocol::END_MARKER) {
             firstEoiMarker = i;
         }
 
@@ -147,9 +152,12 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
     int frameCount = 0;
     int lastFrameId = -1;
 
-    while (i + USB::tPktSz <= fileData.size()) {
+    while (i + USB::TotalHeaderSize <= fileData.size()) {
 
-        const USB::UsbPacketHeader* header = reinterpret_cast<const USB::UsbPacketHeader*>(&fileData[i]);
+        const USB::PacketHeader* header = 
+            reinterpret_cast<const USB::PacketHeader*>(
+                &fileData[i]
+            );
 
         if (header->getHeader() != UsbProtocol::USB_FRAME_HEADER || 
             (header->getCameraId() != UsbProtocol::VIDEO_CAMERA_ID && 
@@ -163,10 +171,14 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
         // If we see another header within 300 bytes, this one is mathematically a ghost.
         bool isGhost = false;
         size_t nextHeaderOffset = 0;
-        size_t scanLimit = std::min<size_t>(300, fileData.size() - i - 5);
+        size_t scanLimit = std::min<size_t>(
+            UsbProtocol::MAX_SCAN_LIMIT, 
+            fileData.size() - i - 5
+        );
         
         for (size_t d = 5; d <= scanLimit; ++d) {
-            if (fileData[i+d] == USB::HEADER_A && fileData[i+d+1] == USB::HEADER_B && 
+            if (fileData[i+d] == UsbProtocol::USB_FRAME_HEADER_A && 
+                fileData[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && 
                (fileData[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
                 fileData[i+d+2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
                 isGhost = true;
@@ -180,15 +192,15 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
             continue;
         }
 
-        size_t chunkTotalSize = USB::uPktSz + header->getLength();
-        if (i + chunkTotalSize > fileData.size()) {
+        size_t packetSize = USB::PacketHeaderSize + header->getLength();
+        if (i + packetSize > fileData.size()) {
             std::cout << "Reached incomplete hardware block at end of file. Stopping.\n";
             break; 
         }
 
-        const USB::CameraPacketHeader* meta = 
-            reinterpret_cast<const USB::CameraPacketHeader*>(
-                &fileData[i + USB::uPktSz]
+        const USB::PayloadHeader* meta = 
+            reinterpret_cast<const USB::PayloadHeader*>(
+                &fileData[i + USB::PacketHeaderSize]
             );
 
         if (lastFrameId != -1 && meta->getFrameId() != lastFrameId) {
@@ -196,17 +208,19 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
 
                 size_t soiOffset = std::string::npos;
                 size_t eoiOffset = std::string::npos;
-                size_t minBufferSize = 256;
+                size_t maxSoiPosition = UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION;
 
-                for (size_t j = 0; j + 1 < std::min<size_t>(minBufferSize, currentFrame.size()); ++j) {
-                    if (currentFrame[j] == USB::BOUNDARY_MARKER && currentFrame[j+1] == USB::START_MARKER) {
+                for (size_t j = 0; j + 1 < std::min<size_t>(maxSoiPosition, currentFrame.size()); ++j) {
+                    if (currentFrame[j] == UsbProtocol::BOUNDARY_MARKER && 
+                        currentFrame[j+1] == UsbProtocol::START_MARKER) {
                         soiOffset = j;
                         break;
                     }
                 }
 
                 for (size_t j = currentFrame.size(); j >= 2; --j) {
-                    if (currentFrame[j - 2] == USB::BOUNDARY_MARKER && currentFrame[j - 1] == USB::END_MARKER) {
+                    if (currentFrame[j - 2] == UsbProtocol::BOUNDARY_MARKER && 
+                        currentFrame[j - 1] == UsbProtocol::END_MARKER) {
                         eoiOffset = j;
                         break;
                     }
@@ -237,15 +251,17 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
         lastFrameId = meta->getFrameId();
 
         if (!meta->hasGravitySensor() && meta->getOtherFlags() == 0 && meta->getCameraNumber() < 2) {
-            size_t payloadStart = i + USB::tPktSz;
-            size_t payloadSize = chunkTotalSize - USB::tPktSz;
+            size_t payloadStart = i + USB::TotalHeaderSize;
+            size_t payloadSize = packetSize - USB::TotalHeaderSize;
             
-            currentFrame.insert(currentFrame.end(), 
-                                fileData.begin() + payloadStart, 
-                                fileData.begin() + payloadStart + payloadSize);
+            currentFrame.insert(
+                currentFrame.end(), 
+                fileData.begin() + payloadStart, 
+                fileData.begin() + payloadStart + payloadSize
+            );
         }
 
-        i += chunkTotalSize;
+        i += packetSize;
     }
 
     std::cout << "\nExtraction complete. Saved " << frameCount << " pristine frames.\n";

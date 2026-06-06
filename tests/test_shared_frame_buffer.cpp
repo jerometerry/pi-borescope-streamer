@@ -11,7 +11,7 @@
 #include "shared_frame_buffer.hpp"
 
 TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
-    auto frameBuffer = std::make_shared<SharedFrameBuffer>();
+    auto frameBuffer = SharedFrameBuffer::create();
     uint32_t frameId = 99;
 
     auto activeFrame = frameBuffer->getLatestFrame(frameId);
@@ -21,7 +21,7 @@ TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
 }
 
 TEST(SharedFrameBufferTest, frameBuffer) {
-    auto frameBuffer = std::make_shared<SharedFrameBuffer>();
+    auto frameBuffer = SharedFrameBuffer::create();
 
     std::vector<uint8_t> frame = { 0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9 };
 
@@ -37,7 +37,7 @@ TEST(SharedFrameBufferTest, frameBuffer) {
 }
 
 TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
-    auto frameBuffer = std::make_shared<SharedFrameBuffer>();
+    auto frameBuffer = SharedFrameBuffer::create();
 
     std::vector<uint8_t> frame = { 0x01, 0x02, 0x03 };
     frameBuffer->push(frame);
@@ -57,7 +57,7 @@ TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
 }
 
 TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
-    auto frameBuffer = std::make_shared<SharedFrameBuffer>();
+    auto frameBuffer = SharedFrameBuffer::create();
     std::atomic<bool> producerDone{false};
     std::atomic<int> framesProduced{0};
     std::atomic<int> totalFramesConsumed{0};
@@ -121,7 +121,7 @@ TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
 }
 
 TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
-    auto frameBuffer = std::make_shared<SharedFrameBuffer>();
+    auto frameBuffer = SharedFrameBuffer::create();
 
     std::vector<std::shared_ptr<const std::vector<uint8_t>>> slowConsumers;
     std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
@@ -136,7 +136,7 @@ TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
 
     slowConsumers.clear();
 
-    size_t currentPoolSize = frameBuffer->getFreePoolSize();
+    size_t currentPoolSize = frameBuffer->getFreeBuffers();
     
     EXPECT_EQ(currentPoolSize, SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE);
 }

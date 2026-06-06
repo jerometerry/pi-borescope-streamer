@@ -35,7 +35,7 @@ private:
 
 protected:
     void SetUp() override {
-        frameBuffer_ = std::make_shared<SharedFrameBuffer>();
+        frameBuffer_ = SharedFrameBuffer::create();
 
         server_ = std::make_unique<MjpegServer>(
             TEST_PORT, 

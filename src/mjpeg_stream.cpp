@@ -9,24 +9,29 @@
 #include "mjpeg_stream.hpp"
 
 MjpegStream::MjpegStream(
-    std::function<void(const std::vector<uint8_t>&)> output) 
-    : output_(std::move(output)) {
+    std::function<void(const std::vector<uint8_t>&)> onFrameReady) 
+    : onFrameReady_(std::move(onFrameReady)) {
         frameBuffer_.reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        streamBuffer_.reserve(Units::EIGHT_KILOBYTES);
-        emitBuffer_.reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        inputBuffer_.reserve(Units::EIGHT_KILOBYTES);
+        outputBuffer_.reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {
-    streamBuffer_.insert(streamBuffer_.end(), data.begin(), data.end());
+    inputBuffer_.insert(
+        inputBuffer_.end(), 
+        data.begin(), 
+        data.end()
+    );
 
     size_t i = readOffset_;
 
-    while (i + USB::tPktSz <= streamBuffer_.size()) {
-        USB::UsbPacketHeader header{};
-        std::memcpy(&header, &streamBuffer_[i], USB::uPktSz);
+    while (i + USB::TotalHeaderSize <= inputBuffer_.size()) {
+        USB::PacketHeader packetHeader{};
+        std::memcpy(&packetHeader, &inputBuffer_[i], USB::PacketHeaderSize);
 
-        if (header.getHeader() != UsbProtocol::USB_FRAME_HEADER || 
-           (header.getCameraId() != 0x0B && header.getCameraId() != 0x07)) {
+        if (packetHeader.getHeader() != UsbProtocol::USB_FRAME_HEADER || 
+           (packetHeader.getCameraId() != UsbProtocol::VIDEO_CAMERA_ID && 
+            packetHeader.getCameraId() != UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
             i++;
             continue;
         }
@@ -35,10 +40,16 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         bool isGhost = false;
         size_t nextHeaderOffset = 0;
 
-        size_t maxScan = std::min<size_t>(300, streamBuffer_.size() - i - 3); 
+        size_t maxScan = std::min<size_t>(
+            UsbProtocol::MAX_SCAN_LIMIT, 
+            inputBuffer_.size() - i - 3
+        );
+
         for (size_t d = 5; d <= maxScan; ++d) {
-            if (streamBuffer_[i+d] == 0xAA && streamBuffer_[i+d+1] == 0xBB && 
-               (streamBuffer_[i+d+2] == 0x0B || streamBuffer_[i+d+2] == 0x07)) {
+            if (inputBuffer_[i+d] == UsbProtocol::USB_FRAME_HEADER_A && 
+                inputBuffer_[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && 
+                (inputBuffer_[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
+                    inputBuffer_[i+d+2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
                 isGhost = true;
                 nextHeaderOffset = d;
                 break;
@@ -50,48 +61,52 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             continue;
         }
 
-        size_t chunkTotalSize = USB::uPktSz + header.getLength();
+        size_t totalPacketSize = USB::PacketHeaderSize + packetHeader.getLength();
 
-        if (i + chunkTotalSize > streamBuffer_.size()) {
+        if (i + totalPacketSize > inputBuffer_.size()) {
             break;
         }
 
-        USB::CameraPacketHeader meta{};
+        USB::PayloadHeader payloadHeader{};
         std::memcpy(
-            &meta, 
-            &streamBuffer_[i + USB::uPktSz], 
-            USB::cPktSz
+            &payloadHeader, 
+            &inputBuffer_[i + USB::PacketHeaderSize], 
+            USB::PayloadHeaderSize
         );
 
-        if (!frameBuffer_.empty() && metadata_.getFrameId() != meta.getFrameId()) {
-            trimAndEmitFrame();
+        if (!frameBuffer_.empty() && payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
+            outputFrame();
         }
-        metadata_ = meta;
+        payloadHeader_ = payloadHeader;
 
-        if (!meta.hasGravitySensor() && meta.getOtherFlags() == 0 && meta.getCameraNumber() < 2) {
-            size_t payloadStart = i + USB::tPktSz;
-            size_t payloadSize = chunkTotalSize - USB::tPktSz;
+        if (!payloadHeader.hasGravitySensor() && 
+            payloadHeader.getOtherFlags() == 0 && 
+            payloadHeader.getCameraNumber() < 2) {
+            size_t payloadStart = i + USB::TotalHeaderSize;
+            size_t payloadSize = totalPacketSize - USB::TotalHeaderSize;
             
-            frameBuffer_.insert(frameBuffer_.end(), 
-                               streamBuffer_.begin() + payloadStart, 
-                               streamBuffer_.begin() + payloadStart + payloadSize);
+            frameBuffer_.insert(
+                frameBuffer_.end(), 
+                inputBuffer_.begin() + payloadStart, 
+                inputBuffer_.begin() + payloadStart + payloadSize
+            );
         }
 
-        i += chunkTotalSize;
+        i += totalPacketSize;
     }
 
     readOffset_ = i;
 
-    if (readOffset_ == streamBuffer_.size()) {
-        streamBuffer_.clear();
+    if (readOffset_ == inputBuffer_.size()) {
+        inputBuffer_.clear();
         readOffset_ = 0;
     } else if (readOffset_ > Units::FOUR_KILOBYTES) {
-        streamBuffer_.erase(streamBuffer_.begin(), streamBuffer_.begin() + readOffset_);
+        inputBuffer_.erase(inputBuffer_.begin(), inputBuffer_.begin() + readOffset_);
         readOffset_ = 0;
     }
 }
 
-void MjpegStream::trimAndEmitFrame() {
+void MjpegStream::outputFrame() {
     if (frameBuffer_.empty()) {
         return;
     }
@@ -100,8 +115,9 @@ void MjpegStream::trimAndEmitFrame() {
     size_t eoiOffset = std::string::npos;
 
     // Scan forward for Start of Image (FF D8)
-    for (size_t j = 0; j + 1 < std::min<size_t>(256, frameBuffer_.size()); ++j) {
-        if (frameBuffer_[j] == 0xFF && frameBuffer_[j+1] == 0xD8) {
+    size_t maxSoiPosition = std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, frameBuffer_.size());
+    for (size_t j = 0; j + 1 < maxSoiPosition; ++j) {
+        if (frameBuffer_[j] == UsbProtocol::BOUNDARY_MARKER && frameBuffer_[j+1] == UsbProtocol::START_MARKER) {
             soiOffset = j;
             break;
         }
@@ -109,7 +125,7 @@ void MjpegStream::trimAndEmitFrame() {
 
     // Scan backwards for End of Image (FF D9)
     for (size_t j = frameBuffer_.size(); j >= 2; --j) {
-        if (frameBuffer_[j - 2] == 0xFF && frameBuffer_[j - 1] == 0xD9) {
+        if (frameBuffer_[j - 2] == UsbProtocol::BOUNDARY_MARKER && frameBuffer_[j - 1] == UsbProtocol::END_MARKER) {
             eoiOffset = j;
             break;
         }
@@ -118,16 +134,20 @@ void MjpegStream::trimAndEmitFrame() {
     // If we have valid boundaries, slice the pure JPEG and fire it off
     if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
         size_t frameSize = eoiOffset - soiOffset;
-        emitBuffer_.clear();
+        outputBuffer_.clear();
 
-        if (emitBuffer_.capacity() < frameSize) {
-            emitBuffer_.reserve(frameSize); 
+        if (outputBuffer_.capacity() < frameSize) {
+            outputBuffer_.reserve(frameSize); 
         }
 
-        emitBuffer_.insert(emitBuffer_.end(), frameBuffer_.begin() + soiOffset, frameBuffer_.begin() + eoiOffset);
+        outputBuffer_.insert(
+            outputBuffer_.end(), 
+            frameBuffer_.begin() + soiOffset, 
+            frameBuffer_.begin() + eoiOffset
+        );
 
-        if (output_) {
-            output_(emitBuffer_);
+        if (onFrameReady_) {
+            onFrameReady_(outputBuffer_);
         }
     }
     

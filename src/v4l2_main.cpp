@@ -63,7 +63,7 @@ int main(int argc, const char* argv[]) {
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
-    auto frameBuffer = std::make_shared<SharedFrameBuffer>();
+    auto frameBuffer = SharedFrameBuffer::create();
 
     MjpegStream mjpegStream([&frameBuffer](const std::vector<uint8_t>& frame) {
         frameBuffer->push(frame);

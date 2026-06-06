@@ -43,7 +43,9 @@ namespace UsbProtocol {
     /**
      * @brief We will stop searching for the JPEG start signature if we don't find it within the first 32 bytes of a payload.
      */
-    inline constexpr int JPEG_SOI_MARKERS_MAX_POSITION = 32;
+    inline constexpr size_t JPEG_SOI_MARKERS_MAX_POSITION = 256;
+
+    inline const size_t MAX_SCAN_LIMIT = 300;
 
     /**
      * @brief The internal hardware lens ID for endoscopes equipped with a physical orientation sensor.
@@ -64,6 +66,16 @@ namespace UsbProtocol {
      * @brief The secret 0xBBAA "shipping label" code the hardware uses to tag a valid video chunk on the wire.
      */
     inline constexpr uint16_t USB_FRAME_HEADER = 0xBBAA;
+    
+    inline constexpr uint8_t USB_FRAME_HEADER_A = 0xAA;
+    
+    inline constexpr uint8_t USB_FRAME_HEADER_B = 0xBB;
+
+    inline constexpr uint8_t BOUNDARY_MARKER = 0xFF;
+
+    inline constexpr uint8_t START_MARKER = 0xD8;
+
+    inline constexpr uint8_t END_MARKER = 0xD9;
 
     /**
      * @brief The official hardware whitelist. The software will only connect to cameras matching these Manufacturer and Model IDs.

@@ -97,9 +97,9 @@ namespace USB {
     * out of bounds and crash the server. 
     * 
     * Once we verify this envelope is valid and safe to open, we strip it away to reveal 
-    * the actual inner payload (which begins with the CameraPacketHeader).
+    * the actual inner payload (which begins with the PayloadHeader).
     */
-    struct [[gnu::packed]] UsbPacketHeader {
+    struct [[gnu::packed]] PacketHeader {
 
         /**
         * @brief The raw, un-translated secret code identifying this as a valid camera chunk.
@@ -176,7 +176,7 @@ namespace USB {
     * engineers cleverly used the remaining bytes in this header to piggyback the gravity sensor and 
     * button state alongside the video data.
     */
-    struct [[gnu::packed]] CameraPacketHeader {
+    struct [[gnu::packed]] PayloadHeader {
 
         /**
         * @brief A rolling counter that helps us stitch chunks together into a full picture.
@@ -326,20 +326,12 @@ namespace USB {
         }
     };
 
-    inline constexpr size_t uPktSz = sizeof(USB::UsbPacketHeader);
-    inline constexpr size_t cPktSz = sizeof(USB::CameraPacketHeader);
-    inline constexpr size_t tPktSz = uPktSz + cPktSz;
-
-    inline constexpr uint16_t PACKET_HEADER = 0xBBAA;
-    inline constexpr uint8_t HEADER_A = 0xAA;
-    inline constexpr uint8_t HEADER_B = 0xBB;
-
-    inline constexpr uint8_t BOUNDARY_MARKER = 0xFF;
-    inline constexpr uint8_t START_MARKER = 0xD8;
-    inline constexpr uint8_t END_MARKER = 0xD9;
+    inline constexpr size_t PacketHeaderSize = sizeof(USB::PacketHeader);
+    inline constexpr size_t PayloadHeaderSize = sizeof(USB::PayloadHeader);
+    inline constexpr size_t TotalHeaderSize = PacketHeaderSize + PayloadHeaderSize;
 }
 
 static_assert(
-    sizeof(USB::CameraPacketHeader) == 7, 
-    "CameraPacketHeader size must be exactly 7 bytes to match the hardware protocol!"
+    sizeof(USB::PayloadHeader) == 7, 
+    "PayloadHeader size must be exactly 7 bytes to match the hardware protocol!"
 );

@@ -114,7 +114,7 @@ int main(int argc, const char* argv[]) {
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
 
-        auto frameBuffer = std::make_shared<SharedFrameBuffer>();
+        auto frameBuffer = SharedFrameBuffer::create();
 
         MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
             return frameBuffer->getLatestFrame(id);

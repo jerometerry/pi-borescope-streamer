@@ -25,10 +25,10 @@ class MjpegStream {
 public:
     /**
      * @brief Construct the decoder and wire up its output destinations.
-     * @param output The function we call to hand off a finished, clean JPEG picture. 
+     * @param onFrameReady The function we call to hand off a finished, clean JPEG picture. 
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
      */
-    explicit MjpegStream(std::function<void(const std::vector<uint8_t>&)> output);
+    explicit MjpegStream(std::function<void(const std::vector<uint8_t>&)> onFrameReady);
 
     ~MjpegStream() = default;
 
@@ -45,7 +45,7 @@ private:
     /**
      * @brief The waiting room for raw bytes that haven't been sorted yet.
      */
-    std::vector<uint8_t> streamBuffer_;
+    std::vector<uint8_t> inputBuffer_;
 
     /**
      * @brief The workbench where we are currently stitching the chunks into a picture.
@@ -55,7 +55,7 @@ private:
     /**
      * @brief The staging area for a finished picture right before it gets broadcasted.
      */
-    std::vector<uint8_t> emitBuffer_;
+    std::vector<uint8_t> outputBuffer_;
 
     /**
      * @brief The memory of what the current picture is supposed to look like.
@@ -63,7 +63,7 @@ private:
      * data is coming from, so we don't accidentally stitch chunks from two different 
      * pictures together.
      */
-    USB::CameraPacketHeader metadata_{};
+    USB::PayloadHeader payloadHeader_{};
 
     /**
      * @brief A bookmark tracking how far we've read into the stream buffer.
@@ -75,7 +75,7 @@ private:
     /**
      * @brief Where to send finished video pictures.
      */
-    std::function<void(const std::vector<uint8_t>&)> output_;
+    std::function<void(const std::vector<uint8_t>&)> onFrameReady_;
 
     /**
      * @brief Snip out the exact picture and send it off.
@@ -83,5 +83,5 @@ private:
      * This function scans the workbench, cuts out the perfect JPEG file, and fires it 
      * into the `frameSink`.
      */
-    void trimAndEmitFrame();
+    void outputFrame();
 };
