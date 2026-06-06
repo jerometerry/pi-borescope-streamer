@@ -12,11 +12,6 @@ std::shared_ptr<BufferPool> BufferPool::create() {
     return instance;
 }
 
-size_t BufferPool::getFreeBuffers() const {
-    std::scoped_lock lock(poolMutex_);
-    return pool_.size();
-}
-
 std::shared_ptr<std::vector<uint8_t>> BufferPool::acquire() {
     std::unique_ptr<std::vector<uint8_t>> buffer;
     {
@@ -41,15 +36,9 @@ std::shared_ptr<std::vector<uint8_t>> BufferPool::acquire() {
     }};
 }
 
-void BufferPool::release(std::unique_ptr<std::vector<uint8_t>> buffer) {
-    if (!buffer) return;
-
-    buffer->clear(); 
-
+size_t BufferPool::getFreeBuffers() const {
     std::scoped_lock lock(poolMutex_);
-    if (pool_.size() < SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE) {
-        pool_.push_back(std::move(buffer));
-    }
+    return pool_.size();
 }
 
 void BufferPool::initialize() {
@@ -58,6 +47,17 @@ void BufferPool::initialize() {
     for (int i = 0; i < SharedFrameBufferConfig::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
         auto buffer = std::make_unique<std::vector<uint8_t>>();
         buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        pool_.push_back(std::move(buffer));
+    }
+}
+
+void BufferPool::release(std::unique_ptr<std::vector<uint8_t>> buffer) {
+    if (!buffer) return;
+
+    buffer->clear(); 
+
+    std::scoped_lock lock(poolMutex_);
+    if (pool_.size() < SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE) {
         pool_.push_back(std::move(buffer));
     }
 }

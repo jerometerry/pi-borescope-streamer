@@ -15,11 +15,12 @@ public:
     static std::shared_ptr<BufferPool> create();
     
     std::shared_ptr<std::vector<uint8_t>> acquire();
-    void release(std::unique_ptr<std::vector<uint8_t>> buffer);
+    
     size_t getFreeBuffers() const;
 
 private:
     void initialize();
+    void release(std::unique_ptr<std::vector<uint8_t>> buffer);
     
     mutable std::mutex poolMutex_;
     std::vector<std::unique_ptr<std::vector<uint8_t>>> pool_;
