@@ -3,8 +3,10 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <cstdint>
 #include <iostream>
 #include <string>
+#include <vector>
 #include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
 

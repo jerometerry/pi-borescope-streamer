@@ -4,8 +4,10 @@
 #include <format>
 #include <span>
 #include <string>
+#include <vector>
 #include "constants.hpp"
 #include "device_finder.hpp"
+#include "device_info.hpp"
 #include "usb_context.hpp"
 #include "usb_device_list.hpp"
 

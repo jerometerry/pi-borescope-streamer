@@ -95,7 +95,7 @@ int main(int argc, const char* argv[]) {
         auto currentFrame = frameBuffer.getLatestFrame(currentFrameId);
 
         if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
-            publisher.writeFrame(*currentFrame);
+            publisher.writeFrame(currentFrame->data());
             lastBroadcastedFrameId = currentFrameId;
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));

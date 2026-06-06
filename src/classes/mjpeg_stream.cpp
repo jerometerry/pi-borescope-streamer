@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <functional>
 #include <span>
 #include <string>
 #include <utility>

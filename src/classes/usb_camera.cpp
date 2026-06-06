@@ -6,7 +6,9 @@
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include "constants.hpp"
+#include "device_info.hpp"
 #include "usb_camera.hpp"
 
 UsbCamera::UsbCamera(const DeviceInfo& target) {

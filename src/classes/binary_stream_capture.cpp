@@ -8,6 +8,7 @@
 #include "binary_stream_capture.hpp"
 #include "constants.hpp"
 #include "usb_camera.hpp"
+struct DeviceInfo;
 
 int BinaryStreamCapture::capture(const std::atomic<bool>& running, const DeviceInfo& cameraInfo) {
 	std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
