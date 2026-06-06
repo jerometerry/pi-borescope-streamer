@@ -31,11 +31,11 @@ protected:
         );
     }
 
-    USB::PacketHeader* getPacketHeader(std::vector<uint8_t>& buffer) {
+    USB::PacketHeader* getPacketHeader(std::span<uint8_t> buffer) {
         return reinterpret_cast<USB::PacketHeader*>(buffer.data());
     }
 
-    USB::PayloadHeader* getPayloadHeader(std::vector<uint8_t>& buffer) {
+    USB::PayloadHeader* getPayloadHeader(std::span<uint8_t> buffer) {
         return reinterpret_cast<USB::PayloadHeader*>(
             buffer.data() + USB::PacketHeaderSize
         );
