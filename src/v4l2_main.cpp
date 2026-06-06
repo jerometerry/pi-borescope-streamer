@@ -10,6 +10,7 @@
 #include <memory>
 #include <thread>
 #include <vector>
+#include "buffer_pool.hpp"
 #include "data_structures.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
@@ -63,10 +64,11 @@ int main(int argc, const char* argv[]) {
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
-    auto frameBuffer = SharedFrameBuffer::create();
+    auto bufferPool = BufferPool::create();
+    SharedFrameBuffer frameBuffer(bufferPool);
 
     MjpegStream mjpegStream([&frameBuffer](const std::vector<uint8_t>& frame) {
-        frameBuffer->push(frame);
+        frameBuffer.push(frame);
     });
 
     auto usbRouter = [&mjpegStream](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
@@ -90,7 +92,7 @@ int main(int argc, const char* argv[]) {
 
     while (running.load(std::memory_order_relaxed)) {
         uint32_t currentFrameId = 0;
-        auto currentFrame = frameBuffer->getLatestFrame(currentFrameId);
+        auto currentFrame = frameBuffer.getLatestFrame(currentFrameId);
 
         if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
             publisher.writeFrame(*currentFrame);

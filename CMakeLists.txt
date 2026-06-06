@@ -116,6 +116,7 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 add_library(borescope_core STATIC 
     src/usb_context.cpp
     src/device_finder.cpp
+    src/buffer_pool.cpp
     src/shared_frame_buffer.cpp
     src/frame_extractor.cpp
     src/binary_stream_capture.cpp

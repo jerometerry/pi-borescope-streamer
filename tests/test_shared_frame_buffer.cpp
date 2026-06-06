@@ -7,28 +7,32 @@
 #include <thread>
 #include <vector>
 #include <memory>
+#include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "shared_frame_buffer.hpp"
 
 TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
-    auto frameBuffer = SharedFrameBuffer::create();
+    auto bufferPool = BufferPool::create();
+    SharedFrameBuffer frameBuffer(bufferPool);
+
     uint32_t frameId = 99;
 
-    auto activeFrame = frameBuffer->getLatestFrame(frameId);
+    auto activeFrame = frameBuffer.getLatestFrame(frameId);
     
     EXPECT_EQ(activeFrame, nullptr);
     EXPECT_EQ(frameId, 0) << "Frame ID should start strictly at 0";
 }
 
 TEST(SharedFrameBufferTest, frameBuffer) {
-    auto frameBuffer = SharedFrameBuffer::create();
+    auto bufferPool = BufferPool::create();
+    SharedFrameBuffer frameBuffer(bufferPool);
 
     std::vector<uint8_t> frame = { 0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9 };
 
-    frameBuffer->push(frame);
+    frameBuffer.push(frame);
 
     uint32_t currentId = 0;
-    auto currentFrame = frameBuffer->getLatestFrame(currentId);
+    auto currentFrame = frameBuffer.getLatestFrame(currentId);
 
     EXPECT_EQ(currentId, 1);
     ASSERT_NE(currentFrame, nullptr);
@@ -37,27 +41,30 @@ TEST(SharedFrameBufferTest, frameBuffer) {
 }
 
 TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
-    auto frameBuffer = SharedFrameBuffer::create();
+    auto bufferPool = BufferPool::create();
+    SharedFrameBuffer frameBuffer(bufferPool);
 
     std::vector<uint8_t> frame = { 0x01, 0x02, 0x03 };
-    frameBuffer->push(frame);
+    frameBuffer.push(frame);
     
     uint32_t initialId = 0;
-    auto initialFrame = frameBuffer->getLatestFrame(initialId);
+    auto initialFrame = frameBuffer.getLatestFrame(initialId);
     EXPECT_EQ(initialId, 1);
 
     std::vector<uint8_t> emptyFrame = {};
-    frameBuffer->push(emptyFrame);
+    frameBuffer.push(emptyFrame);
     
     uint32_t nextId = 0;
-    auto nextFrame = frameBuffer->getLatestFrame(nextId);
+    auto nextFrame = frameBuffer.getLatestFrame(nextId);
     
     EXPECT_EQ(initialId, nextId) << "Frame ID should not increment for empty frames.";
     EXPECT_EQ(initialFrame.get(), nextFrame.get()) << "Active frame pointer should remain unchanged.";
 }
 
 TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
-    auto frameBuffer = SharedFrameBuffer::create();
+    auto bufferPool = BufferPool::create();
+    SharedFrameBuffer frameBuffer(bufferPool);
+
     std::atomic<bool> producerDone{false};
     std::atomic<int> framesProduced{0};
     std::atomic<int> totalFramesConsumed{0};
@@ -67,7 +74,7 @@ TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
         std::vector<uint8_t> frame = { 0xAA, 0xBB, 0xCC };
         
         while (framesProduced.load(std::memory_order_relaxed) < TARGET_FRAMES) {
-            frameBuffer->push(frame);
+            frameBuffer.push(frame);
             framesProduced.fetch_add(1, std::memory_order_relaxed);
 
             std::this_thread::yield(); 
@@ -82,7 +89,7 @@ TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
         while (!producerDone.load(std::memory_order_acquire) || lastSeenId < TARGET_FRAMES) {
             
             uint32_t currentId = 0;
-            auto frame = frameBuffer->getLatestFrame(currentId);
+            auto frame = frameBuffer.getLatestFrame(currentId);
             
             if (frame && currentId > lastSeenId) {
                 localConsumed++;
@@ -121,7 +128,8 @@ TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
 }
 
 TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
-    auto frameBuffer = SharedFrameBuffer::create();
+    auto bufferPool = BufferPool::create();
+    SharedFrameBuffer frameBuffer(bufferPool);
 
     std::vector<std::shared_ptr<const std::vector<uint8_t>>> slowConsumers;
     std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
@@ -129,14 +137,14 @@ TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
     constexpr int SPIKE_SIZE = 10;
 
     for (int i = 0; i < SPIKE_SIZE; ++i) {
-        frameBuffer->push(dummyFrame);
+        frameBuffer.push(dummyFrame);
         uint32_t id = 0;
-        slowConsumers.push_back(frameBuffer->getLatestFrame(id));
+        slowConsumers.push_back(frameBuffer.getLatestFrame(id));
     }
 
     slowConsumers.clear();
 
-    size_t currentPoolSize = frameBuffer->getFreeBuffers();
+    size_t currentPoolSize = bufferPool->getFreeBuffers();
     
     EXPECT_EQ(currentPoolSize, SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE);
 }

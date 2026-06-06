@@ -24,6 +24,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "buffer_pool.hpp"
 #include "data_structures.hpp"
 #include "device_info.hpp"
 #include "shared_frame_buffer.hpp"
@@ -114,14 +115,15 @@ int main(int argc, const char* argv[]) {
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
 
-        auto frameBuffer = SharedFrameBuffer::create();
+        auto bufferPool = BufferPool::create();
+        SharedFrameBuffer frameBuffer(bufferPool);
 
         MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
-            return frameBuffer->getLatestFrame(id);
+            return frameBuffer.getLatestFrame(id);
         });
 
         MjpegStream mjpegStream([&frameBuffer](const std::vector<uint8_t>& frame) {
-            frameBuffer->push(frame);
+            frameBuffer.push(frame);
         });
 
         auto usbRouter = [&mjpegStream](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {

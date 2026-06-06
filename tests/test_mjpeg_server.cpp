@@ -15,8 +15,9 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "shared_frame_buffer.hpp"
+#include "buffer_pool.hpp"
 #include "mjpeg_server.hpp"
+#include "shared_frame_buffer.hpp"
 
 namespace {
     constexpr int TEST_PORT = 18080; 
@@ -30,12 +31,14 @@ namespace {
 class MjpegServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
-    std::shared_ptr<SharedFrameBuffer> frameBuffer_; 
+    std::shared_ptr<BufferPool> bufferPool_;
+    std::shared_ptr<SharedFrameBuffer> frameBuffer_;
     std::unique_ptr<MjpegServer> server_;
 
 protected:
     void SetUp() override {
-        frameBuffer_ = SharedFrameBuffer::create();
+        bufferPool_ = BufferPool::create();
+        frameBuffer_ = std::make_shared<SharedFrameBuffer>(bufferPool_);
 
         server_ = std::make_unique<MjpegServer>(
             TEST_PORT, 
