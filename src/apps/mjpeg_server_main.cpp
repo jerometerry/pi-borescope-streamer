@@ -1,5 +1,5 @@
 /**
- * @file server.cpp
+ * @file mjpeg_server_main.cpp
  * @brief The main entry point for the live video streaming application.
  * @details This is the primary program you run to actually use your camera. 
  * When executed, it automatically finds the camera on the USB bus, launches the 
