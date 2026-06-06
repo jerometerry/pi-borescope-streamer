@@ -110,7 +110,7 @@ private:
                 dmaBuffer, 
                 UsbConfig::DMA_BUFFER_SIZE
             );
-            if (!freeResult) {
+            if (freeResult != LIBUSB_SUCCESS) {
                 std::cerr << std::format("[DRIVER ERROR] Failed to free DMA: {} \n", freeResult);
             }
 
