@@ -7,8 +7,10 @@
 #include <thread>
 #include <vector>
 
+// IWYU pragma: begin_exports
 struct us_listen_socket_t;
 struct us_timer_t;
+// IWYU pragma: end_exports
 
 namespace Mjpeg { class Frame; }
 namespace Web { struct ViewerState; }

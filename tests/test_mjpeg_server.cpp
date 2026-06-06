@@ -16,7 +16,6 @@
 #include <thread>
 #include <vector>
 #include "buffer_pool.hpp"
-#include "data_structures.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_buffer.hpp"
 #include "mjpeg_data_structures.hpp"

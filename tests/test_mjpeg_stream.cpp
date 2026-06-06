@@ -7,10 +7,12 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 #include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "data_structures.hpp"
+#include "mjpeg_data_structures.hpp"
 #include "mjpeg_stream.hpp"
 
 class MockHandlers {

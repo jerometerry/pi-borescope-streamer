@@ -15,6 +15,7 @@
 #include "device_info.hpp"
 #include "device_finder.hpp"
 #include "libusb_async_driver.hpp"
+#include "mjpeg_data_structures.hpp"
 #include "mjpeg_stream.hpp"
 #include "shared_frame_buffer.hpp"
 #include "v4l2.hpp"
