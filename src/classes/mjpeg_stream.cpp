@@ -44,7 +44,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             inputBuffer_.size() - i - 3
         );
 
-        for (size_t d = 5; d <= maxScan; ++d) {
+        for (size_t d = USB::PacketHeaderSize; d <= maxScan; ++d) {
             if (inputBuffer_[i+d] == UsbProtocol::USB_FRAME_HEADER_A && 
                 inputBuffer_[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && 
                 (inputBuffer_[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
