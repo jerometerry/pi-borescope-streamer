@@ -10,6 +10,7 @@
 struct us_listen_socket_t;
 struct us_timer_t;
 
+namespace USB { class FramePtr; }
 namespace Web { struct ViewerState; }
 
 /**
@@ -20,7 +21,7 @@ namespace Web { struct ViewerState; }
  */
 class MjpegServer {
 public:
-    using FrameSource = std::function<std::shared_ptr<const std::vector<uint8_t>>(uint32_t&)>;
+    using FrameSource = std::function<USB::FramePtr(uint32_t&)>;
 
     explicit MjpegServer(int port, const std::atomic<bool>& running, FrameSource frameSource);
     ~MjpegServer();

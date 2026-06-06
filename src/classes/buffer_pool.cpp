@@ -5,6 +5,7 @@
 #include <vector>
 #include "buffer_pool.hpp"
 #include "constants.hpp"
+#include "data_structures.hpp"
 
 std::shared_ptr<BufferPool> BufferPool::create() {
     auto instance = std::make_shared<BufferPool>(PrivateConstructTag{});
@@ -12,28 +13,29 @@ std::shared_ptr<BufferPool> BufferPool::create() {
     return instance;
 }
 
-std::shared_ptr<std::vector<uint8_t>> BufferPool::acquire() {
-    std::unique_ptr<std::vector<uint8_t>> buffer;
+static void recycleFrameBridge(void* context, USB::PooledFrame* frame) {
+    auto* pool = static_cast<BufferPool*>(context);
+    pool->returnToPool(frame);
+}
+
+USB::FramePtr BufferPool::acquire() {
+    std::unique_ptr<USB::PooledFrame> frame;
     {
         std::scoped_lock lock(poolMutex_);
         if (!pool_.empty()) {
-            buffer = std::move(pool_.back());
+            frame = std::move(pool_.back());
             pool_.pop_back();
         }
     }
 
-    if (!buffer) {
-        buffer = std::make_unique<std::vector<uint8_t>>();
-        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+    if (!frame) {
+        frame = std::make_unique<USB::PooledFrame>();
+        frame->data().reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        frame->poolContext = this;
+        frame->returnCallback = recycleFrameBridge;
     }
 
-    auto weakThis = weak_from_this();
-    return {buffer.release(), [weakThis](std::vector<uint8_t>* ptr) {                           
-        std::unique_ptr<std::vector<uint8_t>> wrapper(ptr);
-        if (auto sharedThis = weakThis.lock()) {
-            sharedThis->release(std::move(wrapper));
-        }
-    }};
+    return USB::FramePtr(frame.release());
 }
 
 size_t BufferPool::getFreeBuffers() const {
@@ -45,19 +47,26 @@ void BufferPool::initialize() {
     pool_.reserve(SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE);
     
     for (int i = 0; i < SharedFrameBufferConfig::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
-        auto buffer = std::make_unique<std::vector<uint8_t>>();
-        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        pool_.push_back(std::move(buffer));
+
+        auto frame = std::make_unique<USB::PooledFrame>();
+        frame->data().reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+
+        frame->poolContext = this;
+        frame->returnCallback = recycleFrameBridge;
+
+        pool_.push_back(std::move(frame));
     }
 }
 
-void BufferPool::release(std::unique_ptr<std::vector<uint8_t>> buffer) {
-    if (!buffer) return;
+void BufferPool::returnToPool(USB::PooledFrame* frame) {
+    if (!frame) return;
 
-    buffer->clear(); 
+    frame->clear(); 
 
     std::scoped_lock lock(poolMutex_);
     if (pool_.size() < SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE) {
-        pool_.push_back(std::move(buffer));
+        pool_.push_back(std::unique_ptr<USB::PooledFrame>(frame));
+    } else {
+        std::unique_ptr<USB::PooledFrame> toDelete(frame);
     }
 }

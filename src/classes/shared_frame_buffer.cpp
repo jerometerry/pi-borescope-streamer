@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 #include "buffer_pool.hpp"
+#include "data_structures.hpp"
 #include "shared_frame_buffer.hpp"
 
 SharedFrameBuffer::SharedFrameBuffer(std::shared_ptr<BufferPool> bufferPool) : 
@@ -13,13 +14,14 @@ SharedFrameBuffer::SharedFrameBuffer(std::shared_ptr<BufferPool> bufferPool) :
 
 void SharedFrameBuffer::push(std::span<const uint8_t> frame) {
     if (frame.empty()) { 
-		return;
-	}
+        return;
+    }
 
     auto buffer = bufferPool_->acquire();
-    buffer->assign(frame.begin(), frame.end());
 
-    std::shared_ptr<const std::vector<uint8_t>> previousFrame;
+    buffer->data().assign(frame.begin(), frame.end());
+
+    USB::FramePtr previousFrame;
     {
         std::scoped_lock lock(activeMutex_);
         frameId_++;
@@ -28,7 +30,7 @@ void SharedFrameBuffer::push(std::span<const uint8_t> frame) {
     }
 }
 
-std::shared_ptr<const std::vector<uint8_t>> SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
+USB::FramePtr SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
     std::scoped_lock lock(activeMutex_);
     outFrameId = frameId_;
     return frame_;

@@ -19,8 +19,35 @@ TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
 
     auto activeFrame = frameBuffer.getLatestFrame(frameId);
     
-    EXPECT_EQ(activeFrame, nullptr);
+    EXPECT_EQ(activeFrame.get(), nullptr);
     EXPECT_EQ(frameId, 0) << "Frame ID should start strictly at 0";
+}
+
+TEST(SharedFrameBufferTest, SafelyHandlesImmediatePollingWithoutSegfault) {
+    auto bufferPool = BufferPool::create();
+    SharedFrameBuffer frameBuffer(bufferPool);
+
+    uint32_t frameId = 0;
+
+    auto activeFrame = frameBuffer.getLatestFrame(frameId);
+
+    ASSERT_FALSE(activeFrame) << "FramePtr should safely evaluate to false when empty.";
+
+    if (activeFrame) {
+        FAIL() << "Execution should not reach this block. Guard check failed.";
+    }
+}
+
+TEST(SharedFrameBufferTest, DereferencingEmptyFramePtrCausesDeath) {
+    auto bufferPool = BufferPool::create();
+    SharedFrameBuffer frameBuffer(bufferPool);
+
+    uint32_t frameId = 0;
+    auto activeFrame = frameBuffer.getLatestFrame(frameId);
+
+    EXPECT_DEATH({
+        activeFrame->size(); 
+    }, "");
 }
 
 TEST(SharedFrameBufferTest, frameBuffer) {
@@ -35,9 +62,9 @@ TEST(SharedFrameBufferTest, frameBuffer) {
     auto currentFrame = frameBuffer.getLatestFrame(currentId);
 
     EXPECT_EQ(currentId, 1);
-    ASSERT_NE(currentFrame, nullptr);
+    ASSERT_NE(currentFrame->data().data(), nullptr);
     EXPECT_EQ(currentFrame->size(), frame.size());
-    EXPECT_EQ(*currentFrame, frame);
+    EXPECT_EQ(currentFrame->data(), frame);
 }
 
 TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
@@ -58,7 +85,10 @@ TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
     auto nextFrame = frameBuffer.getLatestFrame(nextId);
     
     EXPECT_EQ(initialId, nextId) << "Frame ID should not increment for empty frames.";
-    EXPECT_EQ(initialFrame.get(), nextFrame.get()) << "Active frame pointer should remain unchanged.";
+    EXPECT_EQ(
+        initialFrame.get()->data(), 
+        nextFrame.get()->data()
+    ) << "Active frame pointer should remain unchanged.";
 }
 
 TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
@@ -131,7 +161,7 @@ TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
     auto bufferPool = BufferPool::create();
     SharedFrameBuffer frameBuffer(bufferPool);
 
-    std::vector<std::shared_ptr<const std::vector<uint8_t>>> slowConsumers;
+    std::vector<USB::FramePtr> slowConsumers;
     std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
 
     constexpr int SPIKE_SIZE = 10;

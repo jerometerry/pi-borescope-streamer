@@ -1,8 +1,10 @@
 #pragma once
 
+#include <atomic>
 #include <bit>
 #include <concepts>
 #include <cstdint>
+#include <vector>
 
 namespace uWS { template <bool SSL> struct HttpResponse; }
 
@@ -26,6 +28,105 @@ namespace Arguments {
 }
 
 namespace USB {
+    struct PooledFrame {
+        std::vector<uint8_t> data_;
+        std::atomic<int> refCount_{0};
+
+        void (*returnCallback)(void* context, PooledFrame* frame){nullptr};
+        void* poolContext{nullptr};
+        
+        void release() {
+            if (refCount_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                if (returnCallback && poolContext) {
+                    returnCallback(poolContext, this);
+                }
+            }
+        }
+
+        void clear() {
+            data_.clear();
+        }
+
+        bool empty() const {
+            return data_.empty();
+        }
+
+        size_t size() const {
+            return data_.size();
+        }
+
+        std::vector<uint8_t>& data() {
+            return data_;
+        }
+    };
+
+    /**
+     * @brief A zero-allocation replacement for std::shared_ptr.
+     */
+    class FramePtr {
+    public:
+        FramePtr() = default;
+        
+        explicit FramePtr(PooledFrame* frame) : frame_(frame) {
+            if (frame_) {
+                frame_->refCount_.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        
+        ~FramePtr() {
+            if (frame_) { 
+                frame_->release();
+            }
+        }
+
+        FramePtr(FramePtr&& other) noexcept : frame_(other.frame_) {
+            other.frame_ = nullptr;
+        }
+        
+        FramePtr& operator=(FramePtr&& other) noexcept {
+            if (this != &other) {
+                if (frame_) frame_->release();
+                frame_ = other.frame_;
+                other.frame_ = nullptr;
+            }
+            return *this;
+        }
+
+        FramePtr(const FramePtr& other) : frame_(other.frame_) {
+            if (frame_) {
+                frame_->refCount_.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        
+        FramePtr& operator=(const FramePtr& other) {
+            if (this != &other) {
+                if (frame_) { 
+                    frame_->release();
+                }
+                frame_ = other.frame_;
+                if (frame_) { 
+                    frame_->refCount_.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+            return *this;
+        }
+
+        PooledFrame* get() const { 
+            return frame_; 
+        }
+
+        PooledFrame* operator->() const { 
+            return frame_; 
+        }
+
+        explicit operator bool() const { 
+            return frame_ != nullptr; 
+        }
+
+    private:
+        PooledFrame* frame_{nullptr};
+    };
+
     enum class TransferStatus :std::uint8_t {
         Completed,
         Disconnected,

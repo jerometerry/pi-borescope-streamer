@@ -94,7 +94,9 @@ void MjpegServer::onTimer(us_timer_t *t) {
                         res->write(std::string_view(headerBuf, result.ptr - headerBuf));
                         
                         res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
-                        res->write(std::string_view(reinterpret_cast<const char*>(currentFrame->data()), currentFrame->size()));
+                        res->write(std::string_view(reinterpret_cast<const char*>(
+                            currentFrame->data().data()), currentFrame->size()
+                        ));
                     });
                 } else {
                     if (!viewer.isLagging) {
