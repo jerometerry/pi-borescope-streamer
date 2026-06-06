@@ -142,10 +142,10 @@ target_link_libraries(borescope_core
         GTest::gtest
 )
 
-add_executable(pi-borescope-streamer 
-    src/apps/server.cpp
+add_executable(mjpeg_server
+    src/apps/mjpeg_server_main.cpp
 )
-target_link_libraries(pi-borescope-streamer PRIVATE Borescope::Core project_warnings)
+target_link_libraries(mjpeg_server PRIVATE Borescope::Core project_warnings)
 
 add_executable(attached_usb_devices
     src/apps/attached_usb_devices.cpp
