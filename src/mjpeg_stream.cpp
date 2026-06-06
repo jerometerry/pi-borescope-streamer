@@ -66,10 +66,10 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             break;
         }
 
-        // if (packetHeader.getLength() < USB::PayloadHeaderSize) {
-        //     i++;
-        //     continue;
-        // }
+        if (packetHeader.getLength() < USB::PayloadHeaderSize) {
+            i++;
+            continue;
+        }
 
         USB::PayloadHeader payloadHeader{};
         std::memcpy(

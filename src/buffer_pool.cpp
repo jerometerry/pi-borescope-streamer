@@ -1,7 +1,6 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <span>
 #include <utility>
 #include <vector>
 #include "buffer_pool.hpp"

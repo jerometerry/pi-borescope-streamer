@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <span>
 #include <vector>
 
 class BufferPool : public std::enable_shared_from_this<BufferPool> {
