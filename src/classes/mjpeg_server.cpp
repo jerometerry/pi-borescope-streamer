@@ -103,6 +103,13 @@ void MjpegServer::onTimer(us_timer_t *t) {
                             currentFrame->data().data()), currentFrame->size()
                         ));
                     });
+
+                    size_t postWriteBackpressure = res->getWriteOffset();
+                    if (postWriteBackpressure > 0) {
+                        std::cerr << "[Network Telemetry] HEAP ALLOCATION DETECTED! res->write() caused " 
+                                  << postWriteBackpressure << " bytes to be queued on the heap for viewer frame " 
+                                  << currentFrameId << "\n";
+                    }
                 } else {
                     if (!viewer.isLagging) {
                         std::cout << "[Network Telemetry] Warning: TCP stall detected! OS buffer backed up with " 
@@ -143,23 +150,23 @@ void MjpegServer::start() {
                 ->end();
             }).get("/stream", [this](auto *res, auto *) {
                 if (activeViewers_.size() >= WebServerConfig::MAX_CLIENTS) {
-                    std::cerr << "Server at capacity. Refused new viewer";
+                    std::cerr << "Server at capacity. Refused new viewer\n";
                     res->writeStatus("503 Service Unavailable")->end("Server Capacity Reached");
                     return;
                 }
 
-                std::cerr << "Viewer connected to stream";
+                std::cerr << "Viewer connected to stream\n";
 
                 res->writeStatus("200 OK")
-                ->writeHeader("Connection", "close")
-                ->writeHeader("Cache-Control", "no-cache, private")
-                ->writeHeader("Pragma", "no-cache")
-                ->writeHeader("Content-Type", "multipart/x-mixed-replace; boundary=mjpegstream");
+                   ->writeHeader("Connection", "close")
+                   ->writeHeader("Cache-Control", "no-cache, private")
+                   ->writeHeader("Pragma", "no-cache")
+                   ->writeHeader("Content-Type", "multipart/x-mixed-replace; boundary=mjpegstream");
 
                 activeViewers_.push_back({res, 0, false});
 
                 res->onAborted([this, res]() {
-                    std::cerr << "Viewer disconnected from stream";
+                    std::cerr << "Viewer disconnected from stream\n";
 
                     auto it = std::find_if(activeViewers_.begin(), activeViewers_.end(),
                         [res](const Web::ViewerState& v) { return v.res == res; });
