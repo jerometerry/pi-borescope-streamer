@@ -13,8 +13,8 @@
 MjpegStream::MjpegStream(
     std::function<void(std::span<const uint8_t>)> onFrameReady) 
     : onFrameReady_(std::move(onFrameReady)) {
-        frameBuffer_.reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        inputBuffer_.reserve(Units::EIGHT_KILOBYTES);
+        frameBuffer_.reserve(Units::TWO_HUNDRED_FIFTY_SIX_KILOBYTES);
+        inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {

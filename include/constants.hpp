@@ -103,6 +103,11 @@ namespace Units {
     inline constexpr size_t EIGHT_KILOBYTES = 8 * ONE_KILOBYTE;
 
     /**
+     * @brief 
+     */
+    inline constexpr size_t THIRTY_TWO_KILOBYTES = 32 * ONE_KILOBYTE;
+
+    /**
      * @brief The absolute maximum byte size expected for a single incoming JPEG picture.
      */
     inline constexpr size_t FORTY_KILOBYTES = 40 * ONE_KILOBYTE;
