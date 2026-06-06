@@ -99,9 +99,15 @@ void MjpegServer::onTimer(us_timer_t *t) {
                         res->write(std::string_view(headerBuf, result.ptr - headerBuf));
                         
                         res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
-                        res->write(std::string_view(reinterpret_cast<const char*>(
+
+                        bool ok = res->write(std::string_view(reinterpret_cast<const char*>(
                             currentFrame->data().data()), currentFrame->size()
                         ));
+
+                        if (!ok) {
+                            std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "
+                                      << "uWebSockets just executed a user-space malloc to queue this frame.\n";
+                        }
                     });
 
                     size_t postWriteBackpressure = res->getWriteOffset();
