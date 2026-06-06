@@ -9,6 +9,7 @@
 #include <memory>
 #include "buffer_pool.hpp"
 #include "constants.hpp"
+#include "data_structures.hpp"
 #include "shared_frame_buffer.hpp"
 
 TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
