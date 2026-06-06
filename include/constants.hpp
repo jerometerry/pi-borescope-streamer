@@ -87,64 +87,19 @@ namespace UsbProtocol {
 }
 
 namespace Units {
-    /**
-     * @brief The baseline byte count for a standard memory kilobyte.
-     */
     inline constexpr size_t ONE_KILOBYTE = 1024;
-
-    /**
-     * @brief Standard memory bucket size for small network reads (e.g., incoming HTTP text).
-     */
+    inline constexpr size_t TWO_KILOBYTEs = 2 * ONE_KILOBYTE;
     inline constexpr size_t FOUR_KILOBYTES = 4 * ONE_KILOBYTE;
-
-    /**
-     * @brief Standard memory bucket size for intermediate processing buffers.
-     */
     inline constexpr size_t EIGHT_KILOBYTES = 8 * ONE_KILOBYTE;
-
-    /**
-     * @brief 
-     */
+    inline constexpr size_t SIXTEEN_KILOBYTES = 16 * ONE_KILOBYTE;
     inline constexpr size_t THIRTY_TWO_KILOBYTES = 32 * ONE_KILOBYTE;
-
-    /**
-     * @brief The absolute maximum byte size expected for a single incoming JPEG picture.
-     */
-    inline constexpr size_t FORTY_KILOBYTES = 40 * ONE_KILOBYTE;
-
-    /**
-     * @brief Standard memory bucket size for moderate stream processing.
-     */
     inline constexpr size_t SIXTY_FOUR_KILOBYTES = 64 * ONE_KILOBYTE;
-
-    /**
-     * @brief The massive memory bucket size used for the main shared video canvases.
-     */
     inline constexpr size_t ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES = 128 * ONE_KILOBYTE;
-
-    /**
-     * @brief Safe-zone memory allocation size for extracting unchunked raw frames.
-     */
     inline constexpr size_t TWO_HUNDRED_FIFTY_SIX_KILOBYTES = 256 * ONE_KILOBYTE;
-
-    /**
-     * @brief The baseline byte count for a standard memory megabyte.
-     */
     inline constexpr size_t ONE_MEGABYTE   = ONE_KILOBYTE * ONE_KILOBYTE;
-
-    /**
-     * @brief Standard memory size for large disk-write operations.
-     */
     inline constexpr size_t TWO_MEGABYTES  = 2 * ONE_MEGABYTE;
 
-    /**
-     * @brief 
-     */
     inline constexpr int TEN_MILLISECONDS = 10000;
-
-    /**
-     * @brief 
-     */
     inline constexpr int ONE_HUNDRED_MILLISECONDS = 100000;
 }
 
@@ -174,12 +129,12 @@ namespace UsbConfig {
     /**
      * @brief 
      */
-    inline constexpr int USB_TRANSFER_BUFFER_POOL_SIZE = 8;
+    inline constexpr int BULK_TRANSFER_COUNT = 8;
 
     /**
      * @brief 
      */
-    inline constexpr int CHUNK_SIZE = Units::SIXTY_FOUR_KILOBYTES;
+    inline constexpr int BULK_TRANSFER_SIZE = Units::SIXTEEN_KILOBYTES;
 }
 
 namespace WebServerConfig {

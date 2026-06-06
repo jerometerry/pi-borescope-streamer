@@ -47,16 +47,16 @@ private:
         try {
             camera_ = std::make_unique<UsbCamera>(target);
 
-            transferMemory_.resize(UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE * UsbConfig::CHUNK_SIZE);
+            transferMemory_.resize(UsbConfig::BULK_TRANSFER_COUNT * UsbConfig::BULK_TRANSFER_SIZE);
 
-            for (int i = 0; i < UsbConfig::USB_TRANSFER_BUFFER_POOL_SIZE; ++i) {
+            for (int i = 0; i < UsbConfig::BULK_TRANSFER_COUNT; ++i) {
                 libusb_transfer* transfer = libusb_alloc_transfer(0);
                 libusb_fill_bulk_transfer(
                     transfer,
                     camera_->getRawHandle(),
                     1 | LIBUSB_ENDPOINT_IN,
-                    transferMemory_.data() + (i * UsbConfig::CHUNK_SIZE),
-                    UsbConfig::CHUNK_SIZE,
+                    transferMemory_.data() + (i * UsbConfig::BULK_TRANSFER_SIZE),
+                    UsbConfig::BULK_TRANSFER_SIZE,
                     transferCallback,
                     this,
                     UsbConfig::USB_TIMEOUT
@@ -66,8 +66,12 @@ private:
                 transferPool_.push_back(transfer);
             }
 
+            struct timeval activeTimeValue = {0, Units::ONE_HUNDRED_MILLISECONDS};
             while (running_->load(std::memory_order_relaxed)) {
-                int error = libusb_handle_events(camera_->getContext());
+                int error = libusb_handle_events_timeout(
+                    camera_->getContext(), 
+                    &activeTimeValue
+                );
                 if (error != LIBUSB_SUCCESS) {
                     std::cerr << std::format("libusb_handle_events failed. Error: {}\n", error);
                     break;
@@ -78,9 +82,12 @@ private:
                 libusb_cancel_transfer(transfer);
             }
 
-            struct timeval tv = {0, UsbConfig::SHUTDOWN_WAIT_TIMEOUT}; 
+            struct timeval shutdownTimeValue = {0, UsbConfig::SHUTDOWN_WAIT_TIMEOUT}; 
             while (activeTransfers_.load(std::memory_order_acquire) > 0) {
-                libusb_handle_events_timeout_completed(camera_->getContext(), &tv, nullptr);
+                libusb_handle_events_timeout(
+                    camera_->getContext(), 
+                    &shutdownTimeValue
+                );
             }
 
             for (auto* transfer : transferPool_) {
