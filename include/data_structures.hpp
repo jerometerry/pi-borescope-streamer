@@ -326,9 +326,9 @@ namespace USB {
         }
     };
 
-    inline constexpr size_t PacketHeaderSize = sizeof(USB::PacketHeader);
-    inline constexpr size_t PayloadHeaderSize = sizeof(USB::PayloadHeader);
-    inline constexpr size_t TotalHeaderSize = PacketHeaderSize + PayloadHeaderSize;
+    inline constexpr size_t PACKET_HEADER_SIZE = sizeof(USB::PacketHeader);
+    inline constexpr size_t PAYLOAD_HEADER_SIZE = sizeof(USB::PayloadHeader);
+    inline constexpr size_t TOTAL_HEADER_SIZE = PACKET_HEADER_SIZE + PAYLOAD_HEADER_SIZE;
 }
 
 static_assert(

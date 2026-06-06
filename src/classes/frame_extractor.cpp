@@ -152,7 +152,7 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
     int frameCount = 0;
     int lastFrameId = -1;
 
-    while (i + USB::TotalHeaderSize <= fileData.size()) {
+    while (i + USB::TOTAL_HEADER_SIZE <= fileData.size()) {
 
         const USB::PacketHeader* header = 
             reinterpret_cast<const USB::PacketHeader*>(
@@ -192,7 +192,7 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
             continue;
         }
 
-        size_t packetSize = USB::PacketHeaderSize + header->getLength();
+        size_t packetSize = USB::PACKET_HEADER_SIZE + header->getLength();
         if (i + packetSize > fileData.size()) {
             std::cout << "Reached incomplete hardware block at end of file. Stopping.\n";
             break; 
@@ -200,7 +200,7 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
 
         const USB::PayloadHeader* meta = 
             reinterpret_cast<const USB::PayloadHeader*>(
-                &fileData[i + USB::PacketHeaderSize]
+                &fileData[i + USB::PACKET_HEADER_SIZE]
             );
 
         if (lastFrameId != -1 && meta->getFrameId() != lastFrameId) {
@@ -251,8 +251,8 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
         lastFrameId = meta->getFrameId();
 
         if (!meta->hasGravitySensor() && meta->getOtherFlags() == 0 && meta->getCameraNumber() < 2) {
-            size_t payloadStart = i + USB::TotalHeaderSize;
-            size_t payloadSize = packetSize - USB::TotalHeaderSize;
+            size_t payloadStart = i + USB::TOTAL_HEADER_SIZE;
+            size_t payloadSize = packetSize - USB::TOTAL_HEADER_SIZE;
             
             currentFrame.insert(
                 currentFrame.end(), 
