@@ -127,7 +127,9 @@ namespace UsbConfig {
     inline constexpr unsigned int SHUTDOWN_WAIT_TIMEOUT = 50;
 
     inline constexpr size_t BULK_TRANSFER_COUNT = 4;
-    inline constexpr size_t BULK_TRANSFER_SIZE = Units::SIXTY_FOUR_KILOBYTES;
+
+    inline constexpr size_t BULK_TRANSFER_SIZE = Units::SIXTEEN_KILOBYTES;
+
     inline constexpr size_t DMA_BUFFER_SIZE = BULK_TRANSFER_COUNT * BULK_TRANSFER_SIZE;
 }
 

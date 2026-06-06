@@ -116,10 +116,6 @@ int main(int argc, const char* argv[]) {
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
         SharedFrameBuffer frameBuffer;
-        MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
-            return frameBuffer.getLatestFrame(id);
-        });
-
         auto bufferPool = BufferPool::create();
         MjpegStream mjpegStream(bufferPool, [&frameBuffer](const Mjpeg::Frame& frame) {
             frameBuffer.push(frame);
@@ -134,8 +130,11 @@ int main(int argc, const char* argv[]) {
             }
             return status != USB::TransferStatus::Disconnected; 
         };
-
         LibusbAsyncDriver<decltype(usbRouter)> usbDriver(usbRouter, &globalRunning);
+
+        MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
+            return frameBuffer.getLatestFrame(id);
+        });
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 
