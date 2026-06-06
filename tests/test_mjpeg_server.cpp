@@ -16,6 +16,7 @@
 #include <thread>
 #include <vector>
 #include "buffer_pool.hpp"
+#include "data_structures.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_buffer.hpp"
 
@@ -57,7 +58,13 @@ protected:
         server_.reset(); 
     }
 
-    void injectMockVideoFrame(const std::vector<uint8_t>& frame) {
+    void injectMockVideoFrame(const std::vector<uint8_t>& data) {
+        auto frame = bufferPool_->acquire();
+        frame->insert(data);
+        frameBuffer_->push(frame);
+    }
+
+    void injectMockVideoFrame(const USB::FramePtr& frame) {
         frameBuffer_->push(frame);
     }
 

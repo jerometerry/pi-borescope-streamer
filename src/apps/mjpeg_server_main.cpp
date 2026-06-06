@@ -122,7 +122,7 @@ int main(int argc, const char* argv[]) {
             return frameBuffer.getLatestFrame(id);
         });
 
-        MjpegStream mjpegStream([&frameBuffer](std::span<const uint8_t> frame) {
+        MjpegStream mjpegStream(bufferPool, [&frameBuffer](USB::FramePtr frame) {
             frameBuffer.push(frame);
         });
 

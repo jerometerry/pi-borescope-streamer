@@ -51,12 +51,20 @@ namespace USB {
             return data_.empty();
         }
 
+        uint8_t front() const {
+            return data_.front();
+        }
+
         size_t size() const {
             return data_.size();
         }
 
         std::vector<uint8_t>& data() {
             return data_;
+        }
+
+        void insert(const std::vector<uint8_t>& data) {
+            data_.insert(data_.begin(), data.begin(), data.end());
         }
     };
 

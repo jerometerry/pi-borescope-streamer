@@ -67,7 +67,7 @@ int main(int argc, const char* argv[]) {
     auto bufferPool = BufferPool::create();
     SharedFrameBuffer frameBuffer(bufferPool);
 
-    MjpegStream mjpegStream([&frameBuffer](std::span<const uint8_t> frame) {
+    MjpegStream mjpegStream(bufferPool, [&frameBuffer](USB::FramePtr frame) {
         frameBuffer.push(frame);
     });
 

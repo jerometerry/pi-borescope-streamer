@@ -8,25 +8,29 @@
 #include <span>
 #include <string>
 #include <vector>
+#include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "data_structures.hpp"
 #include "mjpeg_stream.hpp"
 
 class MockHandlers {
 public:
-    MOCK_METHOD(void, output, (const std::span<const uint8_t> output));
+    MOCK_METHOD(void, output, (USB::FramePtr frame));
 };
 
 class MjpegStreamTest : public ::testing::Test {
 private:
+    std::shared_ptr<BufferPool> bufferPool_;
     MockHandlers handler_;
     std::unique_ptr<MjpegStream> stream_;
 
 protected:
     void SetUp() override {
+        bufferPool_ = BufferPool::create();
         stream_ = std::make_unique<MjpegStream>(
-            [this](std::span<const uint8_t> data) { 
-                handler_.output(data); 
+            bufferPool_,
+            [this](USB::FramePtr frame) { 
+                handler_.output(std::move(frame)); 
             }
         );
     }
@@ -44,6 +48,39 @@ protected:
     MockHandlers& GetOutputHandler() { return handler_; }
     MjpegStream& GetStream() { return *stream_; }
 };
+
+// NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members)
+MATCHER_P(FrameDataEq, expectedOutput, "FramePtr internal data matches expected output") {
+    if (!arg) {
+        *result_listener << "which is a null FramePtr";
+        return false;
+    }
+
+    return ::testing::ExplainMatchResult(
+        ::testing::ElementsAreArray(expectedOutput), 
+        arg->data(), 
+        result_listener
+    );
+}
+
+MATCHER_P(FrameStartsWith, expectedFront, "FramePtr internal data starts with expected byte") {
+    if (!arg) {
+        *result_listener << "which is a null FramePtr";
+        return false;
+    }
+
+    if (arg->empty()) {
+        *result_listener << "which points to an empty payload buffer";
+        return false;
+    }
+
+    return ::testing::ExplainMatchResult(
+        ::testing::Eq(expectedFront), 
+        arg->data().front(), 
+        result_listener
+    );
+}
+// NOLINTEND(cppcoreguidelines-avoid-const-or-ref-data-members)
 
 TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     std::vector<uint8_t> packet(1024, 0xDD); 
@@ -76,7 +113,8 @@ TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
         packet.begin() + USB::PACKET_HEADER_SIZE + USB::PAYLOAD_HEADER_SIZE,
         packet.begin() + USB::PACKET_HEADER_SIZE + packetHeader->getLength()
     );
-    EXPECT_CALL(GetOutputHandler(), output(::testing::ElementsAreArray(expectedOutput))).Times(1);
+
+    EXPECT_CALL(GetOutputHandler(), output(FrameDataEq(expectedOutput))).Times(1);
 
     GetStream().send(packet);
     GetStream().send(triggerPacket);
@@ -114,7 +152,8 @@ TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
         packet.begin() + USB::TOTAL_HEADER_SIZE,
         packet.end()
     );
-    EXPECT_CALL(GetOutputHandler(), output(::testing::ElementsAreArray(expectedOutput))).Times(1);
+
+    EXPECT_CALL(GetOutputHandler(), output(FrameDataEq(expectedOutput))).Times(1);
 
     GetStream().send(packet);
     GetStream().send(shortPacket);
@@ -195,7 +234,7 @@ TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
         UsbProtocol::USB_FRAME_HEADER_B
     });
 
-    EXPECT_CALL(GetOutputHandler(), output(::testing::ElementsAreArray(expectedOutput))).Times(1);
+    EXPECT_CALL(GetOutputHandler(), output(FrameDataEq(expectedOutput))).Times(1);
 
     GetStream().send(packet1buffer);
     GetStream().send(packet2);
@@ -264,14 +303,8 @@ TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
 
     EXPECT_CALL(
         GetOutputHandler(), 
-        output(::testing::Not(::testing::IsEmpty()))
-    )
-    .WillOnce(
-        ::testing::Invoke([](std::span<const uint8_t> frameBuffer) {
-            ASSERT_FALSE(frameBuffer.empty());
-            EXPECT_EQ(frameBuffer.front(), UsbProtocol::BOUNDARY_MARKER);
-        }
-    ));
+        output(FrameStartsWith(UsbProtocol::BOUNDARY_MARKER))
+    ).Times(1);
 
     GetStream().send(packet1);
     GetStream().send(packet2);
@@ -371,7 +404,8 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
 }
 
 TEST(UsbFrameDecoderEdgeTest, HandlesNullCallbacksSafely) {
-    MjpegStream silentDecoder(nullptr);
+    std::shared_ptr<BufferPool> pool = BufferPool::create();
+    MjpegStream silentDecoder(pool, nullptr);
     std::vector<uint8_t> packet(100, 0x00);
     ASSERT_NO_THROW(silentDecoder.send(packet));
 }

@@ -12,6 +12,12 @@
 #include "data_structures.hpp"
 #include "shared_frame_buffer.hpp"
 
+static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
+    USB::FramePtr frame = bp->acquire();
+    frame->insert(data);
+    sfb.push(frame);
+};
+
 TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
     auto bufferPool = BufferPool::create();
     SharedFrameBuffer frameBuffer(bufferPool);
@@ -56,8 +62,7 @@ TEST(SharedFrameBufferTest, frameBuffer) {
     SharedFrameBuffer frameBuffer(bufferPool);
 
     std::vector<uint8_t> frame = { 0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9 };
-
-    frameBuffer.push(frame);
+    pushFrame(frameBuffer, bufferPool, frame);
 
     uint32_t currentId = 0;
     auto currentFrame = frameBuffer.getLatestFrame(currentId);
@@ -72,15 +77,15 @@ TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
     auto bufferPool = BufferPool::create();
     SharedFrameBuffer frameBuffer(bufferPool);
 
-    std::vector<uint8_t> frame = { 0x01, 0x02, 0x03 };
-    frameBuffer.push(frame);
+    std::vector<uint8_t> frameData = { 0x01, 0x02, 0x03 };
+    pushFrame(frameBuffer, bufferPool, frameData);
     
     uint32_t initialId = 0;
     auto initialFrame = frameBuffer.getLatestFrame(initialId);
     EXPECT_EQ(initialId, 1);
 
     std::vector<uint8_t> emptyFrame = {};
-    frameBuffer.push(emptyFrame);
+    pushFrame(frameBuffer, bufferPool, emptyFrame);    
     
     uint32_t nextId = 0;
     auto nextFrame = frameBuffer.getLatestFrame(nextId);
@@ -105,7 +110,7 @@ TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
         std::vector<uint8_t> frame = { 0xAA, 0xBB, 0xCC };
         
         while (framesProduced.load(std::memory_order_relaxed) < TARGET_FRAMES) {
-            frameBuffer.push(frame);
+            pushFrame(frameBuffer, bufferPool, frame);
             framesProduced.fetch_add(1, std::memory_order_relaxed);
 
             std::this_thread::yield(); 
@@ -168,7 +173,7 @@ TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
     constexpr int SPIKE_SIZE = 10;
 
     for (int i = 0; i < SPIKE_SIZE; ++i) {
-        frameBuffer.push(dummyFrame);
+        pushFrame(frameBuffer, bufferPool, dummyFrame);
         uint32_t id = 0;
         slowConsumers.push_back(frameBuffer.getLatestFrame(id));
     }

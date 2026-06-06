@@ -12,21 +12,18 @@ SharedFrameBuffer::SharedFrameBuffer(std::shared_ptr<BufferPool> bufferPool) :
     bufferPool_(std::move(bufferPool)) {
 }
 
-void SharedFrameBuffer::push(std::span<const uint8_t> frame) {
-    if (frame.empty()) { 
+void SharedFrameBuffer::push(USB::FramePtr frame) {
+    if (!frame || frame->empty()) { 
         return;
     }
-
-    auto buffer = bufferPool_->acquire();
-
-    buffer->data().assign(frame.begin(), frame.end());
 
     USB::FramePtr previousFrame;
     {
         std::scoped_lock lock(activeMutex_);
         frameId_++;
         previousFrame = std::move(frame_);
-        frame_ = std::move(buffer);
+ 
+        frame_ = std::move(frame);
     }
 }
 

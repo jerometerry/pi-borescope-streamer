@@ -6,23 +6,22 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "data_structures.hpp"
 #include "mjpeg_stream.hpp"
 
 MjpegStream::MjpegStream(
-    std::function<void(std::span<const uint8_t>)> onFrameReady) 
-    : onFrameReady_(std::move(onFrameReady)) {
-        frameBuffer_.reserve(Units::TWO_HUNDRED_FIFTY_SIX_KILOBYTES);
+    std::shared_ptr<BufferPool> bufferPool, 
+    std::function<void(USB::FramePtr)> onFrameReady)
+    : bufferPool_(std::move(bufferPool)), 
+      onFrameReady_(std::move(onFrameReady)) {
         inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
+        activeFrame_ = bufferPool_->acquire();
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {
-    inputBuffer_.insert(
-        inputBuffer_.end(), 
-        data.begin(), 
-        data.end()
-    );
+    inputBuffer_.insert(inputBuffer_.end(), data.begin(), data.end());
 
     size_t i = readOffset_;
 
@@ -37,20 +36,20 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             continue;
         }
 
-        // Verify if a ghost header lives down the pipe *before* checking data boundaries
         bool isGhost = false;
         size_t nextHeaderOffset = 0;
-
         size_t maxScan = std::min<size_t>(
-            UsbProtocol::MAX_SCAN_LIMIT, 
+            UsbProtocol::MAX_SCAN_LIMIT,
             inputBuffer_.size() - i - 3
         );
 
         for (size_t d = USB::PACKET_HEADER_SIZE; d <= maxScan; ++d) {
             if (inputBuffer_[i+d] == UsbProtocol::USB_FRAME_HEADER_A && 
-                inputBuffer_[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && 
-                (inputBuffer_[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
-                    inputBuffer_[i+d+2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
+                inputBuffer_[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && (
+                    inputBuffer_[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
+                    inputBuffer_[i+d+2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID
+                )
+            ) {
                 isGhost = true;
                 nextHeaderOffset = d;
                 break;
@@ -64,7 +63,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
 
         size_t totalPacketSize = USB::PACKET_HEADER_SIZE + packetHeader.getLength();
 
-        if (i + totalPacketSize > inputBuffer_.size()) {
+        if (i + totalPacketSize > inputBuffer_.size()) { 
             break;
         }
 
@@ -75,14 +74,15 @@ void MjpegStream::send(std::span<const uint8_t> data) {
 
         USB::PayloadHeader payloadHeader{};
         std::memcpy(
-            &payloadHeader, 
-            &inputBuffer_[i + USB::PACKET_HEADER_SIZE], 
-            USB::PAYLOAD_HEADER_SIZE
+            &payloadHeader,
+            &inputBuffer_[i + USB::PACKET_HEADER_SIZE],
+             USB::PAYLOAD_HEADER_SIZE
         );
 
-        if (!frameBuffer_.empty() && payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
+        if (activeFrame_ && !activeFrame_->empty() && payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
             outputFrame();
         }
+        
         payloadHeader_ = payloadHeader;
 
         if (!payloadHeader.hasGravitySensor() && 
@@ -90,9 +90,13 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             payloadHeader.getCameraNumber() < 2) {
             size_t payloadStart = i + USB::TOTAL_HEADER_SIZE;
             size_t payloadSize = totalPacketSize - USB::TOTAL_HEADER_SIZE;
-            
-            frameBuffer_.insert(
-                frameBuffer_.end(), 
+
+            if (!activeFrame_) {
+                activeFrame_ = bufferPool_->acquire();
+            }
+
+            activeFrame_->data().insert(
+                activeFrame_->data().end(), 
                 inputBuffer_.begin() + payloadStart, 
                 inputBuffer_.begin() + payloadStart + payloadSize
             );
@@ -113,37 +117,45 @@ void MjpegStream::send(std::span<const uint8_t> data) {
 }
 
 void MjpegStream::outputFrame() {
-    if (frameBuffer_.empty()) {
+    if (!activeFrame_ || activeFrame_->empty()) {
         return;
     }
 
+    auto& buffer = activeFrame_->data();
     size_t soiOffset = std::string::npos;
     size_t eoiOffset = std::string::npos;
 
     // Scan forward for Start of Image (FF D8)
-    size_t maxSoiPosition = std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, frameBuffer_.size());
+    size_t maxSoiPosition = std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, buffer.size());
     for (size_t j = 0; j + 1 < maxSoiPosition; ++j) {
-        if (frameBuffer_[j] == UsbProtocol::BOUNDARY_MARKER && frameBuffer_[j+1] == UsbProtocol::START_MARKER) {
+        if (buffer[j] == UsbProtocol::BOUNDARY_MARKER && buffer[j+1] == UsbProtocol::START_MARKER) {
             soiOffset = j;
             break;
         }
     }
 
     // Scan backwards for End of Image (FF D9)
-    for (size_t j = frameBuffer_.size(); j >= 2; --j) {
-        if (frameBuffer_[j - 2] == UsbProtocol::BOUNDARY_MARKER && frameBuffer_[j - 1] == UsbProtocol::END_MARKER) {
+    for (size_t j = buffer.size(); j >= 2; --j) {
+        if (buffer[j - 2] == UsbProtocol::BOUNDARY_MARKER && buffer[j - 1] == UsbProtocol::END_MARKER) {
             eoiOffset = j;
             break;
         }
     }
 
     if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
+        if (soiOffset > 0) {
+            buffer.erase(buffer.begin(), buffer.begin() + soiOffset);
+            eoiOffset -= soiOffset; 
+        }
+
+        if (eoiOffset + 2 < buffer.size()) {
+            buffer.erase(buffer.begin() + eoiOffset + 2, buffer.end());
+        }
+
         if (onFrameReady_) {
-            onFrameReady_(std::span<const uint8_t>(
-                frameBuffer_.data() + soiOffset, 
-                eoiOffset - soiOffset
-            ));
+            onFrameReady_(std::move(activeFrame_));
         }
     }
-    frameBuffer_.clear();
+
+    activeFrame_ = bufferPool_->acquire();
 }

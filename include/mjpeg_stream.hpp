@@ -7,6 +7,8 @@
 #include <vector>
 #include "data_structures.hpp"
 
+class BufferPool;
+
 /**
  * @brief The translator that extracts and reassembles clean MJPEG video pictures from the hardware stream.
  * @details The physical camera does not send nice, neat video files. It chops the MJPEG video 
@@ -24,10 +26,14 @@ class MjpegStream {
 public:
     /**
      * @brief Construct the decoder and wire up its output destinations.
+     * @param bufferPool description
      * @param onFrameReady The function we call to hand off a finished, clean JPEG picture. 
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
      */
-    explicit MjpegStream(std::function<void(std::span<const uint8_t>)> onFrameReady);
+    explicit MjpegStream(
+        std::shared_ptr<BufferPool> bufferPool,
+        std::function<void(USB::FramePtr)> onFrameReady
+    );
 
     ~MjpegStream() = default;
 
@@ -41,6 +47,8 @@ public:
     void send(std::span<const uint8_t> data);
 
 private:
+    std::shared_ptr<BufferPool> bufferPool_;
+
     /**
      * @brief The waiting room for raw bytes that haven't been sorted yet.
      */
@@ -49,7 +57,7 @@ private:
     /**
      * @brief The workbench where we are currently stitching the chunks into a picture.
      */
-    std::vector<uint8_t> frameBuffer_;
+    USB::FramePtr activeFrame_;
 
     /**
      * @brief The memory of what the current picture is supposed to look like.
@@ -69,7 +77,7 @@ private:
     /**
      * @brief Where to send finished video pictures.
      */
-    std::function<void(std::span<const uint8_t>)> onFrameReady_;
+    std::function<void(USB::FramePtr)> onFrameReady_;
 
     /**
      * @brief Snip out the exact picture and send it off.
