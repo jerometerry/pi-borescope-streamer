@@ -28,7 +28,7 @@ public:
      * @param onFrameReady The function we call to hand off a finished, clean JPEG picture. 
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
      */
-    explicit MjpegStream(std::function<void(const std::vector<uint8_t>&)> onFrameReady);
+    explicit MjpegStream(std::function<void(std::span<const uint8_t>)> onFrameReady);
 
     ~MjpegStream() = default;
 
@@ -53,11 +53,6 @@ private:
     std::vector<uint8_t> frameBuffer_;
 
     /**
-     * @brief The staging area for a finished picture right before it gets broadcasted.
-     */
-    std::vector<uint8_t> outputBuffer_;
-
-    /**
      * @brief The memory of what the current picture is supposed to look like.
      * @details Keeps track of things like the current frame ID and which lens the 
      * data is coming from, so we don't accidentally stitch chunks from two different 
@@ -75,7 +70,7 @@ private:
     /**
      * @brief Where to send finished video pictures.
      */
-    std::function<void(const std::vector<uint8_t>&)> onFrameReady_;
+    std::function<void(std::span<const uint8_t>)> onFrameReady_;
 
     /**
      * @brief Snip out the exact picture and send it off.

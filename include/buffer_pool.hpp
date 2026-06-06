@@ -7,8 +7,12 @@
 #include <vector>
 
 class BufferPool : public std::enable_shared_from_this<BufferPool> {
+private:
+    struct PrivateConstructTag {};
+
 public:
-    BufferPool() = default;
+    explicit BufferPool(PrivateConstructTag) {}
+    
     static std::shared_ptr<BufferPool> create();
     
     std::shared_ptr<std::vector<uint8_t>> acquire();

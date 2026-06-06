@@ -8,7 +8,7 @@
 #include "constants.hpp"
 
 std::shared_ptr<BufferPool> BufferPool::create() {
-    auto instance = std::make_shared<BufferPool>();
+    auto instance = std::make_shared<BufferPool>(PrivateConstructTag{});
     instance->initialize();
     return instance;
 }
@@ -43,6 +43,10 @@ std::shared_ptr<std::vector<uint8_t>> BufferPool::acquire() {
 }
 
 void BufferPool::release(std::unique_ptr<std::vector<uint8_t>> buffer) {
+    if (!buffer) return;
+
+    buffer->clear(); 
+
     std::scoped_lock lock(poolMutex_);
     if (pool_.size() < SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE) {
         pool_.push_back(std::move(buffer));
@@ -50,6 +54,8 @@ void BufferPool::release(std::unique_ptr<std::vector<uint8_t>> buffer) {
 }
 
 void BufferPool::initialize() {
+    pool_.reserve(SharedFrameBufferConfig::MAX_SHARED_FRAME_POOL_SIZE);
+    
     for (int i = 0; i < SharedFrameBufferConfig::INITIAL_SHARED_FRAME_POOL_SIZE; ++i) {
         auto buffer = std::make_unique<std::vector<uint8_t>>();
         buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);

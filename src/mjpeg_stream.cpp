@@ -9,11 +9,10 @@
 #include "mjpeg_stream.hpp"
 
 MjpegStream::MjpegStream(
-    std::function<void(const std::vector<uint8_t>&)> onFrameReady) 
+    std::function<void(std::span<const uint8_t>)> onFrameReady) 
     : onFrameReady_(std::move(onFrameReady)) {
         frameBuffer_.reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         inputBuffer_.reserve(Units::EIGHT_KILOBYTES);
-        outputBuffer_.reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {
@@ -66,6 +65,11 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         if (i + totalPacketSize > inputBuffer_.size()) {
             break;
         }
+
+        // if (packetHeader.getLength() < USB::PayloadHeaderSize) {
+        //     i++;
+        //     continue;
+        // }
 
         USB::PayloadHeader payloadHeader{};
         std::memcpy(
@@ -131,25 +135,13 @@ void MjpegStream::outputFrame() {
         }
     }
 
-    // If we have valid boundaries, slice the pure JPEG and fire it off
     if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
-        size_t frameSize = eoiOffset - soiOffset;
-        outputBuffer_.clear();
-
-        if (outputBuffer_.capacity() < frameSize) {
-            outputBuffer_.reserve(frameSize); 
-        }
-
-        outputBuffer_.insert(
-            outputBuffer_.end(), 
-            frameBuffer_.begin() + soiOffset, 
-            frameBuffer_.begin() + eoiOffset
-        );
-
         if (onFrameReady_) {
-            onFrameReady_(outputBuffer_);
+            onFrameReady_(std::span<const uint8_t>(
+                frameBuffer_.data() + soiOffset, 
+                eoiOffset - soiOffset
+            ));
         }
     }
-    
     frameBuffer_.clear();
 }

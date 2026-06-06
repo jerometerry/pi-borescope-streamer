@@ -15,7 +15,7 @@
 
 class MockHandlers {
 public:
-    MOCK_METHOD(void, output, (const std::vector<uint8_t>& output));
+    MOCK_METHOD(void, output, (const std::span<const uint8_t> output));
 };
 
 class MjpegStreamTest : public ::testing::Test {
@@ -26,7 +26,7 @@ private:
 protected:
     void SetUp() override {
         stream_ = std::make_unique<MjpegStream>(
-            [this](const std::vector<uint8_t>& data) { 
+            [this](std::span<const uint8_t> data) { 
                 handler_.output(data); 
             }
         );
@@ -77,7 +77,7 @@ TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
         packet.begin() + USB::PacketHeaderSize + USB::PayloadHeaderSize,
         packet.begin() + USB::PacketHeaderSize + packetHeader->getLength()
     );
-    EXPECT_CALL(GetOutputHandler(), output(expectedOutput)).Times(1);
+    EXPECT_CALL(GetOutputHandler(), output(::testing::ElementsAreArray(expectedOutput))).Times(1);
 
     GetStream().send(packet);
     GetStream().send(triggerPacket);
@@ -115,7 +115,7 @@ TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
         packet.begin() + USB::TotalHeaderSize,
         packet.end()
     );
-    EXPECT_CALL(GetOutputHandler(), output(expectedOutput)).Times(1);
+    EXPECT_CALL(GetOutputHandler(), output(::testing::ElementsAreArray(expectedOutput))).Times(1);
 
     GetStream().send(packet);
     GetStream().send(shortPacket);
@@ -196,7 +196,7 @@ TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
         UsbProtocol::USB_FRAME_HEADER_B
     });
 
-    EXPECT_CALL(GetOutputHandler(), output(expectedOutput)).Times(1);
+    EXPECT_CALL(GetOutputHandler(), output(::testing::ElementsAreArray(expectedOutput))).Times(1);
 
     GetStream().send(packet1buffer);
     GetStream().send(packet2);
@@ -265,17 +265,10 @@ TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
 
     EXPECT_CALL(
         GetOutputHandler(), 
-        output(
-            ::testing::Property(
-                &std::vector<uint8_t>::empty, 
-                false
-            )
-        )
+        output(::testing::Not(::testing::IsEmpty()))
     )
     .WillOnce(
-        ::testing::Invoke([](
-            const std::vector<uint8_t>& frameBuffer
-        ) {
+        ::testing::Invoke([](std::span<const uint8_t> frameBuffer) {
             ASSERT_FALSE(frameBuffer.empty());
             EXPECT_EQ(frameBuffer.front(), UsbProtocol::BOUNDARY_MARKER);
         }
@@ -382,4 +375,20 @@ TEST(UsbFrameDecoderEdgeTest, HandlesNullCallbacksSafely) {
     MjpegStream silentDecoder(nullptr);
     std::vector<uint8_t> packet(100, 0x00);
     ASSERT_NO_THROW(silentDecoder.send(packet));
+}
+
+TEST_F(MjpegStreamTest, PreventsIntegerUnderflowOnUndersizedHardwareLength) {
+    std::vector<uint8_t> malformedPacket(USB::TotalHeaderSize, 0x00);
+    
+    auto* packetHeader = getPacketHeader(malformedPacket);
+    packetHeader->setHeader(UsbProtocol::USB_FRAME_HEADER);
+    packetHeader->setCameraId(UsbProtocol::VIDEO_CAMERA_ID);
+
+    packetHeader->setLength(2);
+
+    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
+
+    ASSERT_NO_THROW({
+        GetStream().send(malformedPacket);
+    });
 }

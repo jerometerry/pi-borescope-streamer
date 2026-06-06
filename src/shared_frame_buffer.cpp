@@ -7,7 +7,8 @@
 #include "buffer_pool.hpp"
 #include "shared_frame_buffer.hpp"
 
-SharedFrameBuffer::SharedFrameBuffer(std::shared_ptr<BufferPool>& bufferPool) : bufferPool_(bufferPool) {
+SharedFrameBuffer::SharedFrameBuffer(std::shared_ptr<BufferPool> bufferPool) : 
+    bufferPool_(std::move(bufferPool)) {
 }
 
 void SharedFrameBuffer::push(std::span<const uint8_t> frame) {
