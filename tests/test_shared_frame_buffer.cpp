@@ -1,3 +1,4 @@
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <atomic>
 #include <cstddef>
@@ -65,9 +66,16 @@ TEST(SharedFrameBufferTest, frameBuffer) {
     auto currentFrame = frameBuffer.getLatestFrame(currentId);
 
     EXPECT_EQ(currentId, 1);
-    ASSERT_NE(currentFrame->data().data(), nullptr);
+    ASSERT_NE(currentFrame->view().data(), nullptr);
+
     EXPECT_EQ(currentFrame->size(), frame.size());
-    EXPECT_EQ(currentFrame->data(), frame);
+
+    auto frameView = std::span<uint8_t>(frame.data(), frame.size());
+
+    EXPECT_THAT(
+        currentFrame->view(), 
+        ::testing::ElementsAreArray(frameView.begin(), frameView.end())
+    ) << "Active frame pointer should remain unchanged.";
 }
 
 TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
@@ -88,9 +96,13 @@ TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
     auto nextFrame = frameBuffer.getLatestFrame(nextId);
     
     EXPECT_EQ(initialId, nextId) << "Frame ID should not increment for empty frames.";
-    EXPECT_EQ(
-        initialFrame.get()->data(), 
-        nextFrame.get()->data()
+
+    std::span<const uint8_t> initialPayload = initialFrame->view();
+    std::span<const uint8_t> nextPayload = nextFrame->view();
+
+    EXPECT_THAT(
+        initialPayload, 
+        ::testing::ElementsAreArray(nextPayload.begin(), nextPayload.end())
     ) << "Active frame pointer should remain unchanged.";
 }
 

@@ -100,8 +100,10 @@ void MjpegServer::onTimer(us_timer_t *t) {
                         
                         res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
 
-                        bool ok = res->write(std::string_view(reinterpret_cast<const char*>(
-                            currentFrame->data().data()), currentFrame->size()
+                        auto frameView = currentFrame->view();
+                        bool ok = res->write(std::string_view(
+                            reinterpret_cast<const char*>(frameView.data()), 
+                            frameView.size()
                         ));
 
                         if (!ok) {

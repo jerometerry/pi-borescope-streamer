@@ -97,11 +97,11 @@ void MjpegStream::send(std::span<const uint8_t> data) {
                 activeFrame_ = bufferPool_->acquire();
             }
 
-            activeFrame_->data().insert(
-                activeFrame_->data().end(), 
-                inputBuffer_.begin() + payloadStart, 
-                inputBuffer_.begin() + payloadStart + payloadSize
+            std::span<const uint8_t> toInsert(
+                inputBuffer_.data() + payloadStart, 
+                payloadSize
             );
+            activeFrame_->insert(toInsert);
         }
 
         i += totalPacketSize;
@@ -123,7 +123,7 @@ void MjpegStream::outputFrame() {
         return;
     }
 
-    auto& buffer = activeFrame_->data();
+    auto buffer = activeFrame_->view();
     size_t soiOffset = std::string::npos;
     size_t eoiOffset = std::string::npos;
 
@@ -145,14 +145,10 @@ void MjpegStream::outputFrame() {
     }
 
     if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
-        if (soiOffset > 0) {
-            buffer.erase(buffer.begin(), buffer.begin() + soiOffset);
-            eoiOffset -= soiOffset; 
-        }
+        size_t startTrim = soiOffset;
+        size_t endTrim = eoiOffset;
 
-        if (eoiOffset + 2 < buffer.size()) {
-            buffer.erase(buffer.begin() + eoiOffset + 2, buffer.end());
-        }
+        activeFrame_->trim(startTrim, endTrim);
 
         if (onFrameReady_) {
             onFrameReady_(std::move(activeFrame_));

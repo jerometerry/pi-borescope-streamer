@@ -17,7 +17,7 @@ public:
     
     Mjpeg::Frame acquire();
 
-    void returnToPool(Mjpeg::Buffer* frame);
+    void returnToPool(Mjpeg::Buffer* buffer);
     
     size_t getFreeBuffers() const;
 

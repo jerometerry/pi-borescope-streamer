@@ -60,7 +60,7 @@ MATCHER_P(FrameDataEq, expectedOutput, "Frame internal data matches expected out
 
     return ::testing::ExplainMatchResult(
         ::testing::ElementsAreArray(expectedOutput), 
-        arg->data(), 
+        arg->view(), 
         result_listener
     );
 }
@@ -78,7 +78,7 @@ MATCHER_P(FrameStartsWith, expectedFront, "Frame internal data starts with expec
 
     return ::testing::ExplainMatchResult(
         ::testing::Eq(expectedFront), 
-        arg->data().front(), 
+        arg->front(), 
         result_listener
     );
 }

@@ -30,9 +30,9 @@ Mjpeg::Frame BufferPool::acquire() {
 
     if (!buffer) {
         buffer = std::make_unique<Mjpeg::Buffer>();
-        buffer->data().reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        buffer->poolContext = this;
-        buffer->returnCallback = recycleFrameBridge;
+        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        buffer->setPoolContext(this);
+        buffer->setReturnCallback(recycleFrameBridge);
     }
 
     return Mjpeg::Frame(buffer.release());
@@ -49,10 +49,10 @@ void BufferPool::initialize() {
     for (int i = 0; i < BufferPoolConfig::INITIAL_POOL_SIZE; ++i) {
 
         auto buffer = std::make_unique<Mjpeg::Buffer>();
-        buffer->data().reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
-        buffer->poolContext = this;
-        buffer->returnCallback = recycleFrameBridge;
+        buffer->setPoolContext(this);
+        buffer->setReturnCallback(recycleFrameBridge);
 
         pool_.push_back(std::move(buffer));
     }
