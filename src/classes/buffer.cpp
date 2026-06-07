@@ -106,10 +106,6 @@ std::span<const uint8_t> Buffer::getPaddingSlice() const {
 	return { data_.data(), paddingSize() };
 }
 
-std::span<const uint8_t> Buffer::getPrefixSlice() const {
-	return getPaddingSlice();
-}
-
 std::span<const uint8_t> Buffer::all() const {
 	return { data_.data(), data_.size() };
 }
@@ -120,10 +116,6 @@ std::span<uint8_t> Buffer::getMutableContentSlice() {
 
 std::span<uint8_t> Buffer::getMutablePaddingSlice() {
 	return { data_.data(), paddingSize() };
-}
-
-std::span<uint8_t> Buffer::getMutablePrefixSlice() {
-	return getMutablePaddingSlice();
 }
 
 void Buffer::ensurePaddingReserved() {

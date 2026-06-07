@@ -39,7 +39,11 @@ std::string_view MjpegServer::buildMjpegResponse(Buffer* frame) {
 
     // buffer has 128 bytes reserved for zero-byte allocations
     // startPtr is offset 128 bytes from the start of the allocated buffer
-    char* startPtr = reinterpret_cast<char*>(frame->getMutableContentSlice().data());
+
+    auto padding = frame->getMutablePaddingSlice().data();
+    char* paddingStartPtr = reinterpret_cast<char*>(padding);
+    char* paddingEndPtr = paddingStartPtr + frame->paddingSize();
+    char* startPtr = paddingEndPtr;
     char* cursor = startPtr;
     
     constexpr char newLines[4] = {'\r', '\n', '\r', '\n'};

@@ -66,7 +66,11 @@ void BufferPool::returnToPool(Buffer* buffer) {
     if (pool_.size() < maxPoolSize_) {
         pool_.push_back(std::unique_ptr<Buffer>(buffer));
     } else {
+        // Delay destruction of the previous Buffer until after poolMutex_ lock is released. 
+        // Prevents a potential deadlock, if this is the only remaining reference.
         std::unique_ptr<Buffer> toDelete(buffer);
+        // Suppress cppcheck unusedVariable warning
+        (void)toDelete;
     }
 }
 

@@ -40,8 +40,6 @@ public:
 
     size_t paddingSize() const;
 
-    size_t prefixSize() const;
-
     size_t totalSize() const;
 
     size_t totalCapacity() const;
@@ -50,15 +48,11 @@ public:
 
     std::span<const uint8_t> getPaddingSlice() const;
 
-    std::span<const uint8_t> getPrefixSlice() const;
-
     std::span<const uint8_t> all() const;
 
     std::span<uint8_t> getMutableContentSlice();
 
     std::span<uint8_t> getMutablePaddingSlice();
-
-    std::span<uint8_t> getMutablePrefixSlice();
 
 private:
     void ensurePaddingReserved();

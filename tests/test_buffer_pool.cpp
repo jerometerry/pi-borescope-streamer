@@ -75,13 +75,13 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
     constexpr std::string_view mjpegHeader = "--mjpegstream\r\nContent-Type: image/jpeg\r\n";
 
     // Get span<uinit_8> that covers the 128 byte reserved memory inside the buffer
-    auto prefix = buffer->getMutablePrefixSlice();
+    auto padding = buffer->getMutablePaddingSlice();
 
-    // Initialize the entire prefix memory with all zeros
-    std::ranges::fill(prefix, 0);
+    // Initialize the entire padding memory with all zeros
+    std::ranges::fill(padding, 0);
 
     // Convert the span into a raw pointer
-    char* ptr = reinterpret_cast<char*>(prefix.data());
+    char* ptr = reinterpret_cast<char*>(padding.data());
 
     // Keep a separate cursor for remembering our position
     char* cursor = ptr;
@@ -105,7 +105,7 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
     // Initialize content with the same 128 bytes of 0xFF as we did for the Buffer
     std::vector<uint8_t> contentData(128, 0xFF);
 
-    // For the expected data by concatenating the 128 byte header with the 128 byte content
+    // For the expected data by concatenating the 128 byte padding with the 128 byte content
     std::vector<uint8_t> expectedData;
     expectedData.insert(expectedData.end(), headerData.begin(), headerData.end());
     expectedData.insert(expectedData.end(), contentData.begin(), contentData.end());
@@ -125,7 +125,11 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
 // -------------------------------------------------------------------
 
 TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
-    auto bufferPool = BufferPool::create();
+    BufferPool::BufferPoolArgs args {
+        4, 4, 128
+    };
+    auto bufferPool = BufferPool::create(args);
+
     size_t initialFree = bufferPool->getFreeBuffers();
 
     {
@@ -156,7 +160,11 @@ TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
 }
 
 TEST(BufferPoolTest, FrameMoveSemantics) {
-    auto bufferPool = BufferPool::create();
+    BufferPool::BufferPoolArgs args {
+        3, 1, 128
+    };
+    auto bufferPool = BufferPool::create(args);
+
     size_t initialFree = bufferPool->getFreeBuffers();
 
     Frame original = bufferPool->acquire();
@@ -179,11 +187,15 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
 
 // -------------------------------------------------------------------
 // BUFFER MEMORY BOUNDARY & SLICING TESTS
-// Proves the 128-byte prefix reservation is heavily guarded
+// Proves the 128-byte padding reservation is heavily guarded
 // -------------------------------------------------------------------
 
-TEST(BufferPoolTest, PrefixAndContentSliceBoundaries) {
-    auto bufferPool = BufferPool::create();
+TEST(BufferPoolTest, PaddingAndContentSliceBoundaries) {
+    BufferPool::BufferPoolArgs args {
+        3, 1, 128
+    };
+    auto bufferPool = BufferPool::create(args);
+
     Frame frame = bufferPool->acquire();
     auto* buffer = frame.getBuffer();
 
@@ -200,12 +212,16 @@ TEST(BufferPoolTest, PrefixAndContentSliceBoundaries) {
     EXPECT_EQ(contentSlice.size(), mockData.size());
     EXPECT_EQ(contentSlice[0], 0xAA);
 
-    auto prefixSlice = buffer->getPrefixSlice();
-    EXPECT_EQ(prefixSlice.size(), BufferPoolConfig::BUFFER_PADDING);
+    auto paddingSlice = buffer->getPaddingSlice();
+    EXPECT_EQ(paddingSlice.size(), BufferPoolConfig::BUFFER_PADDING);
 }
 
-TEST(BufferPoolTest, BufferTrimMaintainsPrefix) {
-    auto bufferPool = BufferPool::create();
+TEST(BufferPoolTest, BufferTrimMaintainsPadding) {
+    BufferPool::BufferPoolArgs args {
+        3, 1, 128
+    };
+    auto bufferPool = BufferPool::create(args);
+
     Frame frame = bufferPool->acquire();
     auto* buffer = frame.getBuffer();
 
@@ -229,12 +245,19 @@ TEST(BufferPoolTest, BufferTrimMaintainsPrefix) {
         ::testing::ElementsAreArray(expectedContent)
     ) << "Trim algorithm corrupted the internal payload";
 
-    // Crucially, verify the prefix still perfectly exists and wasn't destroyed by the vector erase
-    EXPECT_EQ(buffer->getPrefixSlice().size(), BufferPoolConfig::BUFFER_PADDING) << "Trim operation corrupted the reserved prefix memory";
+    // Verify the padding still exists and wasn't destroyed by the vector erase
+    EXPECT_EQ(
+        buffer->getPaddingSlice().size(), 
+        BufferPoolConfig::BUFFER_PADDING
+    ) << "Trim operation corrupted the reserved padding memory";
 }
 
 TEST(BufferPoolTest, BufferClearRestoresState) {
-    auto bufferPool = BufferPool::create();
+    BufferPool::BufferPoolArgs args {
+        3, 1, 128
+    };
+    auto bufferPool = BufferPool::create(args);
+
     Buffer* underlyingPtr = nullptr;
 
     {
@@ -261,7 +284,10 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
 // -------------------------------------------------------------------
 
 TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
-    auto bufferPool = BufferPool::create();
+    BufferPool::BufferPoolArgs args {
+        3, 1, 128
+    };
+    auto bufferPool = BufferPool::create(args);
     Frame frame = bufferPool->acquire();
     auto* buffer = frame.getBuffer();
 
@@ -280,7 +306,10 @@ TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
 }
 
 TEST(BufferPoolTest, FrontOnEmptyBufferThrowsException) {
-    auto bufferPool = BufferPool::create();
+    BufferPool::BufferPoolArgs args {
+        3, 1, 128
+    };
+    auto bufferPool = BufferPool::create(args);
     Frame frame = bufferPool->acquire();
 
     // The buffer is technically not "empty" vector-wise (it holds 128 bytes of prefix), 
@@ -289,4 +318,51 @@ TEST(BufferPoolTest, FrontOnEmptyBufferThrowsException) {
         const auto* buffer = frame.getBuffer();
         buffer->front();
     }, std::out_of_range) << "Failed to throw when accessing front of empty payload";
+}
+
+TEST(BufferPoolTest, BufferPointerMath_InsertContentDoesNotChangePointer) {
+    BufferPool::BufferPoolArgs args {
+        3, 1, 128
+    };
+    auto bufferPool = BufferPool::create(args);
+    auto frame = bufferPool->acquire();
+
+    auto* buffer = frame.getBuffer();
+    std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
+
+    char* paddingStartPtr1 = reinterpret_cast<char*>(frame->getMutablePaddingSlice().data());
+    char* contentStartPtr1 = reinterpret_cast<char*>(frame->getMutableContentSlice().data());
+
+    EXPECT_EQ(buffer->getMutableContentSlice().size(), 0);
+    EXPECT_EQ(buffer->getMutablePaddingSlice().size(), 128);
+
+    frame->insertContent(payload);
+
+    EXPECT_EQ(buffer->getMutableContentSlice().size(), 4);
+    EXPECT_EQ(buffer->getMutablePaddingSlice().size(), 128);
+
+    char* paddingStartPtr2 = reinterpret_cast<char*>(frame->getMutablePaddingSlice().data());
+    char* contentStartPtr2 = reinterpret_cast<char*>(frame->getMutableContentSlice().data());
+
+    EXPECT_EQ(paddingStartPtr1, paddingStartPtr2);
+    EXPECT_EQ(contentStartPtr1, contentStartPtr2);
+}
+
+TEST(BufferPoolTest, BufferPointerMath_ContentPtrOffsetFromPaddingPtr) {
+    BufferPool::BufferPoolArgs args {
+        3, 1, 128
+    };
+    auto bufferPool = BufferPool::create(args);
+    auto frame = bufferPool->acquire();
+
+    auto* buffer = frame.getBuffer();
+    std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
+
+    frame->insertContent(payload);
+ 
+    const char* contentStartPtr = reinterpret_cast<const char*>(buffer->getMutableContentSlice().data());
+    const char* paddingStartPtr = reinterpret_cast<const char*>(buffer->getMutablePaddingSlice().data());
+
+    auto expectedContentStartPtr = paddingStartPtr + buffer->paddingSize();
+    EXPECT_EQ(contentStartPtr, expectedContentStartPtr);
 }
