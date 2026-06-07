@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 namespace Mjpeg {
