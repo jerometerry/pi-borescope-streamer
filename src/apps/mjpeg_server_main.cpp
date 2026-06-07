@@ -24,7 +24,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "data_structures.hpp"
 #include "device_info.hpp"

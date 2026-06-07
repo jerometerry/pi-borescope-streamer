@@ -9,7 +9,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "data_structures.hpp"

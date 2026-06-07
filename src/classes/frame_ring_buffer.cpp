@@ -1,9 +1,10 @@
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <vector>
-#include "constants.hpp"
+#include "buffer.hpp"
 #include "frame_ring_buffer.hpp"
 #include "constants.hpp"
 

@@ -1,11 +1,6 @@
-#include <atomic>
-#include <cstdint>
-#include <span>
-#include <stdexcept>
-#include <vector>
 #include "buffer.hpp"
 #include "frame.hpp"
-        
+
 Mjpeg::Frame::Frame(Buffer* buffer) : buffer_(buffer) {
 	if (buffer_) {
 		buffer_->retain();
