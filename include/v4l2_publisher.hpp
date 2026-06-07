@@ -1,6 +1,6 @@
 #pragma once
-#include <cstdint>
-#include <vector>
+
+namespace Mjpeg { class Frame; }
 namespace V4L2 { struct Config; }
 
 /**
@@ -23,7 +23,7 @@ public:
     /**
      * @brief Writes a completed JPEG frame directly to the virtual video node.
      */
-    void writeFrame(const std::vector<uint8_t>& frame);
+    void writeFrame(Mjpeg::Frame frame);
 
 private:
     int v4l2_fd_{-1};

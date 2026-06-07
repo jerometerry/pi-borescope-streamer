@@ -1,4 +1,5 @@
 #include <App.h>
+#include <CachingApp.h>
 #include <HttpResponse.h>
 #include <Loop.h>
 #include <libusockets.h>
@@ -10,6 +11,7 @@
 #include <iostream>
 #include <functional>
 #include <future>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
