@@ -5,6 +5,8 @@
 #include <mutex>
 #include <vector>
 #include "mjpeg_data_structures.hpp"
+#include "thread_safety.hpp"
+#include "thread_safety_mutex.hpp"
 
 class BufferPool : public std::enable_shared_from_this<BufferPool> {
 public:
@@ -30,8 +32,8 @@ private:
     void initialize();
     static void recycleFrameBridge(void* context, Mjpeg::Buffer* buffer);
     
-    mutable std::mutex poolMutex_;
-    std::vector<std::unique_ptr<Mjpeg::Buffer>> pool_;
+    mutable Mutex poolMutex_;
+    std::vector<std::unique_ptr<Mjpeg::Buffer>> pool_ GUARDED_BY(poolMutex_);
 
     const size_t maxPoolSize_;
     const size_t initialPoolSize_;

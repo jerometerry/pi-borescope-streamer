@@ -6,6 +6,8 @@
 #include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "mjpeg_data_structures.hpp"
+#include "thread_safety.hpp"
+#include "thread_safety_mutex.hpp"
 
 BufferPool::BufferPool(const BufferPoolArgs& args) 
     : maxPoolSize_(args.maxPoolSize), 
@@ -30,8 +32,9 @@ std::shared_ptr<BufferPool> BufferPool::create(const BufferPoolArgs& args) {
 
 Mjpeg::Frame BufferPool::acquire() {
     std::unique_ptr<Mjpeg::Buffer> buffer;
+
     {
-        std::scoped_lock lock(poolMutex_);
+        MutexLock lock(poolMutex_);
         if (!pool_.empty()) {
             buffer = std::move(pool_.back());
             pool_.pop_back();
@@ -49,7 +52,7 @@ Mjpeg::Frame BufferPool::acquire() {
 }
 
 size_t BufferPool::getFreeBuffers() const {
-    std::scoped_lock lock(poolMutex_);
+    MutexLock lock(poolMutex_);
     return pool_.size();
 }
 
@@ -60,7 +63,7 @@ void BufferPool::returnToPool(Mjpeg::Buffer* buffer) {
 
     buffer->clear(); 
 
-    std::scoped_lock lock(poolMutex_);
+    MutexLock lock(poolMutex_);
     if (pool_.size() < maxPoolSize_) {
         pool_.push_back(std::unique_ptr<Mjpeg::Buffer>(buffer));
     } else {
@@ -69,6 +72,7 @@ void BufferPool::returnToPool(Mjpeg::Buffer* buffer) {
 }
 
 void BufferPool::initialize() {
+    MutexLock lock(poolMutex_);
     pool_.reserve(maxPoolSize_);
     
     for (size_t i = 0; i < initialPoolSize_; ++i) {
