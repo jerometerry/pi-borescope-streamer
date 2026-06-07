@@ -165,8 +165,10 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
     Mjpeg::Frame movedFrame = std::move(original);
 
     // The original frame should now be completely empty (operator bool() == false)
-    EXPECT_FALSE(original) << "Moved-from frame still holds a valid state"; // NOLINT(bugprone-use-after-move)
-    
+
+    bool is_valid = static_cast<bool>(original); // NOLINT(bugprone-use-after-move)
+    EXPECT_FALSE(is_valid) << "Moved-from frame still holds a valid state";
+
     // The new frame should point to the exact same memory
     EXPECT_EQ(movedFrame.getBuffer(), underlyingPtr) << "Underlying buffer pointer shifted during move";
     

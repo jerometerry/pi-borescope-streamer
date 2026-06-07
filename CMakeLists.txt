@@ -60,7 +60,15 @@ else()
 endif()
 
 add_library(project_warnings INTERFACE)
+
 target_compile_options(project_warnings INTERFACE -Wall -Wextra)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
+    target_compile_options(project_warnings INTERFACE 
+        -Wthread-safety 
+        -Werror=thread-safety
+    )
+endif()
 
 if(NOT APPLE)
     target_compile_options(project_warnings INTERFACE 
