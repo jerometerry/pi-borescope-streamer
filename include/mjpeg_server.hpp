@@ -12,7 +12,10 @@ struct us_listen_socket_t;
 struct us_timer_t;
 // IWYU pragma: end_exports
 
-namespace Mjpeg { class Frame; }
+namespace Mjpeg { 
+    class Frame;
+    struct Buffer;
+}
 namespace Web { struct ViewerState; }
 
 /**
@@ -32,6 +35,8 @@ public:
     MjpegServer& operator=(const MjpegServer&) = delete;
 
     void start();
+
+    static std::string_view buildMjpegResponse(Mjpeg::Buffer* buffer, size_t size);
 
 private:
     const int port_;

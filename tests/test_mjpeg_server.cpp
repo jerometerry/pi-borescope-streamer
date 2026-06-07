@@ -68,6 +68,14 @@ protected:
         frameBuffer_->push(frame);
     }
 
+    Mjpeg::Frame acquireFrame() {
+        return bufferPool_->acquire();
+    }
+
+    std::string_view buildMjpegResponse(Mjpeg::Buffer *buffer, size_t size) {
+        return server_->buildMjpegResponse(buffer, size);
+    }
+
     std::string fetchFromLocalhost(const std::string& route) {
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) return "";
@@ -182,4 +190,18 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
     EXPECT_NE(chunkResponse.find(payloadString), std::string::npos) << "Stream chunk payload corrupted or incomplete.";
 
     close(sock);
+}
+
+TEST_F(MjpegServerTest, BuildMjpegResponse) {
+
+    auto frame = acquireFrame();
+    auto* buffer = frame.getBuffer();
+    std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
+    frame->insert(payload);
+
+    auto response = buildMjpegResponse(buffer, payload.size());
+
+    EXPECT_EQ(response, 
+        "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: 4\r\n\r\n\xDE\xAD\xBE\xEF"
+    );
 }

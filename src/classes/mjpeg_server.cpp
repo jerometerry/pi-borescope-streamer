@@ -32,6 +32,44 @@ MjpegServer::~MjpegServer() {
     std::cout << "[Network Core] Network engine cleanly terminated.\n";
 }
 
+std::string_view MjpegServer::buildMjpegResponse(Mjpeg::Buffer* buffer, size_t size) {
+
+    // buffer has 128 bytes reserved for zero-byte allocations
+    // startPtr is offset 128 bytes from the start of the allocated buffer
+    char* startPtt = reinterpret_cast<char*>(buffer->mutable_view().data());
+    char* cursor = startPtt;
+    
+    constexpr char newLines[4] = {'\r', '\n', '\r', '\n'};
+
+    // Insert 2 line separator
+    cursor -= 4;
+    std::memcpy(cursor, newLines, 4);
+    
+    char lb[32];
+    auto [ptr, ec] = std::to_chars(lb, lb + sizeof(lb), size);
+    std::string_view lengthStr(lb, ptr - lb);
+    
+    // Write number of bytes in the jpeg
+    cursor -= lengthStr.size();
+    std::memcpy(cursor, lengthStr.data(), lengthStr.size());
+    
+    constexpr std::string_view clHeader = "Content-Length: ";
+
+    // Write "Content-Length: " header
+    cursor -= clHeader.size();
+    std::memcpy(cursor, clHeader.data(), clHeader.size());
+
+    constexpr std::string_view prefix = "--mjpegstream\r\nContent-Type: image/jpeg\r\n";
+
+    // Write "Content-Type: " header
+    cursor -= prefix.size();
+    std::memcpy(cursor, prefix.data(), prefix.size());
+
+    size_t totalPayloadSize = (startPtt - cursor) + size;
+
+    return {cursor, totalPayloadSize};
+}
+
 void MjpegServer::onTimer(us_timer_t *t) {
     auto* server = *static_cast<MjpegServer**>(us_timer_ext(t));
 
@@ -85,32 +123,15 @@ void MjpegServer::onTimer(us_timer_t *t) {
                         viewer.isLagging = false;
                     }
 
-                    res->cork([&]() {
-                        res->write(HttpHeaders::MJPEG_CHUNK_PREFIX);
-                        
-                        char headerBuf[WebServerConfig::HEADER_BUFFER_SIZE];
+                    Mjpeg::Buffer* rawBuffer = currentFrame.getBuffer();
+                    size_t payloadSize = rawBuffer->size();
 
-                        auto result = std::to_chars(
-                            headerBuf, 
-                            headerBuf + WebServerConfig::HEADER_BUFFER_SIZE, 
-                            currentFrame->size()
-                        );
-
-                        res->write(std::string_view(headerBuf, result.ptr - headerBuf));
-                        
-                        res->write(HttpHeaders::MJPEG_CHUNK_SUFFIX);
-
-                        auto frameView = currentFrame->view();
-                        bool ok = res->write(std::string_view(
-                            reinterpret_cast<const char*>(frameView.data()), 
-                            frameView.size()
-                        ));
-
-                        if (!ok) {
-                            std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "
-                                      << "uWebSockets just executed a user-space malloc to queue this frame.\n";
-                        }
-                    });
+                    auto payload = buildMjpegResponse(rawBuffer, payloadSize);
+                    bool ok = res->write(payload);
+                    if (!ok) {
+                        std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "
+                                    << "uWebSockets just executed a user-space malloc to queue this frame.\n";
+                    }
 
                     size_t postWriteBackpressure = res->getWriteOffset();
                     if (postWriteBackpressure > 0) {

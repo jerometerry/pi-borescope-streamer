@@ -6,13 +6,13 @@
 #include <vector>
 
 namespace Mjpeg {
+    static constexpr size_t K_PREFIX_OFFSET = 128;
+
     struct Buffer;
     using ReturnCallback = void(*)(void*, Buffer*);
 
     struct Buffer {
     private:
-        static constexpr size_t K_PREFIX_OFFSET = 128;
-
         std::atomic<int> refCount_{0};
         std::vector<uint8_t> data_;
         ReturnCallback returnCallback_{nullptr};
@@ -117,65 +117,65 @@ namespace Mjpeg {
     public:
         Frame() = default;
         
-        explicit Frame(Buffer* frame) : frame_(frame) {
-            if (frame_) {
-                frame_->retain();
+        explicit Frame(Buffer* buffer) : buffer_(buffer) {
+            if (buffer_) {
+                buffer_->retain();
             }
         }
         
         ~Frame() {
-            if (frame_) { 
-                frame_->release();
+            if (buffer_) { 
+                buffer_->release();
             }
         }
 
-        Frame(Frame&& other) noexcept : frame_(other.frame_) {
-            other.frame_ = nullptr;
+        Frame(Frame&& other) noexcept : buffer_(other.buffer_) {
+            other.buffer_ = nullptr;
         }
         
         Frame& operator=(Frame&& other) noexcept {
             if (this != &other) {
-                if (frame_) { 
-                    frame_->release();
+                if (buffer_) { 
+                    buffer_->release();
                 }
-                frame_ = other.frame_;
-                other.frame_ = nullptr;
+                buffer_ = other.buffer_;
+                other.buffer_ = nullptr;
             }
             return *this;
         }
 
-        Frame(const Frame& other) : frame_(other.frame_) {
-            if (frame_) {
-                frame_->retain();
+        Frame(const Frame& other) : buffer_(other.buffer_) {
+            if (buffer_) {
+                buffer_->retain();
             }
         }
         
         Frame& operator=(const Frame& other) {
             if (this != &other) {
-                if (frame_) { 
-                    frame_->release();
+                if (buffer_) { 
+                    buffer_->release();
                 }
-                frame_ = other.frame_;
-                if (frame_) { 
-                    frame_->retain();
+                buffer_ = other.buffer_;
+                if (buffer_) { 
+                    buffer_->retain();
                 }
             }
             return *this;
         }
 
-        Buffer* get() const { 
-            return frame_; 
+        Buffer* getBuffer() const { 
+            return buffer_; 
         }
 
         Buffer* operator->() const { 
-            return frame_; 
+            return buffer_; 
         }
 
         explicit operator bool() const { 
-            return frame_ != nullptr; 
+            return buffer_ != nullptr; 
         }
 
     private:
-        Buffer* frame_{nullptr};
+        Buffer* buffer_{nullptr};
     };
 }

@@ -26,7 +26,7 @@ TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
 
     auto activeFrame = frameBuffer.getLatestFrame(frameId);
     
-    EXPECT_EQ(activeFrame.get(), nullptr);
+    EXPECT_EQ(activeFrame.getBuffer(), nullptr);
     EXPECT_EQ(frameId, 0) << "Frame ID should start strictly at 0";
 }
 
@@ -70,12 +70,13 @@ TEST(SharedFrameBufferTest, frameBuffer) {
 
     EXPECT_EQ(currentFrame->size(), frame.size());
 
-    auto frameView = std::span<uint8_t>(frame.data(), frame.size());
-
-    EXPECT_THAT(
-        currentFrame->view(), 
-        ::testing::ElementsAreArray(frameView.begin(), frameView.end())
-    ) << "Active frame pointer should remain unchanged.";
+    std::span<const uint8_t> actualPayload = currentFrame->view();
+    std::span<const uint8_t> expectedPayload(frame.data(), frame.size());
+    bool areEqual = std::equal(
+        actualPayload.begin(), actualPayload.end(), 
+        expectedPayload.begin(), expectedPayload.end()
+    );
+    EXPECT_TRUE(areEqual);
 }
 
 TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
