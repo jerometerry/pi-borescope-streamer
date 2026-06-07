@@ -17,12 +17,13 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include "buffer.hpp"
 #include "constants.hpp"
 #include "data_structures.hpp"
 #include "device_finder.hpp"
+#include "frame.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
-#include "mjpeg_data_structures.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameSource frameSource)
     : port_(port), running_(running), frameSource_(std::move(frameSource)) {}

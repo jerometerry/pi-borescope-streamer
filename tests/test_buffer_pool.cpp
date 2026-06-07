@@ -11,10 +11,11 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
+#include "frame.hpp"
 #include "constants.hpp"
 #include "shared_frame_buffer.hpp"
-#include "mjpeg_data_structures.hpp"
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
     Mjpeg::Frame frame = bp->acquire();
@@ -47,17 +48,17 @@ TEST(BufferPoolTest, BoundedPoolGrowth) {
 TEST(BufferPoolTest, DefaultTotalCapacity128K) {
     auto bufferPool = BufferPool::create();
     auto frame = bufferPool->acquire();
-    auto expectedCapacity = Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES + Mjpeg::Buffer::PREFIX_SIZE;
+    auto expectedCapacity = Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES + BufferPoolConfig::BUFFER_PADDING;
     EXPECT_EQ(frame->totalCapacity(), expectedCapacity);
 }
 
-TEST(BufferPoolTest, FrameReserveAddsPrefixSize) {
+TEST(BufferPoolTest, FrameReserveAddsPaddingSize) {
     BufferPool::BufferPoolArgs args = {
         3, 1, Units::ONE_KILOBYTE
     };
     auto bufferPool = BufferPool::create(args);
     auto frame = bufferPool->acquire();
-    auto expectedCapacity = args.bufferReserveSize + Mjpeg::Buffer::PREFIX_SIZE;
+    auto expectedCapacity = args.bufferReserveSize + BufferPoolConfig::BUFFER_PADDING;
     EXPECT_EQ(frame->totalCapacity(), expectedCapacity);
 }
 
@@ -192,7 +193,7 @@ TEST(BufferPoolTest, PrefixAndContentSliceBoundaries) {
 
     // Verify sizes
     EXPECT_EQ(buffer->contentSize(), mockData.size()) << "Content size calculation is incorrect";
-    EXPECT_EQ(buffer->totalSize(), Mjpeg::Buffer::PREFIX_SIZE + mockData.size()) << "Total size does not account for reserved prefix";
+    EXPECT_EQ(buffer->totalSize(), BufferPoolConfig::BUFFER_PADDING + mockData.size()) << "Total size does not account for reserved prefix";
 
     // Verify slice bounds
     auto contentSlice = buffer->getContentSlice();
@@ -200,7 +201,7 @@ TEST(BufferPoolTest, PrefixAndContentSliceBoundaries) {
     EXPECT_EQ(contentSlice[0], 0xAA);
 
     auto prefixSlice = buffer->getPrefixSlice();
-    EXPECT_EQ(prefixSlice.size(), Mjpeg::Buffer::PREFIX_SIZE);
+    EXPECT_EQ(prefixSlice.size(), BufferPoolConfig::BUFFER_PADDING);
 }
 
 TEST(BufferPoolTest, BufferTrimMaintainsPrefix) {
@@ -229,7 +230,7 @@ TEST(BufferPoolTest, BufferTrimMaintainsPrefix) {
     ) << "Trim algorithm corrupted the internal payload";
 
     // Crucially, verify the prefix still perfectly exists and wasn't destroyed by the vector erase
-    EXPECT_EQ(buffer->getPrefixSlice().size(), Mjpeg::Buffer::PREFIX_SIZE) << "Trim operation corrupted the reserved prefix memory";
+    EXPECT_EQ(buffer->getPrefixSlice().size(), BufferPoolConfig::BUFFER_PADDING) << "Trim operation corrupted the reserved prefix memory";
 }
 
 TEST(BufferPoolTest, BufferClearRestoresState) {
@@ -252,7 +253,7 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
     
     // Verify clear() actually wiped the user data but kept the prefix allocation
     EXPECT_TRUE(reusedFrame.getBuffer()->empty()) << "Recycled buffer was not cleanly wiped";
-    EXPECT_EQ(reusedFrame.getBuffer()->totalSize(), Mjpeg::Buffer::PREFIX_SIZE) << "Recycled buffer lost its prefix reservation";
+    EXPECT_EQ(reusedFrame.getBuffer()->totalSize(), BufferPoolConfig::BUFFER_PADDING) << "Recycled buffer lost its prefix reservation";
 }
 
 // -------------------------------------------------------------------

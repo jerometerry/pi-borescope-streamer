@@ -9,10 +9,11 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "data_structures.hpp"
-#include "mjpeg_data_structures.hpp"
+#include "frame.hpp"
 #include "mjpeg_stream.hpp"
 
 class MockHandlers {

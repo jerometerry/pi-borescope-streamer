@@ -2,7 +2,8 @@
 #include <cstdint>
 #include <memory>
 
-#include "mjpeg_data_structures.hpp"
+#include "buffer.hpp"
+#include "frame.hpp"
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 

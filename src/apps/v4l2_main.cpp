@@ -10,12 +10,13 @@
 #include <memory>
 #include <thread>
 #include <vector>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "data_structures.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
+#include "frame.hpp"
 #include "libusb_async_driver.hpp"
-#include "mjpeg_data_structures.hpp"
 #include "mjpeg_stream.hpp"
 #include "shared_frame_buffer.hpp"
 #include "v4l2.hpp"

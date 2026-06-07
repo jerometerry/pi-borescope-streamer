@@ -16,10 +16,11 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
+#include "frame.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_buffer.hpp"
-#include "mjpeg_data_structures.hpp"
 
 namespace {
     constexpr int TEST_PORT = 18080; 

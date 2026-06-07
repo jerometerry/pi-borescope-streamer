@@ -6,7 +6,8 @@
 #include <iostream>
 #include <span>
 #include <string>
-#include "mjpeg_data_structures.hpp"
+#include "buffer.hpp"
+#include "frame.hpp"
 #include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
 

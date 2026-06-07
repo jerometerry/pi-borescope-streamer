@@ -1,7 +1,8 @@
 #include <cstdint>
 #include <utility>
 
-#include "mjpeg_data_structures.hpp"
+#include "buffer.hpp"
+#include "frame.hpp"
 #include "shared_frame_buffer.hpp"
 #include "thread_safety_mutex.hpp"
 

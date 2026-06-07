@@ -113,6 +113,11 @@ namespace BufferPoolConfig {
      * @brief 
      */
     inline constexpr int MAX_POOL_SIZE = 8;
+
+    /**
+     * @brief 
+     */
+    static constexpr size_t BUFFER_PADDING = 128;
 }
 
 namespace UsbConfig {

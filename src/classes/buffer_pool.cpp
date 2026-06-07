@@ -2,9 +2,10 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "constants.hpp"
-#include "mjpeg_data_structures.hpp"
+#include "frame.hpp"
 #include "thread_safety_mutex.hpp"
 
 BufferPool::BufferPool(const BufferPoolArgs& args) 
@@ -40,7 +41,7 @@ Mjpeg::Frame BufferPool::acquire() {
     }
 
     if (!buffer) {
-        buffer = std::make_unique<Mjpeg::Buffer>();
+        buffer = Mjpeg::Buffer::unique();
         buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);
@@ -74,7 +75,7 @@ void BufferPool::initialize() {
     pool_.reserve(maxPoolSize_);
     
     for (size_t i = 0; i < initialPoolSize_; ++i) {
-        auto buffer = std::make_unique<Mjpeg::Buffer>();
+        auto buffer = Mjpeg::Buffer::unique();
         buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);

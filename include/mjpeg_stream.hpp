@@ -6,7 +6,7 @@
 #include <span>
 #include <vector>
 #include "data_structures.hpp"
-#include "mjpeg_data_structures.hpp"
+#include "frame.hpp"
 
 class BufferPool;
 

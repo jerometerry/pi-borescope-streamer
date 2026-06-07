@@ -9,9 +9,10 @@
 #include <thread>
 #include <vector>
 #include <memory>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
+#include "frame.hpp"
 #include "shared_frame_buffer.hpp"
-#include "mjpeg_data_structures.hpp"
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
     Mjpeg::Frame frame = bp->acquire();
