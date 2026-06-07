@@ -39,8 +39,7 @@ namespace {
     std::atomic<bool> globalRunning{true};
 }
 
-void signalHandler(int signal) {
-    std::cout << "\nSignal " << signal << " received. Initiating orderly engine shutdown...\n";
+void signalHandler(int) {
     globalRunning.store(false, std::memory_order_release);
 }
 
@@ -114,9 +113,10 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
+        
+        auto bufferPool = BufferPool::create();
 
         SharedFrameBuffer frameBuffer;
-        auto bufferPool = BufferPool::create();
         MjpegStream mjpegStream(bufferPool, [&frameBuffer](const Mjpeg::Frame& frame) {
             frameBuffer.push(frame);
         });
