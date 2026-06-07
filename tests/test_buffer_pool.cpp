@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <ranges>
 #include <span>
 #include <string>
@@ -115,4 +116,174 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
         actualData, 
         ::testing::ElementsAreArray(expectedData.begin(), expectedData.end())
     ) << "Frame memory management error";
+}
+
+// -------------------------------------------------------------------
+// FRAME REFERENCE COUNTING & LIFECYCLE TESTS
+// Demonstrates safe zero-copy broadcasting across multiple simulated clients
+// -------------------------------------------------------------------
+
+TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
+    auto bufferPool = BufferPool::create();
+    size_t initialFree = bufferPool->getFreeBuffers();
+
+    {
+        Mjpeg::Frame masterFrame = bufferPool->acquire();
+        EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1) << "Buffer not removed from pool";
+
+        {
+            // Simulate Viewer 1 connecting and holding a copy of the frame
+            Mjpeg::Frame viewer1Frame = masterFrame; 
+            
+            // Simulate Viewer 2 connecting and holding a copy
+            Mjpeg::Frame viewer2Frame = masterFrame; 
+            
+            // Master frame is overwritten with a new frame from the camera
+            masterFrame = bufferPool->acquire();
+            EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 2) << "Second buffer not acquired";
+
+            // At this point, the original buffer is solely kept alive by viewer1 and viewer2
+        } // viewer1Frame and viewer2Frame go out of scope here. 
+          // The atomic ref count hits 0, and the callback fires.
+
+        // Verify the original buffer was returned to the pool automatically
+        EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1) << "Buffer not automatically recycled after all references dropped";
+    } // masterFrame goes out of scope here
+
+    // All frames are dead. Pool should be fully restored.
+    EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree) << "Pool leak detected";
+}
+
+TEST(BufferPoolTest, FrameMoveSemantics) {
+    auto bufferPool = BufferPool::create();
+    size_t initialFree = bufferPool->getFreeBuffers();
+
+    Mjpeg::Frame original = bufferPool->acquire();
+    Mjpeg::Buffer* underlyingPtr = original.getBuffer();
+
+    // Move the frame. This should transfer ownership without touching the atomic counter
+    Mjpeg::Frame movedFrame = std::move(original);
+
+    // The original frame should now be completely empty (operator bool() == false)
+    EXPECT_FALSE(original) << "Moved-from frame still holds a valid state"; // NOLINT(bugprone-use-after-move)
+    
+    // The new frame should point to the exact same memory
+    EXPECT_EQ(movedFrame.getBuffer(), underlyingPtr) << "Underlying buffer pointer shifted during move";
+    
+    // The pool size should remain unchanged (no unexpected returns or allocations)
+    EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1);
+}
+
+// -------------------------------------------------------------------
+// BUFFER MEMORY BOUNDARY & SLICING TESTS
+// Proves the 128-byte prefix reservation is heavily guarded
+// -------------------------------------------------------------------
+
+TEST(BufferPoolTest, PrefixAndContentSliceBoundaries) {
+    auto bufferPool = BufferPool::create();
+    Mjpeg::Frame frame = bufferPool->acquire();
+    auto* buffer = frame.getBuffer();
+
+    // Insert mock hardware data
+    std::vector<uint8_t> mockData = { 0xAA, 0xBB, 0xCC, 0xDD };
+    buffer->insertContent(mockData);
+
+    // Verify sizes
+    EXPECT_EQ(buffer->contentSize(), mockData.size()) << "Content size calculation is incorrect";
+    EXPECT_EQ(buffer->totalSize(), Mjpeg::Buffer::PREFIX_SIZE + mockData.size()) << "Total size does not account for reserved prefix";
+
+    // Verify slice bounds
+    auto contentSlice = buffer->getContentSlice();
+    EXPECT_EQ(contentSlice.size(), mockData.size());
+    EXPECT_EQ(contentSlice[0], 0xAA);
+
+    auto prefixSlice = buffer->getPrefixSlice();
+    EXPECT_EQ(prefixSlice.size(), Mjpeg::Buffer::PREFIX_SIZE);
+}
+
+TEST(BufferPoolTest, BufferTrimMaintainsPrefix) {
+    auto bufferPool = BufferPool::create();
+    Mjpeg::Frame frame = bufferPool->acquire();
+    auto* buffer = frame.getBuffer();
+
+    // Data representing a messy stream: [Garbage] [FF D8 ... FF D9] [Garbage]
+    std::vector<uint8_t> streamData = { 0x00, 0x01, 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9, 0x02, 0x03 };
+    buffer->insertContent(streamData);
+
+    // Simulate MjpegStream::outputFrame finding the SOI at index 2 and EOI at index 8
+    size_t soiOffset = 2;
+    size_t eoiOffset = 8;
+
+    buffer->trim(soiOffset, eoiOffset);
+
+    // Expected remaining content: { 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9 }
+    std::vector<uint8_t> expectedContent = { 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9 };
+    auto resultSlice = buffer->getContentSlice();
+
+    EXPECT_EQ(buffer->contentSize(), expectedContent.size());
+    EXPECT_THAT(
+        std::vector<uint8_t>(resultSlice.begin(), resultSlice.end()),
+        ::testing::ElementsAreArray(expectedContent)
+    ) << "Trim algorithm corrupted the internal payload";
+
+    // Crucially, verify the prefix still perfectly exists and wasn't destroyed by the vector erase
+    EXPECT_EQ(buffer->getPrefixSlice().size(), Mjpeg::Buffer::PREFIX_SIZE) << "Trim operation corrupted the reserved prefix memory";
+}
+
+TEST(BufferPoolTest, BufferClearRestoresState) {
+    auto bufferPool = BufferPool::create();
+    Mjpeg::Buffer* underlyingPtr = nullptr;
+
+    {
+        Mjpeg::Frame frame = bufferPool->acquire();
+        underlyingPtr = frame.getBuffer();
+        
+        // Insert data using the captured pointer
+        std::vector<uint8_t> content = {0x01, 0x02, 0x03};
+        underlyingPtr->insertContent(content);
+        EXPECT_FALSE(underlyingPtr->empty());
+    } // Frame dies, buffer is cleared and returned to pool via recycleFrameBridge
+
+    // Re-acquire to get the exact same buffer back
+    Mjpeg::Frame reusedFrame = bufferPool->acquire();
+    EXPECT_EQ(reusedFrame.getBuffer(), underlyingPtr) << "Pool did not return the recycled buffer";
+    
+    // Verify clear() actually wiped the user data but kept the prefix allocation
+    EXPECT_TRUE(reusedFrame.getBuffer()->empty()) << "Recycled buffer was not cleanly wiped";
+    EXPECT_EQ(reusedFrame.getBuffer()->totalSize(), Mjpeg::Buffer::PREFIX_SIZE) << "Recycled buffer lost its prefix reservation";
+}
+
+// -------------------------------------------------------------------
+// EXCEPTION & SAFETY TESTS
+// -------------------------------------------------------------------
+
+TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
+    auto bufferPool = BufferPool::create();
+    Mjpeg::Frame frame = bufferPool->acquire();
+    auto* buffer = frame.getBuffer();
+
+    std::vector<uint8_t> content = { 0x01, 0x02, 0x03, 0x04 };
+    buffer->insertContent(content);
+
+    // Attempting to trim past the end of the content
+    EXPECT_THROW({
+        buffer->trim(1, 10);
+    }, std::out_of_range) << "Failed to throw on end boundary violation";
+
+    // Attempting to start the trim after the end boundary (logical impossibility)
+    EXPECT_THROW({
+        buffer->trim(3, 2);
+    }, std::out_of_range) << "Failed to throw on inverted boundary violation";
+}
+
+TEST(BufferPoolTest, FrontOnEmptyBufferThrowsException) {
+    auto bufferPool = BufferPool::create();
+    Mjpeg::Frame frame = bufferPool->acquire();
+
+    // The buffer is technically not "empty" vector-wise (it holds 128 bytes of prefix), 
+    // but content-wise it is empty. front() should safely reject access.
+    EXPECT_THROW({
+        const auto* buffer = frame.getBuffer();
+        buffer->front();
+    }, std::out_of_range) << "Failed to throw when accessing front of empty payload";
 }

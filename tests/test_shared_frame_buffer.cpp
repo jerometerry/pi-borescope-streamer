@@ -2,7 +2,6 @@
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <span>
@@ -11,7 +10,6 @@
 #include <vector>
 #include <memory>
 #include "buffer_pool.hpp"
-#include "constants.hpp"
 #include "shared_frame_buffer.hpp"
 #include "mjpeg_data_structures.hpp"
 
