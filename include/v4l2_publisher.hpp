@@ -23,7 +23,7 @@ public:
     /**
      * @brief Writes a completed JPEG frame directly to the virtual video node.
      */
-    void writeFrame(Mjpeg::Frame frame);
+    void writeFrame(const Mjpeg::Frame& frame);
 
 private:
     int v4l2_fd_{-1};
