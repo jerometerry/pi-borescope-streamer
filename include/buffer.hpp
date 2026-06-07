@@ -6,75 +6,70 @@
 #include <span>
 #include <vector>
 
-namespace Mjpeg {
-    struct Buffer;
-    using ReturnCallback = void(*)(void*, Buffer*);
-}
-
-namespace Mjpeg {
-    struct Buffer {
+struct Buffer {
 public:
-		explicit Buffer(const size_t paddingSize);
+    using ReturnCallback = void(*)(void*, Buffer*);
 
-        static std::unique_ptr<Mjpeg::Buffer> unique();
+    explicit Buffer(const size_t paddingSize);
 
-        static std::unique_ptr<Mjpeg::Buffer> unique(size_t padding);
+    static std::unique_ptr<Buffer> unique();
 
-        void retain();
-        
-        void release();
+    static std::unique_ptr<Buffer> unique(size_t padding);
 
-        void clear();
+    void retain();
+    
+    void release();
 
-        bool empty() const;
+    void clear();
 
-        void reserve(size_t size);
+    bool empty() const;
 
-        void trim(size_t startOffset, size_t endOffset);
+    void reserve(size_t size);
 
-        void setPoolContext(void* context);
+    void trim(size_t startOffset, size_t endOffset);
 
-        void setReturnCallback(ReturnCallback callback);
+    void setPoolContext(void* context);
 
-        void insertContent(std::span<const uint8_t> content);
+    void setReturnCallback(ReturnCallback callback);
 
-        uint8_t front() const;
+    void insertContent(std::span<const uint8_t> content);
 
-        size_t contentSize() const;
+    uint8_t front() const;
 
-		size_t paddingSize() const;
+    size_t contentSize() const;
 
-		size_t prefixSize() const;
+    size_t paddingSize() const;
 
-        size_t totalSize() const;
+    size_t prefixSize() const;
 
-        size_t totalCapacity() const;
+    size_t totalSize() const;
 
-		std::span<const uint8_t> getContentSlice() const;
+    size_t totalCapacity() const;
 
-		std::span<const uint8_t> getPaddingSlice() const;
+    std::span<const uint8_t> getContentSlice() const;
 
-		std::span<const uint8_t> getPrefixSlice() const;
+    std::span<const uint8_t> getPaddingSlice() const;
 
-		std::span<const uint8_t> all() const;
+    std::span<const uint8_t> getPrefixSlice() const;
 
-        std::span<uint8_t> getMutableContentSlice();
+    std::span<const uint8_t> all() const;
 
-		std::span<uint8_t> getMutablePaddingSlice();
+    std::span<uint8_t> getMutableContentSlice();
 
-        std::span<uint8_t> getMutablePrefixSlice();
+    std::span<uint8_t> getMutablePaddingSlice();
 
-    private:
-		void ensurePaddingReserved();
+    std::span<uint8_t> getMutablePrefixSlice();
 
-		void ensurePrefixReserved();
+private:
+    void ensurePaddingReserved();
 
-        std::vector<uint8_t>& data();
+    void ensurePrefixReserved();
 
-		std::atomic<int> refCount_{0};
-        std::vector<uint8_t> data_;
-        ReturnCallback returnCallback_{nullptr};
-        void* poolContext_{nullptr};
-		const size_t paddingSize_;
-    };
-}
+    std::vector<uint8_t>& data();
+
+    std::atomic<int> refCount_{0};
+    std::vector<uint8_t> data_;
+    ReturnCallback returnCallback_{nullptr};
+    void* poolContext_{nullptr};
+    const size_t paddingSize_;
+};

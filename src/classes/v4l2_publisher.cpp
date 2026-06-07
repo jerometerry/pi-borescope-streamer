@@ -48,7 +48,7 @@ V4l2Publisher::~V4l2Publisher() {
     }
 }
 
-void V4l2Publisher::writeFrame(const Mjpeg::Frame& frame) {
+void V4l2Publisher::writeFrame(const Frame& frame) {
     if (v4l2_fd_ >= 0) {
         ssize_t bytesWritten = write(v4l2_fd_, frame->getContentSlice().data(), frame->contentSize());
         if (bytesWritten < 0) {

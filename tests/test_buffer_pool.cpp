@@ -18,7 +18,7 @@
 #include "shared_frame_buffer.hpp"
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
-    Mjpeg::Frame frame = bp->acquire();
+    Frame frame = bp->acquire();
     frame->insertContent(data);
     sfb.push(frame);
 };
@@ -27,7 +27,7 @@ TEST(BufferPoolTest, BoundedPoolGrowth) {
     auto bufferPool = BufferPool::create();
     SharedFrameBuffer frameBuffer;
 
-    std::vector<Mjpeg::Frame> slowConsumers;
+    std::vector<Frame> slowConsumers;
     std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
 
     constexpr int SPIKE_SIZE = 10;
@@ -129,15 +129,15 @@ TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
     size_t initialFree = bufferPool->getFreeBuffers();
 
     {
-        Mjpeg::Frame masterFrame = bufferPool->acquire();
+        Frame masterFrame = bufferPool->acquire();
         EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1) << "Buffer not removed from pool";
 
         {
             // Simulate Viewer 1 connecting and holding a copy of the frame
-            Mjpeg::Frame viewer1Frame = masterFrame; 
+            Frame viewer1Frame = masterFrame; 
             
             // Simulate Viewer 2 connecting and holding a copy
-            Mjpeg::Frame viewer2Frame = masterFrame; 
+            Frame viewer2Frame = masterFrame; 
             
             // Master frame is overwritten with a new frame from the camera
             masterFrame = bufferPool->acquire();
@@ -159,11 +159,11 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
     auto bufferPool = BufferPool::create();
     size_t initialFree = bufferPool->getFreeBuffers();
 
-    Mjpeg::Frame original = bufferPool->acquire();
-    Mjpeg::Buffer* underlyingPtr = original.getBuffer();
+    Frame original = bufferPool->acquire();
+    Buffer* underlyingPtr = original.getBuffer();
 
     // Move the frame. This should transfer ownership without touching the atomic counter
-    Mjpeg::Frame movedFrame = std::move(original);
+    Frame movedFrame = std::move(original);
 
     // The original frame should now be completely empty (operator bool() == false)
 
@@ -184,7 +184,7 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
 
 TEST(BufferPoolTest, PrefixAndContentSliceBoundaries) {
     auto bufferPool = BufferPool::create();
-    Mjpeg::Frame frame = bufferPool->acquire();
+    Frame frame = bufferPool->acquire();
     auto* buffer = frame.getBuffer();
 
     // Insert mock hardware data
@@ -206,7 +206,7 @@ TEST(BufferPoolTest, PrefixAndContentSliceBoundaries) {
 
 TEST(BufferPoolTest, BufferTrimMaintainsPrefix) {
     auto bufferPool = BufferPool::create();
-    Mjpeg::Frame frame = bufferPool->acquire();
+    Frame frame = bufferPool->acquire();
     auto* buffer = frame.getBuffer();
 
     // Data representing a messy stream: [Garbage] [FF D8 ... FF D9] [Garbage]
@@ -235,10 +235,10 @@ TEST(BufferPoolTest, BufferTrimMaintainsPrefix) {
 
 TEST(BufferPoolTest, BufferClearRestoresState) {
     auto bufferPool = BufferPool::create();
-    Mjpeg::Buffer* underlyingPtr = nullptr;
+    Buffer* underlyingPtr = nullptr;
 
     {
-        Mjpeg::Frame frame = bufferPool->acquire();
+        Frame frame = bufferPool->acquire();
         underlyingPtr = frame.getBuffer();
         
         // Insert data using the captured pointer
@@ -248,7 +248,7 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
     } // Frame dies, buffer is cleared and returned to pool via recycleFrameBridge
 
     // Re-acquire to get the exact same buffer back
-    Mjpeg::Frame reusedFrame = bufferPool->acquire();
+    Frame reusedFrame = bufferPool->acquire();
     EXPECT_EQ(reusedFrame.getBuffer(), underlyingPtr) << "Pool did not return the recycled buffer";
     
     // Verify clear() actually wiped the user data but kept the prefix allocation
@@ -262,7 +262,7 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
 
 TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
     auto bufferPool = BufferPool::create();
-    Mjpeg::Frame frame = bufferPool->acquire();
+    Frame frame = bufferPool->acquire();
     auto* buffer = frame.getBuffer();
 
     std::vector<uint8_t> content = { 0x01, 0x02, 0x03, 0x04 };
@@ -281,7 +281,7 @@ TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
 
 TEST(BufferPoolTest, FrontOnEmptyBufferThrowsException) {
     auto bufferPool = BufferPool::create();
-    Mjpeg::Frame frame = bufferPool->acquire();
+    Frame frame = bufferPool->acquire();
 
     // The buffer is technically not "empty" vector-wise (it holds 128 bytes of prefix), 
     // but content-wise it is empty. front() should safely reject access.

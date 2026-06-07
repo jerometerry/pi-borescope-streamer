@@ -29,8 +29,8 @@ std::shared_ptr<BufferPool> BufferPool::create(const BufferPoolArgs& args) {
     return instance;
 }
 
-Mjpeg::Frame BufferPool::acquire() {
-    std::unique_ptr<Mjpeg::Buffer> buffer;
+Frame BufferPool::acquire() {
+    std::unique_ptr<Buffer> buffer;
 
     {
         MutexLock lock(poolMutex_);
@@ -41,13 +41,13 @@ Mjpeg::Frame BufferPool::acquire() {
     }
 
     if (!buffer) {
-        buffer = Mjpeg::Buffer::unique();
+        buffer = Buffer::unique();
         buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);
     }
 
-    return Mjpeg::Frame(buffer.release());
+    return Frame(buffer.release());
 }
 
 size_t BufferPool::getFreeBuffers() const {
@@ -55,7 +55,7 @@ size_t BufferPool::getFreeBuffers() const {
     return pool_.size();
 }
 
-void BufferPool::returnToPool(Mjpeg::Buffer* buffer) {
+void BufferPool::returnToPool(Buffer* buffer) {
     if (!buffer) {
         return;
     }
@@ -64,9 +64,9 @@ void BufferPool::returnToPool(Mjpeg::Buffer* buffer) {
 
     MutexLock lock(poolMutex_);
     if (pool_.size() < maxPoolSize_) {
-        pool_.push_back(std::unique_ptr<Mjpeg::Buffer>(buffer));
+        pool_.push_back(std::unique_ptr<Buffer>(buffer));
     } else {
-        std::unique_ptr<Mjpeg::Buffer> toDelete(buffer);
+        std::unique_ptr<Buffer> toDelete(buffer);
     }
 }
 
@@ -75,7 +75,7 @@ void BufferPool::initialize() {
     pool_.reserve(maxPoolSize_);
     
     for (size_t i = 0; i < initialPoolSize_; ++i) {
-        auto buffer = Mjpeg::Buffer::unique();
+        auto buffer = Buffer::unique();
         buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);
@@ -83,7 +83,7 @@ void BufferPool::initialize() {
     }
 }
 
-void BufferPool::recycleFrameBridge(void* context, Mjpeg::Buffer* buffer) {
+void BufferPool::recycleFrameBridge(void* context, Buffer* buffer) {
     auto* pool = static_cast<BufferPool*>(context);
     pool->returnToPool(buffer);
 }

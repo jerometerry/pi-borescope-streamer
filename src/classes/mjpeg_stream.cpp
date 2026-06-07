@@ -17,7 +17,7 @@
 
 MjpegStream::MjpegStream(
     std::shared_ptr<BufferPool> bufferPool, 
-    std::function<void(Mjpeg::Frame)> onFrameReady)
+    std::function<void(Frame)> onFrameReady)
     : bufferPool_(std::move(bufferPool)), 
       onFrameReady_(std::move(onFrameReady)) {
         inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);

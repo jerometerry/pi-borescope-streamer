@@ -33,7 +33,7 @@ public:
      */
     explicit MjpegStream(
         std::shared_ptr<BufferPool> bufferPool,
-        std::function<void(Mjpeg::Frame)> onFrameReady
+        std::function<void(Frame)> onFrameReady
     );
 
     ~MjpegStream() = default;
@@ -58,7 +58,7 @@ private:
     /**
      * @brief The workbench where we are currently stitching the chunks into a picture.
      */
-    Mjpeg::Frame activeFrame_;
+    Frame activeFrame_;
 
     /**
      * @brief The memory of what the current picture is supposed to look like.
@@ -78,7 +78,7 @@ private:
     /**
      * @brief Where to send finished video pictures.
      */
-    std::function<void(Mjpeg::Frame)> onFrameReady_;
+    std::function<void(Frame)> onFrameReady_;
 
     /**
      * @brief Snip out the exact picture and send it off.

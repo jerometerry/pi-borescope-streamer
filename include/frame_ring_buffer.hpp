@@ -14,11 +14,11 @@
 class FrameRingBuffer {
 public:
     explicit FrameRingBuffer(size_t size, const std::atomic<bool>& running);
-    void push(const std::shared_ptr<Mjpeg::Buffer>& frame);
-    std::shared_ptr<Mjpeg::Buffer> pop();
+    void push(const std::shared_ptr<Buffer>& frame);
+    std::shared_ptr<Buffer> pop();
 
 private:
-    std::vector<std::shared_ptr<Mjpeg::Buffer>> pool_;
+    std::vector<std::shared_ptr<Buffer>> pool_;
     size_t head_ = 0;
     size_t tail_ = 0;
     size_t capacity_;

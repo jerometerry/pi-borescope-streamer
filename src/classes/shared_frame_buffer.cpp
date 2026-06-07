@@ -6,12 +6,12 @@
 #include "shared_frame_buffer.hpp"
 #include "thread_safety_mutex.hpp"
 
-void SharedFrameBuffer::push(Mjpeg::Frame frame) {
+void SharedFrameBuffer::push(Frame frame) {
     if (!frame || frame->empty()) { 
         return;
     }
 
-    Mjpeg::Frame previousFrame;
+    Frame previousFrame;
 
     {
         MutexLock lock(activeMutex_);
@@ -25,7 +25,7 @@ void SharedFrameBuffer::push(Mjpeg::Frame frame) {
     }
 }
 
-Mjpeg::Frame SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
+Frame SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
     MutexLock lock(activeMutex_);
     outFrameId = frameId_;
     return frame_;

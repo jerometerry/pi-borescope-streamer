@@ -69,7 +69,7 @@ int main(int argc, const char* argv[]) {
     auto bufferPool = BufferPool::create();
 
     SharedFrameBuffer frameBuffer;
-    MjpegStream mjpegStream(bufferPool, [&frameBuffer](const Mjpeg::Frame& frame) {
+    MjpegStream mjpegStream(bufferPool, [&frameBuffer](const Frame& frame) {
         frameBuffer.push(frame);
     });
 

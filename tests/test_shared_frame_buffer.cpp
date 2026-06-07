@@ -15,7 +15,7 @@
 #include "shared_frame_buffer.hpp"
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
-    Mjpeg::Frame frame = bp->acquire();
+    Frame frame = bp->acquire();
     frame->insertContent(data);
     sfb.push(frame);
 };

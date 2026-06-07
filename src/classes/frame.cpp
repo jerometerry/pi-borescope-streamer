@@ -1,23 +1,23 @@
 #include "buffer.hpp"
 #include "frame.hpp"
 
-Mjpeg::Frame::Frame(Buffer* buffer) : buffer_(buffer) {
+Frame::Frame(Buffer* buffer) : buffer_(buffer) {
 	if (buffer_) {
 		buffer_->retain();
 	}
 }
 
-Mjpeg::Frame::~Frame() {
+Frame::~Frame() {
 	if (buffer_) { 
 		buffer_->release();
 	}
 }
 
-Mjpeg::Frame::Frame(Mjpeg::Frame&& other) noexcept : buffer_(other.buffer_)  {
+Frame::Frame(Frame&& other) noexcept : buffer_(other.buffer_)  {
 	other.buffer_ = nullptr;
 }
 
-Mjpeg::Frame& Mjpeg::Frame::operator=(Frame&& other) noexcept {
+Frame& Frame::operator=(Frame&& other) noexcept {
 	if (this != &other) {
 		if (buffer_) { 
 			buffer_->release();
@@ -28,13 +28,13 @@ Mjpeg::Frame& Mjpeg::Frame::operator=(Frame&& other) noexcept {
 	return *this;
 }
 
-Mjpeg::Frame::Frame(const Mjpeg::Frame& other) : buffer_(other.buffer_) {
+Frame::Frame(const Frame& other) : buffer_(other.buffer_) {
 	if (buffer_) {
 		buffer_->retain();
 	}
 }
 
-Mjpeg::Frame& Mjpeg::Frame::operator=(const Frame& other) {
+Frame& Frame::operator=(const Frame& other) {
 	if (this != &other) {
 		if (buffer_) { 
 			buffer_->release();
@@ -47,14 +47,14 @@ Mjpeg::Frame& Mjpeg::Frame::operator=(const Frame& other) {
 	return *this;
 }
 
-Mjpeg::Buffer* Mjpeg::Frame::getBuffer() const { 
+Buffer* Frame::getBuffer() const { 
 	return buffer_; 
 }
 
-Mjpeg::Buffer* Mjpeg::Frame::operator->() const { 
+Buffer* Frame::operator->() const { 
 	return buffer_; 
 }
 
-Mjpeg::Frame::operator bool() const { 
+Frame::operator bool() const { 
 	return buffer_ != nullptr; 
 }

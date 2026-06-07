@@ -23,18 +23,18 @@ public:
 
     static std::shared_ptr<BufferPool> create(const BufferPoolArgs& args);
     
-    Mjpeg::Frame acquire();
+    Frame acquire();
 
-    void returnToPool(Mjpeg::Buffer* buffer);
+    void returnToPool(Buffer* buffer);
     
     size_t getFreeBuffers() const;
 
 private:
     void initialize();
-    static void recycleFrameBridge(void* context, Mjpeg::Buffer* buffer);
+    static void recycleFrameBridge(void* context, Buffer* buffer);
     
     mutable Mutex poolMutex_;
-    std::vector<std::unique_ptr<Mjpeg::Buffer>> pool_ GUARDED_BY(poolMutex_);
+    std::vector<std::unique_ptr<Buffer>> pool_ GUARDED_BY(poolMutex_);
 
     const size_t maxPoolSize_;
     const size_t initialPoolSize_;

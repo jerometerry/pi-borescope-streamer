@@ -18,7 +18,7 @@
 
 class MockHandlers {
 public:
-    MOCK_METHOD(void, output, (Mjpeg::Frame frame));
+    MOCK_METHOD(void, output, (Frame frame));
 };
 
 class MjpegStreamTest : public ::testing::Test {
@@ -32,7 +32,7 @@ protected:
         bufferPool_ = BufferPool::create();
         stream_ = std::make_unique<MjpegStream>(
             bufferPool_,
-            [this](Mjpeg::Frame frame) { 
+            [this](Frame frame) { 
                 handler_.output(std::move(frame)); 
             }
         );

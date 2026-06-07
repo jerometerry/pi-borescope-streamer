@@ -34,7 +34,7 @@ MjpegServer::~MjpegServer() {
     std::cout << "[Network Core] Network engine cleanly terminated.\n";
 }
 
-std::string_view MjpegServer::buildMjpegResponse(Mjpeg::Buffer* frame) {
+std::string_view MjpegServer::buildMjpegResponse(Buffer* frame) {
     size_t size = frame->contentSize();
 
     // buffer has 128 bytes reserved for zero-byte allocations
@@ -126,7 +126,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
                         viewer.isLagging = false;
                     }
 
-                    Mjpeg::Buffer* rawBuffer = currentFrame.getBuffer();
+                    Buffer* rawBuffer = currentFrame.getBuffer();
 
                     auto payload = buildMjpegResponse(rawBuffer);
                     bool ok = res->write(payload);

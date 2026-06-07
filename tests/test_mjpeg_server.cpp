@@ -66,15 +66,15 @@ protected:
         frameBuffer_->push(frame);
     }
 
-    void injectMockVideoFrame(const Mjpeg::Frame& frame) {
+    void injectMockVideoFrame(const Frame& frame) {
         frameBuffer_->push(frame);
     }
 
-    Mjpeg::Frame acquireFrame() {
+    Frame acquireFrame() {
         return bufferPool_->acquire();
     }
 
-    std::string_view buildMjpegResponse(Mjpeg::Buffer *buffer) {
+    std::string_view buildMjpegResponse(Buffer *buffer) {
         return server_->buildMjpegResponse(buffer);
     }
 
