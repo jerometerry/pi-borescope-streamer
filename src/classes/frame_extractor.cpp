@@ -8,6 +8,8 @@
 #include <vector>
 #include "constants.hpp"
 #include "frame_extractor.hpp"
+#include "packet_header.hpp"
+#include "payload_header.hpp"
 
 void FrameExtractor::printPaddingDump(const std::vector<uint8_t>& data, Padding padding) {
     size_t start = padding.start;

@@ -12,6 +12,8 @@
 #include "constants.hpp"
 #include "frame.hpp"
 #include "mjpeg_stream.hpp"
+#include "packet_header.hpp"
+#include "payload_header.hpp"
 
 MjpegStream::MjpegStream(
     std::shared_ptr<BufferPool> bufferPool, 
