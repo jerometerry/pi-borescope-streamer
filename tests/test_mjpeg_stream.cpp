@@ -11,7 +11,6 @@
 #include <vector>
 #include "buffer_pool.hpp"
 #include "constants.hpp"
-#include "data_structures.hpp"
 #include "frame.hpp"
 #include "mjpeg_stream.hpp"
 

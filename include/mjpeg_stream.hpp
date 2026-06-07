@@ -5,7 +5,7 @@
 #include <functional>
 #include <span>
 #include <vector>
-#include "data_structures.hpp"
+#include "constants.hpp"
 #include "frame.hpp"
 
 class BufferPool;

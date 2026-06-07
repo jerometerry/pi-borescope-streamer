@@ -12,7 +12,7 @@
 #include <vector>
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
-#include "data_structures.hpp"
+#include "constants.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
 #include "frame.hpp"

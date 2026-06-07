@@ -8,7 +8,6 @@
 #include <vector>
 #include <span>
 #include "constants.hpp"
-#include "data_structures.hpp"
 #include "device_info.hpp"
 #include "usb_camera.hpp"
 

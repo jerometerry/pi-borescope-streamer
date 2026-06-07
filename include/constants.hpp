@@ -1,9 +1,15 @@
 #pragma once
 
+#include <atomic>
+#include <bit>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
 #include <utility>
+#include <vector>
+#include "packet_header.hpp"
+#include "payload_header.hpp"
 
 namespace UsbProtocol {
     /**
@@ -178,4 +184,37 @@ namespace HttpHeaders {
      * @brief The suffix for MJPEG chunks
      */
     inline constexpr std::string_view MJPEG_CHUNK_SUFFIX = "\r\n\r\n";
+}
+
+namespace uWS { template <bool SSL> struct HttpResponse; }
+
+namespace Web {
+    struct ViewerState {
+        uWS::HttpResponse<false>* res{};
+        uint32_t lastSentFrameId{0};
+        bool isClosed{false};
+
+        bool isLagging{false};
+        uint32_t lagStartFrameId{0};
+    };
+}
+
+namespace Arguments {
+	enum class ParseResult : std::uint8_t {
+		Success,
+		HelpRequested,
+		Error
+	};
+}
+
+namespace USB {
+    enum class TransferStatus :std::uint8_t {
+        Completed,
+        Disconnected,
+        Error
+    };
+
+    inline constexpr size_t PACKET_HEADER_SIZE = sizeof(USB::PacketHeader);
+    inline constexpr size_t PAYLOAD_HEADER_SIZE = sizeof(USB::PayloadHeader);
+    inline constexpr size_t TOTAL_HEADER_SIZE = PACKET_HEADER_SIZE + PAYLOAD_HEADER_SIZE;
 }

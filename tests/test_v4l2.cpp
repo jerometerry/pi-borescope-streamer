@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#include "data_structures.hpp"
+#include "constants.hpp"
 #include "v4l2.hpp"
 
 using ::testing::ThrowsMessage;

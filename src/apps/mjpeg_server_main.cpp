@@ -25,7 +25,7 @@
 #include <thread>
 #include <vector>
 #include "buffer_pool.hpp"
-#include "data_structures.hpp"
+#include "constants.hpp"
 #include "device_info.hpp"
 #include "frame.hpp"
 #include "shared_frame_buffer.hpp"

@@ -19,7 +19,6 @@
 #include <vector>
 #include "buffer.hpp"
 #include "constants.hpp"
-#include "data_structures.hpp"
 #include "device_finder.hpp"
 #include "frame.hpp"
 #include "index_html.hpp"

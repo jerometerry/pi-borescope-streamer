@@ -3,7 +3,7 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
-#include "data_structures.hpp"
+#include "constants.hpp"
 #include "v4l2.hpp"
 
 namespace V4L2 {

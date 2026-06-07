@@ -3,7 +3,6 @@
 #include <string>
 #include <cstddef>
 #include "constants.hpp"
-#include "data_structures.hpp"
 
 namespace V4L2 {
     /**
