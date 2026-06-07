@@ -7,15 +7,25 @@
 #include "constants.hpp"
 #include "mjpeg_data_structures.hpp"
 
-std::shared_ptr<BufferPool> BufferPool::create() {
-    auto instance = std::make_shared<BufferPool>(PrivateConstructTag{});
-    instance->initialize();
-    return instance;
+BufferPool::BufferPool(const BufferPoolArgs& args) 
+    : maxPoolSize_(args.maxPoolSize), 
+      initialPoolSize_(args.initialPoolSize), 
+      bufferReserveSize_(args.bufferReserveSize) {
 }
 
-static void recycleFrameBridge(void* context, Mjpeg::Buffer* buffer) {
-    auto* pool = static_cast<BufferPool*>(context);
-    pool->returnToPool(buffer);
+std::shared_ptr<BufferPool> BufferPool::create() {
+    BufferPoolArgs args {
+        BufferPoolConfig::MAX_POOL_SIZE,
+        BufferPoolConfig::INITIAL_POOL_SIZE,
+        Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES
+    };
+    return create(args);
+}
+
+std::shared_ptr<BufferPool> BufferPool::create(const BufferPoolArgs& args) {
+    auto instance = std::make_shared<BufferPool>(args);
+    instance->initialize();
+    return instance;
 }
 
 Mjpeg::Frame BufferPool::acquire() {
@@ -30,7 +40,7 @@ Mjpeg::Frame BufferPool::acquire() {
 
     if (!buffer) {
         buffer = std::make_unique<Mjpeg::Buffer>();
-        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);
     }
@@ -43,21 +53,6 @@ size_t BufferPool::getFreeBuffers() const {
     return pool_.size();
 }
 
-void BufferPool::initialize() {
-    pool_.reserve(BufferPoolConfig::MAX_POOL_SIZE);
-    
-    for (int i = 0; i < BufferPoolConfig::INITIAL_POOL_SIZE; ++i) {
-
-        auto buffer = std::make_unique<Mjpeg::Buffer>();
-        buffer->reserve(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-
-        buffer->setPoolContext(this);
-        buffer->setReturnCallback(recycleFrameBridge);
-
-        pool_.push_back(std::move(buffer));
-    }
-}
-
 void BufferPool::returnToPool(Mjpeg::Buffer* buffer) {
     if (!buffer) {
         return;
@@ -66,9 +61,26 @@ void BufferPool::returnToPool(Mjpeg::Buffer* buffer) {
     buffer->clear(); 
 
     std::scoped_lock lock(poolMutex_);
-    if (pool_.size() < BufferPoolConfig::MAX_POOL_SIZE) {
+    if (pool_.size() < maxPoolSize_) {
         pool_.push_back(std::unique_ptr<Mjpeg::Buffer>(buffer));
     } else {
         std::unique_ptr<Mjpeg::Buffer> toDelete(buffer);
     }
+}
+
+void BufferPool::initialize() {
+    pool_.reserve(maxPoolSize_);
+    
+    for (size_t i = 0; i < initialPoolSize_; ++i) {
+        auto buffer = std::make_unique<Mjpeg::Buffer>();
+        buffer->reserve(bufferReserveSize_);
+        buffer->setPoolContext(this);
+        buffer->setReturnCallback(recycleFrameBridge);
+        pool_.push_back(std::move(buffer));
+    }
+}
+
+void BufferPool::recycleFrameBridge(void* context, Mjpeg::Buffer* buffer) {
+    auto* pool = static_cast<BufferPool*>(context);
+    pool->returnToPool(buffer);
 }

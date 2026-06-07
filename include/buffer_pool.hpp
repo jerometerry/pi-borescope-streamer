@@ -7,13 +7,18 @@
 #include "mjpeg_data_structures.hpp"
 
 class BufferPool : public std::enable_shared_from_this<BufferPool> {
-private:
-    struct PrivateConstructTag {};
-
 public:
-    explicit BufferPool(PrivateConstructTag) {}
+    struct BufferPoolArgs {
+        size_t maxPoolSize;
+        size_t initialPoolSize;
+        size_t bufferReserveSize;
+    };
+
+    explicit BufferPool(const BufferPoolArgs& args);
     
     static std::shared_ptr<BufferPool> create();
+
+    static std::shared_ptr<BufferPool> create(const BufferPoolArgs& args);
     
     Mjpeg::Frame acquire();
 
@@ -23,8 +28,12 @@ public:
 
 private:
     void initialize();
-    void release(std::unique_ptr<std::vector<uint8_t>> buffer);
+    static void recycleFrameBridge(void* context, Mjpeg::Buffer* buffer);
     
     mutable std::mutex poolMutex_;
     std::vector<std::unique_ptr<Mjpeg::Buffer>> pool_;
+
+    const size_t maxPoolSize_;
+    const size_t initialPoolSize_;
+    const size_t bufferReserveSize_;
 };

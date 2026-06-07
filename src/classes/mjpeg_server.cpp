@@ -34,12 +34,13 @@ MjpegServer::~MjpegServer() {
     std::cout << "[Network Core] Network engine cleanly terminated.\n";
 }
 
-std::string_view MjpegServer::buildMjpegResponse(Mjpeg::Buffer* buffer, size_t size) {
+std::string_view MjpegServer::buildMjpegResponse(Mjpeg::Buffer* frame) {
+    size_t size = frame->contentSize();
 
     // buffer has 128 bytes reserved for zero-byte allocations
     // startPtr is offset 128 bytes from the start of the allocated buffer
-    char* startPtt = reinterpret_cast<char*>(buffer->mutable_view().data());
-    char* cursor = startPtt;
+    char* startPtr = reinterpret_cast<char*>(frame->getMutableContentSlice().data());
+    char* cursor = startPtr;
     
     constexpr char newLines[4] = {'\r', '\n', '\r', '\n'};
 
@@ -67,7 +68,7 @@ std::string_view MjpegServer::buildMjpegResponse(Mjpeg::Buffer* buffer, size_t s
     cursor -= prefix.size();
     std::memcpy(cursor, prefix.data(), prefix.size());
 
-    size_t totalPayloadSize = (startPtt - cursor) + size;
+    size_t totalPayloadSize = (startPtr - cursor) + size;
 
     return {cursor, totalPayloadSize};
 }
@@ -126,9 +127,8 @@ void MjpegServer::onTimer(us_timer_t *t) {
                     }
 
                     Mjpeg::Buffer* rawBuffer = currentFrame.getBuffer();
-                    size_t payloadSize = rawBuffer->size();
 
-                    auto payload = buildMjpegResponse(rawBuffer, payloadSize);
+                    auto payload = buildMjpegResponse(rawBuffer);
                     bool ok = res->write(payload);
                     if (!ok) {
                         std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "

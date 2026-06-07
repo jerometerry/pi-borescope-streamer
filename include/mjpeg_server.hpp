@@ -36,7 +36,7 @@ public:
 
     void start();
 
-    static std::string_view buildMjpegResponse(Mjpeg::Buffer* buffer, size_t size);
+    static std::string_view buildMjpegResponse(Mjpeg::Buffer* frame);
 
 private:
     const int port_;

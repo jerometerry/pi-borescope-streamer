@@ -75,7 +75,7 @@ cmake --build --preset docs-debug
 ```bash
 cmake . --preset debug --fresh
 cmake --build --preset debug --target run_project_tests
-ctest --test-dir out/build/debug
+ctest --test-dir out/build/debug --output-on-failure
 ```
 
 **For running tests / generating code coverage report**

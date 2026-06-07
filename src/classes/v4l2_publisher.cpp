@@ -3,10 +3,9 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <cstdint>
 #include <iostream>
+#include <span>
 #include <string>
-#include <vector>
 #include "mjpeg_data_structures.hpp"
 #include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
@@ -50,7 +49,7 @@ V4l2Publisher::~V4l2Publisher() {
 
 void V4l2Publisher::writeFrame(const Mjpeg::Frame& frame) {
     if (v4l2_fd_ >= 0) {
-        ssize_t bytesWritten = write(v4l2_fd_, frame->view().data(), frame->size());
+        ssize_t bytesWritten = write(v4l2_fd_, frame->getContentSlice().data(), frame->contentSize());
         if (bytesWritten < 0) {
             std::cerr << "[V4L2 Core] Warning: Failed to write frame to loopback device.\n";
         }

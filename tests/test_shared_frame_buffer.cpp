@@ -1,8 +1,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <span>
 #include <string>
 #include <thread>
@@ -15,7 +17,7 @@
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
     Mjpeg::Frame frame = bp->acquire();
-    frame->insert(data);
+    frame->insertContent(data);
     sfb.push(frame);
 };
 
@@ -51,7 +53,7 @@ TEST(SharedFrameBufferTest, DereferencingEmptyFrameCausesDeath) {
     auto activeFrame = frameBuffer.getLatestFrame(frameId);
 
     EXPECT_DEATH({
-        activeFrame->size(); 
+        activeFrame->contentSize(); 
     }, "");
 }
 
@@ -66,11 +68,11 @@ TEST(SharedFrameBufferTest, frameBuffer) {
     auto currentFrame = frameBuffer.getLatestFrame(currentId);
 
     EXPECT_EQ(currentId, 1);
-    ASSERT_NE(currentFrame->view().data(), nullptr);
+    ASSERT_NE(currentFrame->getContentSlice().data(), nullptr);
 
-    EXPECT_EQ(currentFrame->size(), frame.size());
+    EXPECT_EQ(currentFrame->contentSize(), frame.size());
 
-    std::span<const uint8_t> actualPayload = currentFrame->view();
+    std::span<const uint8_t> actualPayload = currentFrame->getContentSlice();
     std::span<const uint8_t> expectedPayload(frame.data(), frame.size());
     bool areEqual = std::equal(
         actualPayload.begin(), actualPayload.end(), 
@@ -98,8 +100,8 @@ TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
     
     EXPECT_EQ(initialId, nextId) << "Frame ID should not increment for empty frames.";
 
-    std::span<const uint8_t> initialPayload = initialFrame->view();
-    std::span<const uint8_t> nextPayload = nextFrame->view();
+    std::span<const uint8_t> initialPayload = initialFrame->getContentSlice();
+    std::span<const uint8_t> nextPayload = nextFrame->getContentSlice();
 
     EXPECT_THAT(
         initialPayload, 
@@ -171,26 +173,4 @@ TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
 
     EXPECT_GT(totalFramesConsumed.load(std::memory_order_relaxed), 0) 
         << "Consumers starved or pipeline failed to serve frames.";
-}
-
-TEST(SharedFrameBufferTest, BoundedPoolGrowth) {
-    auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer;
-
-    std::vector<Mjpeg::Frame> slowConsumers;
-    std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
-
-    constexpr int SPIKE_SIZE = 10;
-
-    for (int i = 0; i < SPIKE_SIZE; ++i) {
-        pushFrame(frameBuffer, bufferPool, dummyFrame);
-        uint32_t id = 0;
-        slowConsumers.push_back(frameBuffer.getLatestFrame(id));
-    }
-
-    slowConsumers.clear();
-
-    size_t currentPoolSize = bufferPool->getFreeBuffers();
-    
-    EXPECT_EQ(currentPoolSize, BufferPoolConfig::MAX_POOL_SIZE);
 }

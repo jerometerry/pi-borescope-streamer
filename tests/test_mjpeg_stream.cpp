@@ -60,7 +60,7 @@ MATCHER_P(FrameDataEq, expectedOutput, "Frame internal data matches expected out
 
     return ::testing::ExplainMatchResult(
         ::testing::ElementsAreArray(expectedOutput), 
-        arg->view(), 
+        arg->getContentSlice(), 
         result_listener
     );
 }

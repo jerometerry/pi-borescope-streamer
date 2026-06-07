@@ -101,7 +101,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
                 inputBuffer_.data() + payloadStart, 
                 payloadSize
             );
-            activeFrame_->insert(toInsert);
+            activeFrame_->insertContent(toInsert);
         }
 
         i += totalPacketSize;
@@ -123,7 +123,7 @@ void MjpegStream::outputFrame() {
         return;
     }
 
-    auto buffer = activeFrame_->view();
+    auto buffer = activeFrame_->getContentSlice();
     size_t soiOffset = std::string::npos;
     size_t eoiOffset = std::string::npos;
 

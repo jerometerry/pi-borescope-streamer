@@ -6,21 +6,25 @@
 #include <vector>
 
 namespace Mjpeg {
-    static constexpr size_t K_PREFIX_OFFSET = 128;
-
     struct Buffer;
     using ReturnCallback = void(*)(void*, Buffer*);
 
     struct Buffer {
+    public:
+        static constexpr size_t PREFIX_SIZE = 128;
+
+        static size_t prefixSize() {
+            return PREFIX_SIZE;
+        }
     private:
         std::atomic<int> refCount_{0};
         std::vector<uint8_t> data_;
         ReturnCallback returnCallback_{nullptr};
         void* poolContext_{nullptr};        
 
-        void ensure_prefix() {
-            if (data_.size() < K_PREFIX_OFFSET) {
-                data_.resize(K_PREFIX_OFFSET);
+        void ensurePrefixReserved() {
+            if (data_.size() < prefixSize()) {
+                data_.resize(prefixSize());
             }
         }
 
@@ -30,7 +34,7 @@ namespace Mjpeg {
 
     public:
         Buffer() {
-            ensure_prefix();
+            ensurePrefixReserved();
         }
 
         void retain() {
@@ -46,29 +50,29 @@ namespace Mjpeg {
         }
 
         void clear() {
-            data_.resize(K_PREFIX_OFFSET);
+            data_.resize(prefixSize());
         }
 
         bool empty() const {
-            return data_.size() <= K_PREFIX_OFFSET;
+            return data_.size() <= prefixSize();
         }
 
         void reserve(size_t size) {
-            data_.reserve(K_PREFIX_OFFSET + size);
+            data_.reserve(prefixSize() + size);
         }
 
         void trim(size_t startOffset, size_t endOffset) {
-            if (endOffset > size() || startOffset > endOffset) {
+            if (endOffset > contentSize() || startOffset > endOffset) {
                 throw std::out_of_range("Invalid trim boundaries");
             }
 
-            size_t internalEnd = K_PREFIX_OFFSET + endOffset;
-            if (internalEnd < data_.size()) {
+            size_t internalEnd = prefixSize() + endOffset;
+            if (internalEnd < totalSize()) {
                 data_.erase(data_.begin() + internalEnd, data_.end());
             }
 
             if (startOffset > 0) {
-                size_t internalStart = K_PREFIX_OFFSET;
+                size_t internalStart = prefixSize();
                 data_.erase(data_.begin() + internalStart, data_.begin() + internalStart + startOffset);
             }
         }
@@ -81,32 +85,48 @@ namespace Mjpeg {
             returnCallback_ = callback;
         }
 
+        void insertContent(std::span<const uint8_t> newData) {
+            ensurePrefixReserved();
+            data_.insert(data_.end(), newData.begin(), newData.end());
+        }
+
         uint8_t front() const {
             if (empty()) {
                 throw std::out_of_range("Buffer is empty");
             }
-            return data_[K_PREFIX_OFFSET];
+            return data_[prefixSize()];
         }
 
-        size_t size() const {
-            return data_.size() - K_PREFIX_OFFSET;
+        size_t contentSize() const {
+            return data_.size() - prefixSize();
         }
 
-        std::span<uint8_t> mutable_view() {
-            return { data_.data() + K_PREFIX_OFFSET, size() };
+        size_t totalSize() const {
+            return data_.size();
         }
 
-        std::span<const uint8_t> view() const {
-            return { data_.data() + K_PREFIX_OFFSET, size() };
+        size_t totalCapacity() const {
+            return data_.capacity();
         }
 
-        void insert(std::span<const uint8_t> newData) {
-            ensure_prefix();
-            data_.insert(data_.end(), newData.begin(), newData.end());
+        std::span<uint8_t> getMutableContentSlice() {
+            return { data_.data() + prefixSize(), contentSize() };
         }
 
-        std::span<uint8_t> internal_raw_prefix() {
-            return { data_.data(), K_PREFIX_OFFSET };
+        std::span<const uint8_t> getContentSlice() const {
+            return { data_.data() + prefixSize(), contentSize() };
+        }
+
+        std::span<const uint8_t> getPrefixSlice() const {
+            return { data_.data(), prefixSize() };
+        }
+
+        std::span<uint8_t> getMutablePrefixSlice() {
+            return { data_.data(), prefixSize() };
+        }
+
+        std::span<const uint8_t> all() const {
+            return { data_.data(), data_.size() };
         }
     };
 

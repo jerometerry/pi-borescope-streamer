@@ -9,10 +9,12 @@
 #include <cctype>
 #include <chrono>
 #include <compare>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 #include "buffer_pool.hpp"
@@ -60,7 +62,7 @@ protected:
 
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
         auto frame = bufferPool_->acquire();
-        frame->insert(data);
+        frame->insertContent(data);
         frameBuffer_->push(frame);
     }
 
@@ -72,8 +74,8 @@ protected:
         return bufferPool_->acquire();
     }
 
-    std::string_view buildMjpegResponse(Mjpeg::Buffer *buffer, size_t size) {
-        return server_->buildMjpegResponse(buffer, size);
+    std::string_view buildMjpegResponse(Mjpeg::Buffer *buffer) {
+        return server_->buildMjpegResponse(buffer);
     }
 
     std::string fetchFromLocalhost(const std::string& route) {
@@ -197,9 +199,9 @@ TEST_F(MjpegServerTest, BuildMjpegResponse) {
     auto frame = acquireFrame();
     auto* buffer = frame.getBuffer();
     std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
-    frame->insert(payload);
+    frame->insertContent(payload);
 
-    auto response = buildMjpegResponse(buffer, payload.size());
+    auto response = buildMjpegResponse(buffer);
 
     EXPECT_EQ(response, 
         "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: 4\r\n\r\n\xDE\xAD\xBE\xEF"
