@@ -1,8 +1,9 @@
 #include <cstdint>
-#include <mutex>
 #include <utility>
-#include "shared_frame_buffer.hpp"
+
 #include "mjpeg_data_structures.hpp"
+#include "shared_frame_buffer.hpp"
+#include "thread_safety_mutex.hpp"
 
 void SharedFrameBuffer::push(Mjpeg::Frame frame) {
     if (!frame || frame->empty()) { 
@@ -10,9 +11,13 @@ void SharedFrameBuffer::push(Mjpeg::Frame frame) {
     }
 
     Mjpeg::Frame previousFrame;
+
     {
-        std::scoped_lock lock(activeMutex_);
+        MutexLock lock(activeMutex_);
         frameId_++;
+
+        // Delay destruction of the previous frame until after activeMutex_ lock is released. 
+        // Prevents a potential deadlock, if this is the only remaining reference.
         previousFrame = std::move(frame_);
  
         frame_ = std::move(frame);
@@ -20,7 +25,7 @@ void SharedFrameBuffer::push(Mjpeg::Frame frame) {
 }
 
 Mjpeg::Frame SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
-    std::scoped_lock lock(activeMutex_);
+    MutexLock lock(activeMutex_);
     outFrameId = frameId_;
     return frame_;
 }

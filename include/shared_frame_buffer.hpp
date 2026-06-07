@@ -1,8 +1,11 @@
 #pragma once
 #include <cstdint>
 #include <memory>
-#include <mutex>
+
 #include "mjpeg_data_structures.hpp"
+#include "thread_safety.hpp"
+#include "thread_safety_mutex.hpp"
+
 class BufferPool;
 
 namespace Mjpeg {
@@ -16,8 +19,8 @@ public:
     Mjpeg::Frame getLatestFrame(uint32_t& outFrameId) const;
 
 private:
-    mutable std::mutex activeMutex_;
-    Mjpeg::Frame frame_;
+    mutable Mutex activeMutex_;
 
-    uint32_t frameId_{0};    
+    Mjpeg::Frame frame_ GUARDED_BY(activeMutex_);
+    uint32_t frameId_ GUARDED_BY(activeMutex_){0};
 };

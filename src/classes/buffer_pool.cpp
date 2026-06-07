@@ -1,12 +1,10 @@
 #include <cstddef>
 #include <memory>
-#include <mutex>
 #include <utility>
 #include <vector>
 #include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "mjpeg_data_structures.hpp"
-#include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 
 BufferPool::BufferPool(const BufferPoolArgs& args) 

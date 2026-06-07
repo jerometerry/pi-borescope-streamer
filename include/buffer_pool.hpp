@@ -4,6 +4,7 @@
 #include <memory>
 #include <mutex>
 #include <vector>
+
 #include "mjpeg_data_structures.hpp"
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
