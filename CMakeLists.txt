@@ -85,7 +85,10 @@ if(IWYU_EXE)
                 "-Xiwyu" "--no_default_mappings"
             )
         endif()
-        list(APPEND IWYU_ARGS "-Xiwyu" "--no_fwd_decls")
+        list(APPEND IWYU_ARGS 
+            "-Xiwyu" "--no_fwd_decls"
+            "-cc1" "-Wno-everything"
+        )
     endif()
 
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_ARGS}")
