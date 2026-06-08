@@ -3,7 +3,7 @@
 #include <libusb.h>
 #include <string>
 #include <vector>
-#include "device_info.hpp"
+#include "usb_device_info.hpp"
 
 class UsbContext;
 
@@ -14,7 +14,7 @@ class UsbContext;
  * is plugged in against our list of known endoscopes, and hands back the exact coordinates 
  * needed to connect.
  */
-namespace DeviceFinder {
+namespace UsbDeviceFinder {
     /**
      * @brief Scan the motherboard and return the ID badges for absolutely everything plugged in.
      * @details Useful for debugging if you want to see your keyboard, mouse, and camera all at once.
