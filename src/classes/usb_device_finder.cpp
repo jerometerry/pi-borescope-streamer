@@ -3,7 +3,9 @@
 #include <cstddef>
 #include <span>
 #include <string>
+// IWYU pragma: begin_exports
 #include <format>
+// IWYU pragma: end_exports
 #include <vector>
 #include "constants.hpp"
 #include "usb_context.hpp"
