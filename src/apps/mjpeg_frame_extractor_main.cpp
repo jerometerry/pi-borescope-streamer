@@ -17,7 +17,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include "frame_extractor.hpp"
+#include "mjpeg_frame_extractor.hpp"
 
 int main(int argc, const char* argv[]) {
     try {
@@ -52,7 +52,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "File size: " << fileData.size() << '\n';
 
-        FrameExtractor::extractFrames(fileData);
+        MjpegFrameExtractor::extractFrames(fileData);
 
         return EXIT_SUCCESS;
 
