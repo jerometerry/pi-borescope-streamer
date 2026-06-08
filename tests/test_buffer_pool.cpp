@@ -17,15 +17,15 @@
 #include "intrusive_ptr.hpp"
 #include "mjpeg_frame_queue.hpp"
 
-static void pushFrame (MjpegFrameQueue& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
+static void pushFrame (MjpegFrameQueue& q, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
     BufferPtr frame = bp->borrow();
     frame->insertContent(data);
-    sfb.push(frame);
+    q.push(frame);
 };
 
 TEST(BufferPoolTest, BoundedPoolGrowth) {
     auto bufferPool = BufferPool::create();
-    MjpegFrameQueue frameBuffer;
+    MjpegFrameQueue frameQueue;
 
     std::vector<BufferPtr> slowConsumers;
     std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
@@ -33,9 +33,9 @@ TEST(BufferPoolTest, BoundedPoolGrowth) {
     constexpr int SPIKE_SIZE = 10;
 
     for (int i = 0; i < SPIKE_SIZE; ++i) {
-        pushFrame(frameBuffer, bufferPool, dummyFrame);
+        pushFrame(frameQueue, bufferPool, dummyFrame);
         uint32_t id = 0;
-        slowConsumers.push_back(frameBuffer.pop(id));
+        slowConsumers.push_back(frameQueue.pop(id));
     }
 
     slowConsumers.clear();

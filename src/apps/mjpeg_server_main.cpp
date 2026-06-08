@@ -37,11 +37,11 @@
 
 namespace {
     constexpr int DEFAULT_PORT = 8080;
-    std::atomic<bool> globalRunning{true};
+    std::atomic<bool> running{true};
 }
 
 void signalHandler(int) {
-    globalRunning.store(false, std::memory_order_release);
+    running.store(false, std::memory_order_release);
 }
 
 int main(int argc, const char* argv[]) {
@@ -115,44 +115,45 @@ int main(int argc, const char* argv[]) {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
         
-        auto bufferPool = BufferPool::create();
+        auto pool = BufferPool::create();
 
         // MjpegFrameQueue HAS to be initialized after buffer pool!
         // Otherwise it will go out of scope before incoming mjpeg stream completes.
-        MjpegFrameQueue frameQueue;
-        MjpegStream mjpegStream(bufferPool, [&frameQueue](const BufferPtr& frame) {
-            frameQueue.push(frame);
+        MjpegFrameQueue queue;
+        MjpegStream stream(pool, [&queue](const BufferPtr& frame) {
+            queue.push(frame);
         });
 
-        auto usbRouter = [&mjpegStream](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
-            if (status == USB::TransferStatus::Completed) {
+        auto transfer = [&stream](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
+            if (status == UsbTransferStatus::Completed) {
                 if (!payload.empty()) {
-                    mjpegStream.send(payload);
+                    stream.send(payload);
                 }
                 return true;
             }
-            return status != USB::TransferStatus::Disconnected; 
+            return status != UsbTransferStatus::Disconnected; 
         };
-        UsbDriver<decltype(usbRouter)> usbDriver(usbRouter, &globalRunning);
+        UsbDriver<decltype(transfer)> driver(transfer, &running);
 
-        MjpegServer server(port, globalRunning, [&frameQueue](uint32_t& id) {
-            return frameQueue.pop(id);
-        });
+        auto source = [&queue](uint32_t& id) {
+            return queue.pop(id);
+        };
+        MjpegServer server(port, running, source);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 
-        usbDriver.start(camera);
+        driver.start(camera);
         server.start();
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
         
-        while (globalRunning.load(std::memory_order_relaxed)) {
+        while (running.load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
         std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
 
-        usbDriver.stop();
+        driver.stop();
         
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception in application core: " << e.what() << "\n";

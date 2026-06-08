@@ -152,7 +152,7 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
     int frameCount = 0;
     int lastFrameId = -1;
 
-    while (i + USB::TOTAL_USB_HEADER_SIZE <= fileData.size()) {
+    while (i + TOTAL_USB_HEADER_SIZE <= fileData.size()) {
 
         const UsbPacketHeader* header = 
             reinterpret_cast<const UsbPacketHeader*>(
@@ -192,7 +192,7 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
             continue;
         }
 
-        size_t packetSize = USB::USB_PACKET_HEADER_SIZE + header->getLength();
+        size_t packetSize = USB_PACKET_HEADER_SIZE + header->getLength();
         if (i + packetSize > fileData.size()) {
             std::cout << "Reached incomplete hardware block at end of file. Stopping.\n";
             break; 
@@ -200,7 +200,7 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
 
         const UsbPayloadHeader* meta = 
             reinterpret_cast<const UsbPayloadHeader*>(
-                &fileData[i + USB::USB_PACKET_HEADER_SIZE]
+                &fileData[i + USB_PACKET_HEADER_SIZE]
             );
 
         if (lastFrameId != -1 && meta->getFrameId() != lastFrameId) {
@@ -251,8 +251,8 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
         lastFrameId = meta->getFrameId();
 
         if (!meta->hasGravitySensor() && meta->getOtherFlags() == 0 && meta->getCameraNumber() < 2) {
-            size_t payloadStart = i + USB::TOTAL_USB_HEADER_SIZE;
-            size_t payloadSize = packetSize - USB::TOTAL_USB_HEADER_SIZE;
+            size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
+            size_t payloadSize = packetSize - TOTAL_USB_HEADER_SIZE;
             
             currentFrame.insert(
                 currentFrame.end(), 

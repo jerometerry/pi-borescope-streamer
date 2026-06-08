@@ -67,27 +67,27 @@ int main(int argc, const char* argv[]) {
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
-    auto bufferPool = BufferPool::create();
+    auto pool = BufferPool::create();
 
     // MjpegFrameQueue HAS to be initialized after BufferPool!
     // Prevents segfaults if MjpegFrameQueue goes out of scope before program terminates. 
-    MjpegFrameQueue frameQueue;
-    MjpegStream mjpegStream(bufferPool, [&frameQueue](const BufferPtr& frame) {
-        frameQueue.push(frame);
+    MjpegFrameQueue queue;
+    MjpegStream stream(pool, [&queue](const BufferPtr& frame) {
+        queue.push(frame);
     });
 
-    auto usbRouter = [&mjpegStream](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
-        if (status == USB::TransferStatus::Completed) {
+    auto transfer = [&stream](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
+        if (status == UsbTransferStatus::Completed) {
             if (!payload.empty()) {
-                mjpegStream.send(payload);
+                stream.send(payload);
             }
             return true;
         }
-        return status != USB::TransferStatus::Disconnected; 
+        return status != UsbTransferStatus::Disconnected; 
     };
 
-    UsbDriver<decltype(usbRouter)> usbDriver(usbRouter, &running);
-    usbDriver.start(camera);
+    UsbDriver<decltype(transfer)> driver(transfer, &running);
+    driver.start(camera);
 
     V4l2Publisher publisher(config);
 
@@ -97,7 +97,7 @@ int main(int argc, const char* argv[]) {
 
     while (running.load(std::memory_order_relaxed)) {
         uint32_t currentFrameId = 0;
-        auto currentFrame = frameQueue.pop(currentFrameId);
+        auto currentFrame = queue.pop(currentFrameId);
 
         if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
             publisher.writeFrame(currentFrame);
@@ -107,7 +107,7 @@ int main(int argc, const char* argv[]) {
         }
     }
 
-    usbDriver.stop();
+    driver.stop();
     
     std::cout << "[System Termination] V4L2 daemon exited cleanly.\n";
     return EXIT_SUCCESS;

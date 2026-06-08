@@ -24,11 +24,11 @@
 #include "usb_device_info.hpp"
 
 namespace {
-    static std::atomic<bool> keepRunning{true};
+    static std::atomic<bool> running{true};
 }
 
 void signalHandler(int /*signum*/) {
-    keepRunning = false;
+    running = false;
 }
 
 bool selectCamera(UsbDeviceInfo& cameraInfo) {
@@ -78,7 +78,7 @@ int main() {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(cameraInfo.bus)
                   << " Address " << static_cast<int>(cameraInfo.address) << "...\n";
 
-        return MjpegStreamCapture::capture(keepRunning, cameraInfo);
+        return MjpegStreamCapture::capture(running, cameraInfo);
 
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";

@@ -47,13 +47,20 @@ find_program(CPPCHECK_EXE NAMES "cppcheck"
           "/usr/local/bin"
 )
 if(CPPCHECK_EXE)
-    set(CMAKE_CXX_CPPCHECK "${CPPCHECK_EXE}" 
-        "--enable=all" 
-        "--inconclusive" 
-        "--inline-suppr"
-        "--check-level=exhaustive"
-        "--suppress=missingIncludeSystem"
-        "--suppress=unmatchedSuppression"
+    add_custom_target(run_cppcheck
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build"
+        COMMAND "${CPPCHECK_EXE}"
+            --project=${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json
+            --cppcheck-build-dir=${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build
+            --enable=all
+            --inconclusive
+            --inline-suppr
+            --check-level=exhaustive
+            --suppress=missingIncludeSystem
+            --suppress=unmatchedSuppression
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Running whole-program Cppcheck analysis in a single pass"
+        VERBATIM
     )
 else()
     message(FATAL_ERROR "cppcheck not found!")

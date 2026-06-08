@@ -92,12 +92,18 @@ cmake . --preset release --fresh
 cmake --build --preset release
 ```
 
+**Run cppcheck**
+```bash
+cmake -B build
+cmake --build build --target run_cppcheck
+```
+
 **Run CMake using Homebrew Installed LLVM Compiler**
 ```bash
 cmake . --preset debug --fresh \
   -DCMAKE_C_COMPILER="/opt/homebrew/opt/llvm/bin/clang" \
   -DCMAKE_CXX_COMPILER="/opt/homebrew/opt/llvm/bin/clang++"
-  cmake --build --preset debug
+cmake --build --preset debug
 ```
 
 ### 3. Alternative: Manual Compile via CMake CLI

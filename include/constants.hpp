@@ -179,14 +179,13 @@ namespace Arguments {
 	};
 }
 
-namespace USB {
-    enum class TransferStatus :std::uint8_t {
-        Completed,
-        Disconnected,
-        Error
-    };
+enum class UsbTransferStatus :std::uint8_t {
+    Completed,
+    Disconnected,
+    Error
+};
 
-    inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(UsbPacketHeader);
-    inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(UsbPayloadHeader);
-    inline constexpr size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
-}
+inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(UsbPacketHeader);
+inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(UsbPayloadHeader);
+inline constexpr size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
+

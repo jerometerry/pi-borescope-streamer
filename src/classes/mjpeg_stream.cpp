@@ -30,9 +30,9 @@ void MjpegStream::send(std::span<const uint8_t> data) {
 
     size_t i = readOffset_;
 
-    while (i + USB::TOTAL_USB_HEADER_SIZE <= inputBuffer_.size()) {
+    while (i + TOTAL_USB_HEADER_SIZE <= inputBuffer_.size()) {
         UsbPacketHeader packetHeader{};
-        std::memcpy(&packetHeader, &inputBuffer_[i], USB::USB_PACKET_HEADER_SIZE);
+        std::memcpy(&packetHeader, &inputBuffer_[i], USB_PACKET_HEADER_SIZE);
 
         if (packetHeader.getHeader() != UsbProtocol::USB_FRAME_HEADER || 
            (packetHeader.getCameraId() != UsbProtocol::VIDEO_CAMERA_ID && 
@@ -48,7 +48,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             inputBuffer_.size() - i - 3
         );
 
-        for (size_t d = USB::USB_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
+        for (size_t d = USB_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
             if (inputBuffer_[i+d] == UsbProtocol::USB_FRAME_HEADER_A && 
                 inputBuffer_[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && (
                     inputBuffer_[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
@@ -66,13 +66,13 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             continue;
         }
 
-        size_t totalPacketSize = USB::USB_PACKET_HEADER_SIZE + packetHeader.getLength();
+        size_t totalPacketSize = USB_PACKET_HEADER_SIZE + packetHeader.getLength();
 
         if (i + totalPacketSize > inputBuffer_.size()) { 
             break;
         }
 
-        if (packetHeader.getLength() < USB::USB_PAYLOAD_HEADER_SIZE) {
+        if (packetHeader.getLength() < USB_PAYLOAD_HEADER_SIZE) {
             i++;
             continue;
         }
@@ -80,8 +80,8 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         UsbPayloadHeader payloadHeader{};
         std::memcpy(
             &payloadHeader,
-            &inputBuffer_[i + USB::USB_PACKET_HEADER_SIZE],
-             USB::USB_PAYLOAD_HEADER_SIZE
+            &inputBuffer_[i + USB_PACKET_HEADER_SIZE],
+             USB_PAYLOAD_HEADER_SIZE
         );
 
         if (activeFrame_ && !activeFrame_->empty() && payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
@@ -93,8 +93,8 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         if (!payloadHeader.hasGravitySensor() && 
             payloadHeader.getOtherFlags() == 0 && 
             payloadHeader.getCameraNumber() < 2) {
-            size_t payloadStart = i + USB::TOTAL_USB_HEADER_SIZE;
-            size_t payloadSize = totalPacketSize - USB::TOTAL_USB_HEADER_SIZE;
+            size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
+            size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
 
             if (!activeFrame_) {
                 activeFrame_ = bufferPool_->borrow();

@@ -13,7 +13,7 @@
 
 /**
  * @brief A zero-cost template wrapper that manages the libusb event loop.
- * @tparam FrameProcessor A class implementing `bool processTransfer(USB::TransferStatus, std::span<const uint8_t>)`
+ * @tparam FrameProcessor A class implementing `bool processTransfer(UsbTransferStatus, std::span<const uint8_t>)`
  */
 template <typename Callable>
 class UsbDriver {
@@ -159,15 +159,15 @@ private:
             return; 
         }
 
-        USB::TransferStatus status = USB::TransferStatus::Error;
+        UsbTransferStatus status = UsbTransferStatus::Error;
         if (transfer->status == LIBUSB_TRANSFER_COMPLETED) {
-            status = USB::TransferStatus::Completed;
+            status = UsbTransferStatus::Completed;
         } else if (transfer->status == LIBUSB_TRANSFER_NO_DEVICE) {
-            status = USB::TransferStatus::Disconnected;
+            status = UsbTransferStatus::Disconnected;
         }
 
         std::span<const uint8_t> payload;
-        if (status == USB::TransferStatus::Completed && transfer->actual_length > 0) {
+        if (status == UsbTransferStatus::Completed && transfer->actual_length > 0) {
             payload = std::span<const uint8_t>(transfer->buffer, transfer->actual_length);
         }
 

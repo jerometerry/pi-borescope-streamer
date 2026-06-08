@@ -114,11 +114,11 @@ struct [[gnu::packed]] UsbPayloadHeader {
 
     /**
     * @brief Toggle the flag indicating if the hardware has a gravity sensor.
-    * @param hasGravitySensor True to turn the flag on, false to turn it off.
+    * @param has True to turn the flag on, false to turn it off.
     */
-    constexpr void setHasGravitySensor(bool hasGravitySensor) noexcept { 
+    constexpr void setHasGravitySensor(bool has) noexcept { 
         uint8_t current = getFlags();
-        if (hasGravitySensor) { 
+        if (has) { 
             current |= 0x01; 
         } else { 
             current &= ~0x01; 
