@@ -29,7 +29,7 @@ MjpegServer::~MjpegServer() {
     if (networkThread_.joinable()) {
         networkThread_.join();
     }
-    std::cout << "[Network Core] Network engine cleanly terminated.\n";
+    std::cerr << "[Network Core] Network engine cleanly terminated.\n";
 }
 
 void MjpegServer::onTimer(us_timer_t *t) {
@@ -80,7 +80,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
                 if (backpressure == 0) {
                     if (viewer.isLagging) {
                         uint32_t droppedFrames = currentFrameId - viewer.lagStartFrameId;
-                        std::cout << "[Network Telemetry] Viewer recovered. TCP pipe cleared. " 
+                        std::cerr << "[Network Telemetry] Viewer recovered. TCP pipe cleared. " 
                                   << droppedFrames << " frames were deliberately dropped to maintain real-time latency.\n";
                         viewer.isLagging = false;
                     }
@@ -108,7 +108,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
                     }
                 } else {
                     if (!viewer.isLagging) {
-                        std::cout << "[Network Telemetry] Warning: TCP stall detected! OS buffer backed up with " 
+                        std::cerr << "[Network Telemetry] Warning: TCP stall detected! OS buffer backed up with " 
                                   << backpressure << " bytes. Dropping frames...\n";
                         viewer.isLagging = true;
                         viewer.lagStartFrameId = currentFrameId;
@@ -180,7 +180,7 @@ void MjpegServer::start() {
         app.listen(port_, [this](us_listen_socket_t *socket) {
             if (socket) {
                 listenSocket_ = socket;
-                std::cout << "[Network Core] Asynchronous uWebSockets engine listening on port " << port_ << '\n';
+                std::cerr << "[Network Core] Asynchronous uWebSockets engine listening on port " << port_ << '\n';
 
                 auto *loop = reinterpret_cast<struct us_loop_t *>(uWS::Loop::get());
                 us_timer_t *timer = us_create_timer(
