@@ -122,8 +122,7 @@ endif()
 
 target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 
-add_library(borescope_core STATIC 
-    src/classes/binary_stream_capture.cpp
+add_library(borescope_core STATIC
     src/classes/buffer.cpp
     src/classes/buffer_pool.cpp
     src/classes/device_finder.cpp
@@ -131,6 +130,7 @@ add_library(borescope_core STATIC
     src/classes/frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp
     src/classes/mjpeg_stream.cpp
+    src/classes/mjpeg_stream_capture.cpp
     src/classes/shared_frame_buffer.cpp
     src/classes/usb_camera.cpp 
     src/classes/usb_context.cpp
@@ -163,11 +163,11 @@ add_executable(attached_usb_devices
 )
 target_link_libraries(attached_usb_devices PRIVATE Borescope::Core project_warnings)
 
-add_executable(binary_stream_capture
-    src/classes/binary_stream_capture.cpp
-    src/apps/binary_stream_capture_main.cpp
+add_executable(mjpeg_stream_capture
+    src/classes/mjpeg_stream_capture.cpp
+    src/apps/mjpeg_stream_capture_main.cpp
 )
-target_link_libraries(binary_stream_capture PRIVATE Borescope::Core project_warnings)
+target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
 
 add_executable(frame_extractor
     src/classes/frame_extractor.cpp
