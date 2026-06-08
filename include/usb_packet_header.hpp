@@ -18,7 +18,7 @@ namespace USB {
     * Once we verify this envelope is valid and safe to open, we strip it away to reveal 
     * the actual inner payload (which begins with the PayloadHeader).
     */
-    struct [[gnu::packed]] PacketHeader {
+    struct [[gnu::packed]] UsbPacketHeader {
 
         /**
         * @brief The raw, un-translated secret code identifying this as a valid camera chunk.
