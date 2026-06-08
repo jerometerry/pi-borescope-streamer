@@ -87,7 +87,7 @@ if(IWYU_EXE)
         endif()
         list(APPEND IWYU_ARGS 
             "-Xiwyu" "--no_fwd_decls"
-            "-Wno-everything"
+            "-Xiwyu" "--no_comments"
             "-Qunused-arguments"
         )
     endif()
