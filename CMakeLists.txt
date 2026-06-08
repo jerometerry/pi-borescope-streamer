@@ -126,8 +126,8 @@ add_library(borescope_core STATIC
     src/classes/buffer.cpp
     src/classes/buffer_pool.cpp
     src/classes/device_finder.cpp
-    src/classes/frame_extractor.cpp
     src/classes/frame_ring_buffer.cpp
+    src/classes/mjpeg_frame_extractor.cpp
     src/classes/mjpeg_server.cpp
     src/classes/mjpeg_stream.cpp
     src/classes/mjpeg_stream_capture.cpp
@@ -169,11 +169,11 @@ add_executable(mjpeg_stream_capture
 )
 target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
 
-add_executable(frame_extractor
-    src/classes/frame_extractor.cpp
-    src/apps/frame_extractor_main.cpp
+add_executable(mjpeg_frame_extractor
+    src/classes/mjpeg_frame_extractor.cpp
+    src/apps/mjpeg_frame_extractor_main.cpp
 )
-target_link_libraries(frame_extractor PRIVATE Borescope::Core project_warnings)
+target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(borescope_core PRIVATE src/classes/v4l2_publisher.cpp)
