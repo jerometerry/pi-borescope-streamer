@@ -95,9 +95,9 @@ cmake --build --preset release
 **Run cppcheck**
 ```bash
 # required to run cppcheck-htmlreport
-pip3 install --user pygments
+pip3 install --user pygments --break-system-packages
 
-# generate compiler_commands.json
+# generate compile_commands.json
 cmake -B build
 
 # run cppcheck, output XML file build/cppcheck_report.xm
