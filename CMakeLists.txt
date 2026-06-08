@@ -83,7 +83,11 @@ if(IWYU_EXE)
             list(APPEND IWYU_ARGS "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}")
         endif()
 
-        list(APPEND IWYU_ARGS "-D_GLIBCXX_HOSTED=1" "-D__GXX_EXPERIMENTAL_CXX0X__=1")
+        list(APPEND IWYU_ARGS 
+            "-Xiwyu" "--no_fwd_decls"
+            "-isystem" "/usr/include/c++/14"
+            "-isystem" "/usr/include/c++/14/aarch64-linux-gnu"
+        )
     endif()
 
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_ARGS}")
