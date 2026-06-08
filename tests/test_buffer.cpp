@@ -94,11 +94,10 @@ TEST(IntrusivePtrTest, SelfAssignmentIsSafe) {
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     BufferPtr ptr(new Buffer(128, &tracker));
 
-    // Suppress compiler warnings for deliberate self-assignment test
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wself-assign-overloaded"
-    ptr = ptr;
-    #pragma GCC diagnostic pop
+    // Use a reference to trick the compiler's static analysis 
+    // and avoid compiler-specific #pragma directives.
+    BufferPtr& ptrRef = ptr;
+    ptr = ptrRef;
 
     EXPECT_TRUE(static_cast<bool>(ptr));
     EXPECT_EQ(tracker.destroyedCount, 0) << "Self-assignment triggered premature destruction";
