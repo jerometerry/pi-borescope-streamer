@@ -65,3 +65,11 @@ private:
     void* poolContext_{nullptr};
     const size_t paddingSize_;
 };
+
+inline void intrusive_ptr_add_ref(Buffer* b) {
+    b->retain();
+}
+
+inline void intrusive_ptr_release(Buffer* b) {
+    b->release();
+}

@@ -2,13 +2,11 @@
 #include <cstdint>
 #include <memory>
 
-#include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 
 class BufferPool;
-class BufferPtr;
 
 class SharedFrameBuffer : public std::enable_shared_from_this<SharedFrameBuffer> {
 public:

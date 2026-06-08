@@ -6,14 +6,13 @@
 #include <memory>
 #include <thread>
 #include <vector>
+#include "buffer_ptr.hpp"
 
 // IWYU pragma: begin_exports
 struct us_listen_socket_t;
 struct us_timer_t;
 // IWYU pragma: end_exports
 
-class BufferPtr;
-struct Buffer;
 
 namespace Web { struct ViewerState; }
 

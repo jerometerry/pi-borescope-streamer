@@ -27,7 +27,7 @@ TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
 
     auto activeFrame = frameBuffer.getLatestFrame(frameId);
     
-    EXPECT_EQ(activeFrame.getBuffer(), nullptr);
+    EXPECT_EQ(activeFrame.get(), nullptr);
     EXPECT_EQ(frameId, 0) << "BufferPtr ID should start strictly at 0";
 }
 

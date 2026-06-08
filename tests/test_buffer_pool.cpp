@@ -70,7 +70,7 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
     auto bufferPool = BufferPool::create(args);
 
     auto frame = bufferPool->borrow();
-    auto* buffer = frame.getBuffer();
+    auto* buffer = frame.get();
 
     constexpr std::string_view mjpegHeader = "--mjpegstream\r\nContent-Type: image/jpeg\r\n";
 
@@ -168,7 +168,7 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
     size_t initialFree = bufferPool->getFreeBuffers();
 
     BufferPtr original = bufferPool->borrow();
-    Buffer* underlyingPtr = original.getBuffer();
+    Buffer* underlyingPtr = original.get();
 
     // Move the frame. This should transfer ownership without touching the atomic counter
     BufferPtr movedFrame = std::move(original);
@@ -179,7 +179,7 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
     EXPECT_FALSE(is_valid) << "Moved-from frame still holds a valid state";
 
     // The new frame should point to the exact same memory
-    EXPECT_EQ(movedFrame.getBuffer(), underlyingPtr) << "Underlying buffer pointer shifted during move";
+    EXPECT_EQ(movedFrame.get(), underlyingPtr) << "Underlying buffer pointer shifted during move";
     
     // The pool size should remain unchanged (no unexpected returns or allocations)
     EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1);
@@ -197,7 +197,7 @@ TEST(BufferPoolTest, PaddingAndContentSliceBoundaries) {
     auto bufferPool = BufferPool::create(args);
 
     BufferPtr frame = bufferPool->borrow();
-    auto* buffer = frame.getBuffer();
+    auto* buffer = frame.get();
 
     // Insert mock hardware data
     std::vector<uint8_t> mockData = { 0xAA, 0xBB, 0xCC, 0xDD };
@@ -223,7 +223,7 @@ TEST(BufferPoolTest, BufferTrimMaintainsPadding) {
     auto bufferPool = BufferPool::create(args);
 
     BufferPtr frame = bufferPool->borrow();
-    auto* buffer = frame.getBuffer();
+    auto* buffer = frame.get();
 
     // Data representing a messy stream: [Garbage] [FF D8 ... FF D9] [Garbage]
     std::vector<uint8_t> streamData = { 0x00, 0x01, 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9, 0x02, 0x03 };
@@ -262,7 +262,7 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
 
     {
         BufferPtr frame = bufferPool->borrow();
-        underlyingPtr = frame.getBuffer();
+        underlyingPtr = frame.get();
         
         // Insert data using the captured pointer
         std::vector<uint8_t> content = {0x01, 0x02, 0x03};
@@ -272,11 +272,11 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
 
     // Re-acquire to get the exact same buffer back
     BufferPtr reusedFrame = bufferPool->borrow();
-    EXPECT_EQ(reusedFrame.getBuffer(), underlyingPtr) << "Pool did not return the recycled buffer";
+    EXPECT_EQ(reusedFrame.get(), underlyingPtr) << "Pool did not return the recycled buffer";
     
     // Verify clear() actually wiped the user data but kept the prefix allocation
-    EXPECT_TRUE(reusedFrame.getBuffer()->empty()) << "Recycled buffer was not cleanly wiped";
-    EXPECT_EQ(reusedFrame.getBuffer()->totalSize(), BufferPoolConfig::BUFFER_PADDING) << "Recycled buffer lost its prefix reservation";
+    EXPECT_TRUE(reusedFrame.get()->empty()) << "Recycled buffer was not cleanly wiped";
+    EXPECT_EQ(reusedFrame.get()->totalSize(), BufferPoolConfig::BUFFER_PADDING) << "Recycled buffer lost its prefix reservation";
 }
 
 // -------------------------------------------------------------------
@@ -289,7 +289,7 @@ TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
     };
     auto bufferPool = BufferPool::create(args);
     BufferPtr frame = bufferPool->borrow();
-    auto* buffer = frame.getBuffer();
+    auto* buffer = frame.get();
 
     std::vector<uint8_t> content = { 0x01, 0x02, 0x03, 0x04 };
     buffer->insertContent(content);
@@ -315,7 +315,7 @@ TEST(BufferPoolTest, FrontOnEmptyBufferThrowsException) {
     // The buffer is technically not "empty" vector-wise (it holds 128 bytes of prefix), 
     // but content-wise it is empty. front() should safely reject access.
     EXPECT_THROW({
-        const auto* buffer = frame.getBuffer();
+        const auto* buffer = frame.get();
         buffer->front();
     }, std::out_of_range) << "Failed to throw when accessing front of empty payload";
 }
@@ -327,7 +327,7 @@ TEST(BufferPoolTest, BufferPointerMath_InsertContentDoesNotChangePointer) {
     auto bufferPool = BufferPool::create(args);
     auto frame = bufferPool->borrow();
 
-    auto* buffer = frame.getBuffer();
+    auto* buffer = frame.get();
     std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
 
     char* paddingStartPtr1 = reinterpret_cast<char*>(frame->getMutablePaddingSlice().data());
@@ -355,7 +355,7 @@ TEST(BufferPoolTest, BufferPointerMath_ContentPtrOffsetFromPaddingPtr) {
     auto bufferPool = BufferPool::create(args);
     auto frame = bufferPool->borrow();
 
-    auto* buffer = frame.getBuffer();
+    auto* buffer = frame.get();
     std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
 
     frame->insertContent(payload);

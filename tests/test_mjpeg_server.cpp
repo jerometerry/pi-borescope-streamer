@@ -197,7 +197,7 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
 TEST_F(MjpegServerTest, BuildMjpegResponse) {
 
     auto frame = acquireFrame();
-    auto* buffer = frame.getBuffer();
+    auto* buffer = frame.get();
     std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
     frame->insertContent(payload);
 

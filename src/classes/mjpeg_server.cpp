@@ -20,7 +20,6 @@
 #include "buffer.hpp"
 #include "constants.hpp"
 #include "device_finder.hpp"
-#include "buffer_ptr.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
 
@@ -130,7 +129,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
                         viewer.isLagging = false;
                     }
 
-                    Buffer* rawBuffer = currentFrame.getBuffer();
+                    Buffer* rawBuffer = currentFrame.get();
 
                     auto payload = buildMjpegResponse(rawBuffer);
                     bool ok = res->write(payload);
