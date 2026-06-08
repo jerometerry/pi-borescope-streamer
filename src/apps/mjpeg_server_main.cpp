@@ -24,11 +24,11 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "constants.hpp"
 #include "device_info.hpp"
 #include "buffer_ptr.hpp"
-#include "intrusive_ptr.hpp"
 #include "libusb_async_driver.hpp"
 #include "mjpeg_stream.hpp"
 #include "mjpeg_server.hpp"
