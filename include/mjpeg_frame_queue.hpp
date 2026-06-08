@@ -8,9 +8,9 @@
 
 class BufferPool;
 
-class SharedFrameBuffer : public std::enable_shared_from_this<SharedFrameBuffer> {
+class MjpegFrameQueue : public std::enable_shared_from_this<SharedFrameBuffer> {
 public:
-    SharedFrameBuffer() = default;
+    MjpegFrameQueue() = default;
     void push(BufferPtr frame);
     BufferPtr getLatestFrame(uint32_t& outFrameId) const;
 
