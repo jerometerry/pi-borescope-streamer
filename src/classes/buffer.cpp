@@ -14,24 +14,12 @@ Buffer::Buffer(const size_t paddingSize) : paddingSize_(paddingSize) {
 	}
 }
 
-std::unique_ptr<Buffer> Buffer::create() {
-	return std::make_unique<Buffer>(BufferPoolConfig::BUFFER_PADDING);
-}
-
-std::unique_ptr<Buffer> Buffer::create(size_t padding) {
-	return std::make_unique<Buffer>(padding);
-}
-
 void Buffer::retain() {
 	refCount_.fetch_add(1, std::memory_order_relaxed);
 }
 
-void Buffer::release() {
-	if (refCount_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-		if (returnCallback_ && poolContext_) {
-			returnCallback_(poolContext_, this);
-		}
-	}
+bool Buffer::release() {
+	return refCount_.fetch_sub(1, std::memory_order_acq_rel) == 1;
 }
 
 void Buffer::clear() {

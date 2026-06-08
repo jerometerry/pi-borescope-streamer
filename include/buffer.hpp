@@ -12,13 +12,9 @@ public:
 
     explicit Buffer(const size_t paddingSize);
 
-    static std::unique_ptr<Buffer> create();
-
-    static std::unique_ptr<Buffer> create(size_t padding);
-
     void retain();
     
-    void release();
+    bool release();
 
     void clear();
 
@@ -55,6 +51,8 @@ public:
     std::span<uint8_t> getMutablePaddingSlice();
 
 private:
+    friend void intrusive_ptr_release(Buffer* b);
+
     void ensurePaddingReserved();
 
     std::vector<uint8_t>& data();
@@ -71,5 +69,11 @@ inline void intrusive_ptr_add_ref(Buffer* b) {
 }
 
 inline void intrusive_ptr_release(Buffer* b) {
-    b->release();
+    if (b->release()) {
+        if (b->returnCallback_ && b->poolContext_) {
+            b->returnCallback_(b->poolContext_, b);
+        } else {
+            std::default_delete<Buffer>{}(b);
+        }
+    }
 }

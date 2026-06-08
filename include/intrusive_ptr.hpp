@@ -1,6 +1,7 @@
 #pragma once
 
 #include <utility>
+#include <concepts>
 
 template <typename T>
 class IntrusivePtr {
@@ -8,6 +9,7 @@ public:
     using element_type = T;
 
     constexpr IntrusivePtr() noexcept : ptr_(nullptr) {}
+
     constexpr IntrusivePtr(std::nullptr_t) noexcept : ptr_(nullptr) {}
 
     explicit IntrusivePtr(T* p) : ptr_(p) {
@@ -31,16 +33,16 @@ public:
         other.ptr_ = nullptr;
     }
 
-	IntrusivePtr& operator=(IntrusivePtr&& other) noexcept {
-		if (this != &other) {
-			if (ptr_) {
-				intrusive_ptr_release(ptr_);
-			}
-			ptr_ = other.ptr_;
-			other.ptr_ = nullptr;
-		}
-		return *this;
-	}
+    IntrusivePtr& operator=(IntrusivePtr&& other) noexcept {
+        if (this != &other) {
+            if (ptr_) {
+                intrusive_ptr_release(ptr_);
+            }
+            ptr_ = other.ptr_;
+            other.ptr_ = nullptr;
+        }
+        return *this;
+    }
 
     ~IntrusivePtr() {
         if (ptr_) {
@@ -75,7 +77,40 @@ void swap(IntrusivePtr<T>& lhs, IntrusivePtr<T>& rhs) noexcept {
 }
 
 template <typename T, typename U>
-bool operator==(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept { return lhs.get() == rhs.get(); }
+requires requires(T* t, U* u) { t == u; } // Verifies types are legally comparable
+bool operator==(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept { 
+    return lhs.get() == rhs.get(); 
+}
+
+template <typename T, typename U>
+requires requires(T* t, U* u) { t != u; }
+bool operator!=(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept { 
+    return lhs.get() != rhs.get(); 
+}
+
+template <typename T, typename U>
+requires requires(T* t, U* u) { t < u; }
+bool operator<(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept { 
+    return lhs.get() < rhs.get(); 
+}
 
 template <typename T>
 bool operator==(const IntrusivePtr<T>& lhs, std::nullptr_t) noexcept { return lhs.get() == nullptr; }
+
+template <typename T>
+bool operator!=(const IntrusivePtr<T>& lhs, std::nullptr_t) noexcept { return lhs.get() != nullptr; }
+
+template <typename T>
+bool operator==(std::nullptr_t, const IntrusivePtr<T>& rhs) noexcept { return nullptr == rhs.get(); }
+
+template <typename T>
+bool operator!=(std::nullptr_t, const IntrusivePtr<T>& rhs) noexcept { return nullptr != rhs.get(); }
+
+namespace std {
+    template <typename T>
+    struct hash<IntrusivePtr<T>> {
+        size_t operator()(const IntrusivePtr<T>& p) const noexcept {
+            return std::hash<T*>{}(p.get());
+        }
+    };
+}

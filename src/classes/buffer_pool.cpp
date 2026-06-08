@@ -41,7 +41,7 @@ BufferPtr BufferPool::borrow() {
     }
 
     if (!buffer) {
-        buffer = Buffer::create();
+        buffer = std::make_unique<Buffer>(BufferPoolConfig::BUFFER_PADDING);
         buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);
@@ -79,7 +79,7 @@ void BufferPool::initialize() {
     pool_.reserve(maxPoolSize_);
     
     for (size_t i = 0; i < initialPoolSize_; ++i) {
-        auto buffer = Buffer::create();
+        auto buffer = std::make_unique<Buffer>(BufferPoolConfig::BUFFER_PADDING);
         buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);
