@@ -13,8 +13,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include "device_finder.hpp"
-#include "device_info.hpp"
+#include "usb_device_finder.hpp"
+#include "usb_device_info.hpp"
 
 void signalHandler(int signal) {
     std::cout << "\nSignal " << signal << " received. Initiating shutdown...\n";
@@ -26,7 +26,7 @@ int main() {
     std::signal(SIGPIPE, SIG_IGN);
 
     try {
-        std::vector<DeviceInfo> devices = DeviceFinder::all();
+        std::vector<UsbDeviceInfo> devices = UsbDeviceFinder::all();
         if (devices.empty()) {
             std::cerr << "No Useeplus supercamera devices found on the USB bus.\n";
         } else {
