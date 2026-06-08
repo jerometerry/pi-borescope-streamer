@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <vector>
 
-namespace FrameExtractor {
+namespace MjpegFrameExtractor {
 	struct DumpRange {
 		size_t start;
 		size_t end;
