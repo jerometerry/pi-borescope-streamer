@@ -8,12 +8,10 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
-#include <compare>
 #include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <vector>
 #include "buffer.hpp"
@@ -73,10 +71,6 @@ protected:
 
     BufferPtr acquireFrame() {
         return bufferPool_->borrow();
-    }
-
-    std::string_view buildMjpegResponse(Buffer *buffer) {
-        return server_->buildMjpegResponse(buffer);
     }
 
     std::string fetchFromLocalhost(const std::string& route) {
@@ -193,18 +187,4 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
     EXPECT_NE(chunkResponse.find(payloadString), std::string::npos) << "Stream chunk payload corrupted or incomplete.";
 
     close(sock);
-}
-
-TEST_F(MjpegServerTest, BuildMjpegResponse) {
-
-    auto frame = acquireFrame();
-    auto* buffer = frame.get();
-    std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
-    frame->insertContent(payload);
-
-    auto response = buildMjpegResponse(buffer);
-
-    EXPECT_EQ(response, 
-        "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: 4\r\n\r\n\xDE\xAD\xBE\xEF"
-    );
 }

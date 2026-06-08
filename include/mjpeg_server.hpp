@@ -3,7 +3,6 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
-#include <memory>
 #include <thread>
 #include <vector>
 #include "buffer_ptr.hpp"
@@ -32,8 +31,6 @@ public:
     MjpegServer& operator=(const MjpegServer&) = delete;
 
     void start();
-
-    static std::string_view buildMjpegResponse(Buffer* frame);
 
 private:
     struct ViewerState {

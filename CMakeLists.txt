@@ -173,6 +173,7 @@ add_library(borescope_core STATIC
     src/classes/usb_context.cpp
     src/classes/usb_device_finder.cpp
     src/classes/v4l2.cpp
+    src/classes/zero_allocation_response_builder.cpp
     ${GENERATED_HPP}
 )
 add_library(Borescope::Core ALIAS borescope_core)
@@ -294,6 +295,7 @@ if(BUILD_TESTING)
         tests/test_mjpeg_stream.cpp
         tests/test_usb_device_finder.cpp
         tests/test_v4l2.cpp
+        tests/test_zero_allocation_response_builder.cpp
     )
 
     target_include_directories(run_project_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
