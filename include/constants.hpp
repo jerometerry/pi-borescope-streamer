@@ -216,5 +216,5 @@ namespace USB {
 
     inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(USB::UsbPacketHeader);
     inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(USB::UsbPayloadHeader);
-    inline constexpr size_t TOTAL_USB_HEADER_SIZE = PACKET_HEADER_SIZE + PAYLOAD_HEADER_SIZE;
+    inline constexpr size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
 }
