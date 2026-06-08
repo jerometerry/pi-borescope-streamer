@@ -8,7 +8,7 @@
 #include "frame_ring_buffer.hpp"
 #include "constants.hpp"
 
-FrameRingBuffer::FrameRingBuffer(
+MjpegFrameRingBuffer::MjpegFrameRingBuffer(
 	size_t size, 
 	const std::atomic<bool>& running) : 
 		capacity_(size + 1), running_(running) {
@@ -18,7 +18,7 @@ FrameRingBuffer::FrameRingBuffer(
 	}
 }
 
-void FrameRingBuffer::push(const std::shared_ptr<Buffer>& frame) {
+void MjpegFrameRingBuffer::push(const std::shared_ptr<Buffer>& frame) {
 	std::scoped_lock<std::mutex> lock(mtx_);
 	
 	pool_[head_] = frame;
@@ -31,7 +31,7 @@ void FrameRingBuffer::push(const std::shared_ptr<Buffer>& frame) {
 	cv_.notify_one();
 }
 
-std::shared_ptr<Buffer> FrameRingBuffer::pop() {
+std::shared_ptr<Buffer> MjpegFrameRingBuffer::pop() {
 	std::unique_lock<std::mutex> lock(mtx_);
 	
 	cv_.wait(lock, [this]() { 
