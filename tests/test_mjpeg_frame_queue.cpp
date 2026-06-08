@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
-#include <format>
 #include <span>
 #include <string>
 #include <thread>
