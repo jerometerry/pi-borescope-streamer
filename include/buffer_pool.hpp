@@ -25,11 +25,13 @@ public:
     
     BufferPtr borrow();
 
-    void recycle(Buffer* buffer);
-    
     size_t getFreeBuffers() const;
 
 private:
+    friend Buffer;  
+
+    void recycle(Buffer* buffer);
+
     void initialize();
     static void recycleFrameBridge(void* context, Buffer* buffer);
     
