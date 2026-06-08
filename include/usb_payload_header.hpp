@@ -19,7 +19,7 @@ namespace USB {
     * engineers cleverly used the remaining bytes in this header to piggyback the gravity sensor and 
     * button state alongside the video data.
     */
-    struct [[gnu::packed]] PayloadHeader {
+    struct [[gnu::packed]] UsbPayloadHeader {
 
         /**
         * @brief A rolling counter that helps us stitch chunks together into a full picture.
