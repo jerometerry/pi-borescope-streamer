@@ -1,0 +1,5 @@
+[
+  { symbol: [ "std::formatter", "private", "<format>", "public" ] },
+  { symbol: [ "std::__formatter", "private", "<format>", "public" ] },
+  { include: [ "<bits/version.h>", "private", "<vector>", "public" ] }
+]

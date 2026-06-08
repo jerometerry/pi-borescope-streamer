@@ -41,13 +41,11 @@ find_program(CPPCHECK_EXE NAMES "cppcheck" PATHS "/opt/homebrew/bin" "/usr/local
 if(CPPCHECK_EXE)
     set(CMAKE_CXX_CPPCHECK "${CPPCHECK_EXE}" 
         "--enable=all" 
-        "--inconclusive" 
-        "--suppress=missingIncludeSystem"
-        "--suppress=unusedFunction"
-        "--suppress=unmatchedSuppression"
-        "--suppress=style" 
+        "--inconclusive"
         "--inline-suppr"
         "--check-level=exhaustive"
+        "--suppress=missingIncludeSystem"
+        "--suppress=unmatchedSuppression"
     )
 else()
     message(WARNING "cppcheck not found")
@@ -57,7 +55,11 @@ find_program(IWYU_EXE NAMES "include-what-you-use" PATHS "/opt/homebrew/bin" "/u
 if(IWYU_EXE)
     set(IWYU_ARGS "${IWYU_EXE}")
 
-    # If compiling on Linux (Raspberry Pi), find and append the GCC mapping file
+    set(LOCAL_MAP "${CMAKE_CURRENT_SOURCE_DIR}/project.imp")
+    if(EXISTS "${LOCAL_MAP}")
+        list(APPEND IWYU_ARGS "-Xiwyu" "--mapping_file=${LOCAL_MAP}")
+    endif()
+
     if(NOT APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         find_file(GCC_MAP_FILE 
             NAMES stdcxx.imp
@@ -65,7 +67,6 @@ if(IWYU_EXE)
                   "/usr/local/share/include-what-you-use"
                   "/usr/share/llvm/include-what-you-use"
         )
-        
         if(GCC_MAP_FILE)
             list(APPEND IWYU_ARGS "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}")
         endif()
@@ -75,6 +76,7 @@ if(IWYU_EXE)
 else()
     message(WARNING "include-what-you-use not found")
 endif()
+
 
 add_library(project_warnings INTERFACE)
 
