@@ -18,9 +18,9 @@
 #include <string>
 #include <vector>
 #include <atomic>
-#include "binary_stream_capture.hpp"
 #include "device_finder.hpp"
 #include "device_info.hpp"
+#include "mjpeg_stream_capture.hpp"
 
 namespace {
     static std::atomic<bool> keepRunning{true};
