@@ -1,5 +1,4 @@
 #include <App.h>
-#include <CachingApp.h>
 #include <HttpResponse.h>
 #include <Loop.h>
 #include <libusockets.h>
