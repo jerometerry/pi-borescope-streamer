@@ -55,7 +55,23 @@ endif()
 
 find_program(IWYU_EXE NAMES "include-what-you-use" PATHS "/opt/homebrew/bin" "/usr/local/bin")
 if(IWYU_EXE)
-    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_EXE}")
+    set(IWYU_ARGS "${IWYU_EXE}")
+
+    # If compiling on Linux (Raspberry Pi), find and append the GCC mapping file
+    if(NOT APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_file(GCC_MAP_FILE 
+            NAMES stdcxx.imp
+            PATHS "/usr/share/include-what-you-use" 
+                  "/usr/local/share/include-what-you-use"
+                  "/usr/share/llvm/include-what-you-use"
+        )
+        
+        if(GCC_MAP_FILE)
+            list(APPEND IWYU_ARGS "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}")
+        endif()
+    endif()
+
+    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_ARGS}")
 else()
     message(WARNING "include-what-you-use not found")
 endif()
