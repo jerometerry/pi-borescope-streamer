@@ -1,7 +1,6 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <span>
 #include <stdexcept>
 #include <vector>
