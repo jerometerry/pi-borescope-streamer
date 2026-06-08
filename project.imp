@@ -1,7 +1,8 @@
 [
-  { symbol: [ "std::formatter", "private", "<format>", "public" ] },
-  { symbol: [ "std::__formatter", "private", "<format>", "public" ] },
+  { symbol: [ "std::formatter", "private", "<vector>", "public" ] },
+  { symbol: [ "std::__formatter", "private", "<vector>", "public" ] },
+  { symbol: [ "std::text_encoding", "private", "<vector>", "public" ] },
+  { symbol: [ "std::__unicode", "private", "<vector>", "public" ] },
   { include: [ "<bits/unicode-data.h>", "private", "<vector>", "public" ] },
-  { include: [ "@<bits/unicode.*>", "private", "<vector>", "public" ] },
-  { include: [ "<bits/version.h>", "private", "<vector>", "public" ] }
+  { include: [ "@<bits/unicode.*>", "private", "<vector>", "public" ] }
 ]
