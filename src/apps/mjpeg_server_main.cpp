@@ -133,7 +133,7 @@ int main(int argc, const char* argv[]) {
             }
             return status != UsbTransferStatus::Disconnected; 
         };
-        UsbDriver<decltype(transfer)> driver(transfer, &running);
+        UsbDriver driver(transfer, &running);
 
         auto source = [&queue](uint32_t& id) {
             return queue.pop(id);

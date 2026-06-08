@@ -86,7 +86,7 @@ int main(int argc, const char* argv[]) {
         return status != UsbTransferStatus::Disconnected; 
     };
 
-    UsbDriver<decltype(transfer)> driver(transfer, &running);
+    UsbDriver driver(transfer, &running);
     driver.start(camera);
 
     V4l2Publisher publisher(config);
