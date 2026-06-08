@@ -1,5 +1,4 @@
 #include <gtest/gtest.h>
-#include <cctype>
 #include <cstdint>
 #include <memory>
 #include <span>

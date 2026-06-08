@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cctype>
 #include <chrono>
+#include <compare>
 #include <cstdint>
 #include <memory>
 #include <span>
