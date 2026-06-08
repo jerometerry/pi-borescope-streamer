@@ -3,6 +3,6 @@
 struct UsbDeviceInfo;
 
 namespace MjpegStreamCapture {
-	int capture(const std::atomic<bool>& running, const UsbkDeviceInfo& cameraInfo);
+	int capture(const std::atomic<bool>& running, const UsbDeviceInfo cameraInfo);
 	int capture();
 }
