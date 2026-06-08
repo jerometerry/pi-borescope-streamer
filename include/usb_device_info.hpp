@@ -9,7 +9,7 @@
  * camera is and who made it. This structure holds the physical "address" of the device on 
  * the motherboard, along with the manufacturer's embedded ID tags (Vendor and Product IDs).
  */
-struct DeviceInfo {
+struct UsbDeviceInfo {
     /**
      * @brief The physical hardware lane the device is plugged into (e.g., the top USB row vs bottom row).
      */
