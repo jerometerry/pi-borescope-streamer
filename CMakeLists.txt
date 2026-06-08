@@ -126,12 +126,12 @@ add_library(borescope_core STATIC
     src/classes/buffer.cpp
     src/classes/buffer_pool.cpp
     src/classes/device_finder.cpp
-    src/classes/frame_ring_buffer.cpp
     src/classes/mjpeg_frame_extractor.cpp
+    src/classes/mjpeg_frame_queue.cpp
+    src/classes/mjpeg_frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp
     src/classes/mjpeg_stream.cpp
     src/classes/mjpeg_stream_capture.cpp
-    src/classes/shared_frame_buffer.cpp
     src/classes/usb_camera.cpp 
     src/classes/usb_context.cpp
     src/classes/v4l2.cpp
