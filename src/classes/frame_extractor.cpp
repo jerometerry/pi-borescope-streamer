@@ -55,7 +55,7 @@ void FrameExtractor::inspectPadding(const std::vector<uint8_t>& fileData) {
             if (nextHeaderPos > 0) {
                 size_t paddingLength = nextHeaderPos - paddingStart;
                 
-                std::cout << "--- Frame " << framesAnalyzed << " End Found ---\n";
+                std::cout << "--- BufferPtr " << framesAnalyzed << " End Found ---\n";
                 std::cout << "EOI (FF D9) at: " << eoiPos << "\n";
                 std::cout << "Next Header at: " << nextHeaderPos << "\n";
                 std::cout << "Padding Size:   " << paddingLength << " bytes\n";

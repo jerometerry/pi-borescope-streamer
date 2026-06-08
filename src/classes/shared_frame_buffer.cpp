@@ -2,16 +2,16 @@
 #include <utility>
 
 #include "buffer.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "shared_frame_buffer.hpp"
 #include "thread_safety_mutex.hpp"
 
-void SharedFrameBuffer::push(Frame frame) {
+void SharedFrameBuffer::push(BufferPtr frame) {
     if (!frame || frame->empty()) { 
         return;
     }
 
-    Frame previousFrame;
+    BufferPtr previousFrame;
 
     {
         MutexLock lock(activeMutex_);
@@ -25,7 +25,7 @@ void SharedFrameBuffer::push(Frame frame) {
     }
 }
 
-Frame SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
+BufferPtr SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
     MutexLock lock(activeMutex_);
     outFrameId = frameId_;
     return frame_;

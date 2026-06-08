@@ -7,21 +7,21 @@
 #include <vector>
 #include "buffer.hpp"
 
-class Frame {
+class BufferPtr {
 public:
-    Frame() = default;
+    BufferPtr() = default;
     
-    explicit Frame(Buffer* buffer);
+    explicit BufferPtr(Buffer* buffer);
     
-    ~Frame();
+    ~BufferPtr();
 
-    Frame(Frame&& other) noexcept;
+    BufferPtr(BufferPtr&& other) noexcept;
     
-    Frame& operator=(Frame&& other) noexcept;
+    BufferPtr& operator=(BufferPtr&& other) noexcept;
 
-    Frame(const Frame& other);
+    BufferPtr(const BufferPtr& other);
     
-    Frame& operator=(const Frame& other);
+    BufferPtr& operator=(const BufferPtr& other);
 
     Buffer* getBuffer() const;
 

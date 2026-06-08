@@ -11,14 +11,14 @@
 #include <vector>
 #include "buffer_pool.hpp"
 #include "constants.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "mjpeg_stream.hpp"
 #include "packet_header.hpp"
 #include "payload_header.hpp"
 
 class MockHandlers {
 public:
-    MOCK_METHOD(void, output, (Frame frame));
+    MOCK_METHOD(void, output, (BufferPtr frame));
 };
 
 class MjpegStreamTest : public ::testing::Test {
@@ -32,7 +32,7 @@ protected:
         bufferPool_ = BufferPool::create();
         stream_ = std::make_unique<MjpegStream>(
             bufferPool_,
-            [this](Frame frame) { 
+            [this](BufferPtr frame) { 
                 handler_.output(std::move(frame)); 
             }
         );
@@ -53,9 +53,9 @@ protected:
 };
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members)
-MATCHER_P(FrameDataEq, expectedOutput, "Frame internal data matches expected output") {
+MATCHER_P(FrameDataEq, expectedOutput, "BufferPtr internal data matches expected output") {
     if (!arg) {
-        *result_listener << "which is a null Frame";
+        *result_listener << "which is a null BufferPtr";
         return false;
     }
 
@@ -66,9 +66,9 @@ MATCHER_P(FrameDataEq, expectedOutput, "Frame internal data matches expected out
     );
 }
 
-MATCHER_P(FrameStartsWith, expectedFront, "Frame internal data starts with expected byte") {
+MATCHER_P(FrameStartsWith, expectedFront, "BufferPtr internal data starts with expected byte") {
     if (!arg) {
-        *result_listener << "which is a null Frame";
+        *result_listener << "which is a null BufferPtr";
         return false;
     }
 

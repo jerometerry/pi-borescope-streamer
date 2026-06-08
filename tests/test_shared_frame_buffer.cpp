@@ -11,11 +11,11 @@
 #include <memory>
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "shared_frame_buffer.hpp"
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
-    Frame frame = bp->acquire();
+    BufferPtr frame = bp->borrow();
     frame->insertContent(data);
     sfb.push(frame);
 };
@@ -28,7 +28,7 @@ TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
     auto activeFrame = frameBuffer.getLatestFrame(frameId);
     
     EXPECT_EQ(activeFrame.getBuffer(), nullptr);
-    EXPECT_EQ(frameId, 0) << "Frame ID should start strictly at 0";
+    EXPECT_EQ(frameId, 0) << "BufferPtr ID should start strictly at 0";
 }
 
 TEST(SharedFrameBufferTest, SafelyHandlesImmediatePollingWithoutSegfault) {
@@ -38,7 +38,7 @@ TEST(SharedFrameBufferTest, SafelyHandlesImmediatePollingWithoutSegfault) {
 
     auto activeFrame = frameBuffer.getLatestFrame(frameId);
 
-    ASSERT_FALSE(activeFrame) << "Frame should safely evaluate to false when empty.";
+    ASSERT_FALSE(activeFrame) << "BufferPtr should safely evaluate to false when empty.";
 
     if (activeFrame) {
         FAIL() << "Execution should not reach this block. Guard check failed.";
@@ -97,7 +97,7 @@ TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
     uint32_t nextId = 0;
     auto nextFrame = frameBuffer.getLatestFrame(nextId);
     
-    EXPECT_EQ(initialId, nextId) << "Frame ID should not increment for empty frames.";
+    EXPECT_EQ(initialId, nextId) << "BufferPtr ID should not increment for empty frames.";
 
     std::span<const uint8_t> initialPayload = initialFrame->getContentSlice();
     std::span<const uint8_t> nextPayload = nextFrame->getContentSlice();

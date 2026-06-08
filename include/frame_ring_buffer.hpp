@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "buffer.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 

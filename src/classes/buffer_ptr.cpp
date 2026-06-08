@@ -1,23 +1,23 @@
 #include "buffer.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 
-Frame::Frame(Buffer* buffer) : buffer_(buffer) {
+BufferPtr::BufferPtr(Buffer* buffer) : buffer_(buffer) {
 	if (buffer_) {
 		buffer_->retain();
 	}
 }
 
-Frame::~Frame() {
+BufferPtr::~BufferPtr() {
 	if (buffer_) { 
 		buffer_->release();
 	}
 }
 
-Frame::Frame(Frame&& other) noexcept : buffer_(other.buffer_)  {
+BufferPtr::BufferPtr(BufferPtr&& other) noexcept : buffer_(other.buffer_)  {
 	other.buffer_ = nullptr;
 }
 
-Frame& Frame::operator=(Frame&& other) noexcept {
+BufferPtr& BufferPtr::operator=(BufferPtr&& other) noexcept {
 	if (this != &other) {
 		if (buffer_) { 
 			buffer_->release();
@@ -28,13 +28,13 @@ Frame& Frame::operator=(Frame&& other) noexcept {
 	return *this;
 }
 
-Frame::Frame(const Frame& other) : buffer_(other.buffer_) {
+BufferPtr::BufferPtr(const BufferPtr& other) : buffer_(other.buffer_) {
 	if (buffer_) {
 		buffer_->retain();
 	}
 }
 
-Frame& Frame::operator=(const Frame& other) {
+BufferPtr& BufferPtr::operator=(const BufferPtr& other) {
 	if (this != &other) {
 		if (buffer_) { 
 			buffer_->release();
@@ -47,14 +47,14 @@ Frame& Frame::operator=(const Frame& other) {
 	return *this;
 }
 
-Buffer* Frame::getBuffer() const { 
+Buffer* BufferPtr::getBuffer() const { 
 	return buffer_; 
 }
 
-Buffer* Frame::operator->() const { 
+Buffer* BufferPtr::operator->() const { 
 	return buffer_; 
 }
 
-Frame::operator bool() const { 
+BufferPtr::operator bool() const { 
 	return buffer_ != nullptr; 
 }

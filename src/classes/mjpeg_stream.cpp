@@ -10,18 +10,18 @@
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "constants.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "mjpeg_stream.hpp"
 #include "packet_header.hpp"
 #include "payload_header.hpp"
 
 MjpegStream::MjpegStream(
     std::shared_ptr<BufferPool> bufferPool, 
-    std::function<void(Frame)> onFrameReady)
+    std::function<void(BufferPtr)> onFrameReady)
     : bufferPool_(std::move(bufferPool)), 
       onFrameReady_(std::move(onFrameReady)) {
         inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
-        activeFrame_ = bufferPool_->acquire();
+        activeFrame_ = bufferPool_->borrow();
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {
@@ -96,7 +96,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             size_t payloadSize = totalPacketSize - USB::TOTAL_HEADER_SIZE;
 
             if (!activeFrame_) {
-                activeFrame_ = bufferPool_->acquire();
+                activeFrame_ = bufferPool_->borrow();
             }
 
             std::span<const uint8_t> toInsert(
@@ -157,5 +157,5 @@ void MjpegStream::outputFrame() {
         }
     }
 
-    activeFrame_ = bufferPool_->acquire();
+    activeFrame_ = bufferPool_->borrow();
 }

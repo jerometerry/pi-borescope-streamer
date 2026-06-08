@@ -12,7 +12,7 @@ struct us_listen_socket_t;
 struct us_timer_t;
 // IWYU pragma: end_exports
 
-class Frame;
+class BufferPtr;
 struct Buffer;
 
 namespace Web { struct ViewerState; }
@@ -25,7 +25,7 @@ namespace Web { struct ViewerState; }
  */
 class MjpegServer {
 public:
-    using FrameSource = std::function<Frame(uint32_t&)>;
+    using FrameSource = std::function<BufferPtr(uint32_t&)>;
 
     explicit MjpegServer(int port, const std::atomic<bool>& running, FrameSource frameSource);
     ~MjpegServer();

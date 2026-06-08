@@ -57,8 +57,6 @@ public:
 private:
     void ensurePaddingReserved();
 
-    void ensurePrefixReserved();
-
     std::vector<uint8_t>& data();
 
     std::atomic<int> refCount_{0};

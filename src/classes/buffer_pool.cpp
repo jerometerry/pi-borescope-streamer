@@ -5,7 +5,7 @@
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "constants.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "thread_safety_mutex.hpp"
 
 BufferPool::BufferPool(const BufferPoolArgs& args) 
@@ -29,7 +29,7 @@ std::shared_ptr<BufferPool> BufferPool::create(const BufferPoolArgs& args) {
     return instance;
 }
 
-Frame BufferPool::acquire() {
+BufferPtr BufferPool::borrow() {
     std::unique_ptr<Buffer> buffer;
 
     {
@@ -47,7 +47,7 @@ Frame BufferPool::acquire() {
         buffer->setReturnCallback(recycleFrameBridge);
     }
 
-    return Frame(buffer.release());
+    return BufferPtr(buffer.release());
 }
 
 size_t BufferPool::getFreeBuffers() const {
@@ -55,7 +55,7 @@ size_t BufferPool::getFreeBuffers() const {
     return pool_.size();
 }
 
-void BufferPool::returnToPool(Buffer* buffer) {
+void BufferPool::recycle(Buffer* buffer) {
     if (!buffer) {
         return;
     }
@@ -89,5 +89,5 @@ void BufferPool::initialize() {
 
 void BufferPool::recycleFrameBridge(void* context, Buffer* buffer) {
     auto* pool = static_cast<BufferPool*>(context);
-    pool->returnToPool(buffer);
+    pool->recycle(buffer);
 }

@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "buffer.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 
@@ -23,9 +23,9 @@ public:
 
     static std::shared_ptr<BufferPool> create(const BufferPoolArgs& args);
     
-    Frame acquire();
+    BufferPtr borrow();
 
-    void returnToPool(Buffer* buffer);
+    void recycle(Buffer* buffer);
     
     size_t getFreeBuffers() const;
 

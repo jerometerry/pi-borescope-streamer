@@ -124,9 +124,9 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 add_library(borescope_core STATIC 
     src/classes/binary_stream_capture.cpp
     src/classes/buffer.cpp
+    src/classes/buffer_ptr.cpp
     src/classes/buffer_pool.cpp
     src/classes/device_finder.cpp
-    src/classes/frame.cpp
     src/classes/frame_extractor.cpp
     src/classes/frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp

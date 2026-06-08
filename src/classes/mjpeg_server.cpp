@@ -20,7 +20,7 @@
 #include "buffer.hpp"
 #include "constants.hpp"
 #include "device_finder.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
 

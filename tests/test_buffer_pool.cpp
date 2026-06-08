@@ -13,12 +13,12 @@
 #include <vector>
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "shared_frame_buffer.hpp"
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
-    Frame frame = bp->acquire();
+    BufferPtr frame = bp->borrow();
     frame->insertContent(data);
     sfb.push(frame);
 };
@@ -27,7 +27,7 @@ TEST(BufferPoolTest, BoundedPoolGrowth) {
     auto bufferPool = BufferPool::create();
     SharedFrameBuffer frameBuffer;
 
-    std::vector<Frame> slowConsumers;
+    std::vector<BufferPtr> slowConsumers;
     std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
 
     constexpr int SPIKE_SIZE = 10;
@@ -47,7 +47,7 @@ TEST(BufferPoolTest, BoundedPoolGrowth) {
 
 TEST(BufferPoolTest, DefaultTotalCapacity128K) {
     auto bufferPool = BufferPool::create();
-    auto frame = bufferPool->acquire();
+    auto frame = bufferPool->borrow();
     auto expectedCapacity = Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES + BufferPoolConfig::BUFFER_PADDING;
     EXPECT_EQ(frame->totalCapacity(), expectedCapacity);
 }
@@ -57,7 +57,7 @@ TEST(BufferPoolTest, FrameReserveAddsPaddingSize) {
         3, 1, Units::ONE_KILOBYTE
     };
     auto bufferPool = BufferPool::create(args);
-    auto frame = bufferPool->acquire();
+    auto frame = bufferPool->borrow();
     auto expectedCapacity = args.bufferReserveSize + BufferPoolConfig::BUFFER_PADDING;
     EXPECT_EQ(frame->totalCapacity(), expectedCapacity);
 }
@@ -69,7 +69,7 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
 
     auto bufferPool = BufferPool::create(args);
 
-    auto frame = bufferPool->acquire();
+    auto frame = bufferPool->borrow();
     auto* buffer = frame.getBuffer();
 
     constexpr std::string_view mjpegHeader = "--mjpegstream\r\nContent-Type: image/jpeg\r\n";
@@ -116,7 +116,7 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
     EXPECT_THAT(
         actualData, 
         ::testing::ElementsAreArray(expectedData.begin(), expectedData.end())
-    ) << "Frame memory management error";
+    ) << "BufferPtr memory management error";
 }
 
 // -------------------------------------------------------------------
@@ -133,18 +133,18 @@ TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
     size_t initialFree = bufferPool->getFreeBuffers();
 
     {
-        Frame masterFrame = bufferPool->acquire();
+        BufferPtr masterFrame = bufferPool->borrow();
         EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1) << "Buffer not removed from pool";
 
         {
             // Simulate Viewer 1 connecting and holding a copy of the frame
-            Frame viewer1Frame = masterFrame; 
+            BufferPtr viewer1Frame = masterFrame; 
             
             // Simulate Viewer 2 connecting and holding a copy
-            Frame viewer2Frame = masterFrame; 
+            BufferPtr viewer2Frame = masterFrame; 
             
             // Master frame is overwritten with a new frame from the camera
-            masterFrame = bufferPool->acquire();
+            masterFrame = bufferPool->borrow();
             EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 2) << "Second buffer not acquired";
 
             // At this point, the original buffer is solely kept alive by viewer1 and viewer2
@@ -167,11 +167,11 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
 
     size_t initialFree = bufferPool->getFreeBuffers();
 
-    Frame original = bufferPool->acquire();
+    BufferPtr original = bufferPool->borrow();
     Buffer* underlyingPtr = original.getBuffer();
 
     // Move the frame. This should transfer ownership without touching the atomic counter
-    Frame movedFrame = std::move(original);
+    BufferPtr movedFrame = std::move(original);
 
     // The original frame should now be completely empty (operator bool() == false)
 
@@ -196,7 +196,7 @@ TEST(BufferPoolTest, PaddingAndContentSliceBoundaries) {
     };
     auto bufferPool = BufferPool::create(args);
 
-    Frame frame = bufferPool->acquire();
+    BufferPtr frame = bufferPool->borrow();
     auto* buffer = frame.getBuffer();
 
     // Insert mock hardware data
@@ -222,7 +222,7 @@ TEST(BufferPoolTest, BufferTrimMaintainsPadding) {
     };
     auto bufferPool = BufferPool::create(args);
 
-    Frame frame = bufferPool->acquire();
+    BufferPtr frame = bufferPool->borrow();
     auto* buffer = frame.getBuffer();
 
     // Data representing a messy stream: [Garbage] [FF D8 ... FF D9] [Garbage]
@@ -261,17 +261,17 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
     Buffer* underlyingPtr = nullptr;
 
     {
-        Frame frame = bufferPool->acquire();
+        BufferPtr frame = bufferPool->borrow();
         underlyingPtr = frame.getBuffer();
         
         // Insert data using the captured pointer
         std::vector<uint8_t> content = {0x01, 0x02, 0x03};
         underlyingPtr->insertContent(content);
         EXPECT_FALSE(underlyingPtr->empty());
-    } // Frame dies, buffer is cleared and returned to pool via recycleFrameBridge
+    } // BufferPtr dies, buffer is cleared and returned to pool via recycleFrameBridge
 
     // Re-acquire to get the exact same buffer back
-    Frame reusedFrame = bufferPool->acquire();
+    BufferPtr reusedFrame = bufferPool->borrow();
     EXPECT_EQ(reusedFrame.getBuffer(), underlyingPtr) << "Pool did not return the recycled buffer";
     
     // Verify clear() actually wiped the user data but kept the prefix allocation
@@ -288,7 +288,7 @@ TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
         3, 1, 128
     };
     auto bufferPool = BufferPool::create(args);
-    Frame frame = bufferPool->acquire();
+    BufferPtr frame = bufferPool->borrow();
     auto* buffer = frame.getBuffer();
 
     std::vector<uint8_t> content = { 0x01, 0x02, 0x03, 0x04 };
@@ -310,7 +310,7 @@ TEST(BufferPoolTest, FrontOnEmptyBufferThrowsException) {
         3, 1, 128
     };
     auto bufferPool = BufferPool::create(args);
-    Frame frame = bufferPool->acquire();
+    BufferPtr frame = bufferPool->borrow();
 
     // The buffer is technically not "empty" vector-wise (it holds 128 bytes of prefix), 
     // but content-wise it is empty. front() should safely reject access.
@@ -325,7 +325,7 @@ TEST(BufferPoolTest, BufferPointerMath_InsertContentDoesNotChangePointer) {
         3, 1, 128
     };
     auto bufferPool = BufferPool::create(args);
-    auto frame = bufferPool->acquire();
+    auto frame = bufferPool->borrow();
 
     auto* buffer = frame.getBuffer();
     std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
@@ -353,7 +353,7 @@ TEST(BufferPoolTest, BufferPointerMath_ContentPtrOffsetFromPaddingPtr) {
         3, 1, 128
     };
     auto bufferPool = BufferPool::create(args);
-    auto frame = bufferPool->acquire();
+    auto frame = bufferPool->borrow();
 
     auto* buffer = frame.getBuffer();
     std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };

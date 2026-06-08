@@ -15,7 +15,7 @@
 #include "constants.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "libusb_async_driver.hpp"
 #include "mjpeg_stream.hpp"
 #include "shared_frame_buffer.hpp"
@@ -69,7 +69,7 @@ int main(int argc, const char* argv[]) {
     auto bufferPool = BufferPool::create();
 
     SharedFrameBuffer frameBuffer;
-    MjpegStream mjpegStream(bufferPool, [&frameBuffer](const Frame& frame) {
+    MjpegStream mjpegStream(bufferPool, [&frameBuffer](const BufferPtr& frame) {
         frameBuffer.push(frame);
     });
 

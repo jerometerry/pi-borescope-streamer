@@ -18,7 +18,7 @@
 #include <vector>
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_buffer.hpp"
 
@@ -61,17 +61,17 @@ protected:
     }
 
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
-        auto frame = bufferPool_->acquire();
+        auto frame = bufferPool_->borrow();
         frame->insertContent(data);
         frameBuffer_->push(frame);
     }
 
-    void injectMockVideoFrame(const Frame& frame) {
+    void injectMockVideoFrame(const BufferPtr& frame) {
         frameBuffer_->push(frame);
     }
 
-    Frame acquireFrame() {
-        return bufferPool_->acquire();
+    BufferPtr acquireFrame() {
+        return bufferPool_->borrow();
     }
 
     std::string_view buildMjpegResponse(Buffer *buffer) {

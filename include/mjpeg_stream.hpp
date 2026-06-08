@@ -6,7 +6,7 @@
 #include <span>
 #include <vector>
 #include "constants.hpp"
-#include "frame.hpp"
+#include "buffer_ptr.hpp"
 
 class BufferPool;
 
@@ -33,7 +33,7 @@ public:
      */
     explicit MjpegStream(
         std::shared_ptr<BufferPool> bufferPool,
-        std::function<void(Frame)> onFrameReady
+        std::function<void(BufferPtr)> onFrameReady
     );
 
     ~MjpegStream() = default;
@@ -58,7 +58,7 @@ private:
     /**
      * @brief The workbench where we are currently stitching the chunks into a picture.
      */
-    Frame activeFrame_;
+    BufferPtr activeFrame_;
 
     /**
      * @brief The memory of what the current picture is supposed to look like.
@@ -78,7 +78,7 @@ private:
     /**
      * @brief Where to send finished video pictures.
      */
-    std::function<void(Frame)> onFrameReady_;
+    std::function<void(BufferPtr)> onFrameReady_;
 
     /**
      * @brief Snip out the exact picture and send it off.
