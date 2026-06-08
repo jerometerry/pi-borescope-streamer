@@ -28,9 +28,9 @@
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
+#include "mjpeg_frame_queue.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_stream.hpp"
-#include "shared_frame_buffer.hpp"
 #include "usb_camera.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
@@ -117,9 +117,11 @@ int main(int argc, const char* argv[]) {
         
         auto bufferPool = BufferPool::create();
 
-        SharedFrameBuffer frameBuffer;
-        MjpegStream mjpegStream(bufferPool, [&frameBuffer](const BufferPtr& frame) {
-            frameBuffer.push(frame);
+        // MjpegFrameQueue HAS to be initialized after buffer pool!
+        // Otherwise it will go out of scope before incoming mjpeg stream completes.
+        MjpegFrameQueue frameQueue;
+        MjpegStream mjpegStream(bufferPool, [&frameQueue](const BufferPtr& frame) {
+            frameQueue.push(frame);
         });
 
         auto usbRouter = [&mjpegStream](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
@@ -133,8 +135,8 @@ int main(int argc, const char* argv[]) {
         };
         UsbDriver<decltype(usbRouter)> usbDriver(usbRouter, &globalRunning);
 
-        MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
-            return frameBuffer.getLatestFrame(id);
+        MjpegServer server(port, globalRunning, [&frameQueue](uint32_t& id) {
+            return frameQueue.getLatestFrame(id);
         });
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
