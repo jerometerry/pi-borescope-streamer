@@ -6,21 +6,21 @@
 #include <string>
 #include <vector>
 #include "constants.hpp"
-#include "device_finder.hpp"
-#include "device_info.hpp"
 #include "usb_context.hpp"
+#include "usb_device_finder.hpp"
+#include "usb_device_info.hpp"
 #include "usb_device_list.hpp"
 
-std::vector<DeviceInfo> DeviceFinder::all() {
+std::vector<UsbDeviceInfo> UsbDeviceFinder::all() {
     return find(false);
 }
 
-std::vector<DeviceInfo> DeviceFinder::superCameras() {
+std::vector<UsbDeviceInfo> UsbDeviceFinder::superCameras() {
     return find(true);
 }
 
-std::vector<DeviceInfo> DeviceFinder::find(bool onlySuperCameras) {
-    std::vector<DeviceInfo> foundDevices;
+std::vector<UsbDeviceInfo> UsbDeviceFinder::find(bool onlySuperCameras) {
+    std::vector<UsbDeviceInfo> foundDevices;
     UsbContext context;
     UsbDeviceList attachedDevices(context);
 
@@ -40,7 +40,7 @@ std::vector<DeviceInfo> DeviceFinder::find(bool onlySuperCameras) {
             continue;
         }
 
-        DeviceInfo info{
+        UsbDeviceInfo info{
             .bus = libusb_get_bus_number(device),
             .address = libusb_get_device_address(device),
             .vendorId = desc.idVendor,
@@ -76,7 +76,7 @@ std::vector<DeviceInfo> DeviceFinder::find(bool onlySuperCameras) {
     return foundDevices;
 }
 
-libusb_device_handle* DeviceFinder::open(UsbContext& context, const DeviceInfo& target) {
+libusb_device_handle* UsbDeviceFinder::open(UsbContext& context, const DeviceInfo& target) {
     UsbDeviceList attachedDevices(context);
     
     for (libusb_device* device : attachedDevices.get()) {
@@ -92,7 +92,7 @@ libusb_device_handle* DeviceFinder::open(UsbContext& context, const DeviceInfo& 
     return nullptr;
 }
 
-std::string DeviceFinder::toJson(const std::vector<DeviceInfo>& devices) {
+std::string UsbDeviceFinder::toJson(const std::vector<UsbDeviceInfo>& devices) {
     std::string json = "[";
     for (size_t i = 0; i < devices.size(); ++i) {
         const auto& dev = devices[i];
