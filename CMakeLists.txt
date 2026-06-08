@@ -30,7 +30,8 @@ pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
 find_program(CLANG_TIDY_EXE NAMES "clang-tidy" 
     PATHS "/opt/homebrew/opt/llvm/bin" 
           "/usr/bin" 
-          "/usr/local/bin")
+          "/usr/local/bin"
+)
 if(CLANG_TIDY_EXE)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}" 
         "-checks=-*,performance-*,concurrency-*,bugprone-*,modernize-*,cppcoreguidelines-*,-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-avoid-c-arrays,-modernize-avoid-c-arrays,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-non-const-global-variables,-bugprone-throwing-static-initialization,-modernize-use-designated-initializers,-modernize-use-integer-sign-comparison,-modernize-use-auto,-modernize-use-ranges,-bugprone-narrowing-conversions,-cppcoreguidelines-narrowing-conversions,-modernize-avoid-c-style-cast,-cppcoreguidelines-pro-type-const-cast,-modernize-use-nodiscard,-modernize-use-equals-default,-cppcoreguidelines-special-member-functions,-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access"
@@ -43,7 +44,8 @@ endif()
 find_program(CPPCHECK_EXE NAMES "cppcheck" 
     PATHS "/opt/homebrew/bin" 
           "/usr/bin" 
-          "/usr/local/bin")
+          "/usr/local/bin"
+)
 if(CPPCHECK_EXE)
     set(CMAKE_CXX_CPPCHECK "${CPPCHECK_EXE}" 
         "--enable=all" 
@@ -57,10 +59,11 @@ else()
     message(FATAL_ERROR "cppcheck not found!")
 endif()
 
-find_program(IWYU_EXE NAMES "include-what-you-use" 
+find_program(IWYU_EXE NAMES "include-what-you-use" iwyu
     PATHS "/opt/homebrew/bin" 
           "/usr/bin" 
-          "/usr/local/bin")
+          "/usr/local/bin"
+)
 if(IWYU_EXE)
     set(IWYU_ARGS "${IWYU_EXE}")
 
@@ -79,6 +82,8 @@ if(IWYU_EXE)
         if(GCC_MAP_FILE)
             list(APPEND IWYU_ARGS "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}")
         endif()
+
+        list(APPEND IWYU_ARGS "-D_GLIBCXX_HOSTED=1" "-D__GXX_EXPERIMENTAL_CXX0X__=1")
     endif()
 
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_ARGS}")
