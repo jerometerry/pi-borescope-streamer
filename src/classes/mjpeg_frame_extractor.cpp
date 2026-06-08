@@ -8,10 +8,10 @@
 #include <vector>
 #include "constants.hpp"
 #include "frame_extractor.hpp"
-#include "packet_header.hpp"
-#include "payload_header.hpp"
+#include "usb_packet_header.hpp"
+#include "usb_payload_header.hpp"
 
-void FrameExtractor::printPaddingDump(const std::vector<uint8_t>& data, Padding padding) {
+void MjpegFrameExtractor::printPaddingDump(const std::vector<uint8_t>& data, Padding padding) {
     size_t start = padding.start;
     size_t length = padding.length;
     if (length == 0) {
@@ -32,7 +32,7 @@ void FrameExtractor::printPaddingDump(const std::vector<uint8_t>& data, Padding 
     }
 }
 
-void FrameExtractor::inspectPadding(const std::vector<uint8_t>& fileData) {
+void MjpegFrameExtractor::inspectPadding(const std::vector<uint8_t>& fileData) {
     int framesAnalyzed = 0;
     size_t i = 0;
 
@@ -80,7 +80,7 @@ void FrameExtractor::inspectPadding(const std::vector<uint8_t>& fileData) {
     }
 }
 
-void FrameExtractor::printHexDump(const std::vector<uint8_t>& data, DumpRange range) {
+void MjpegFrameExtractor::printHexDump(const std::vector<uint8_t>& data, DumpRange range) {
     size_t endPos = std::min(range.end, data.size());
     
     for (size_t i = range.start; i < endPos; i += 16) {
@@ -99,7 +99,7 @@ void FrameExtractor::printHexDump(const std::vector<uint8_t>& data, DumpRange ra
     }
 }
 
-void FrameExtractor::inspectFrameBoundary(const std::vector<uint8_t>& fileData) {
+void MjpegFrameExtractor::inspectFrameBoundary(const std::vector<uint8_t>& fileData) {
     if (fileData.size() < 12) {
         std::cerr << "File too small.\n";
         return;
@@ -143,7 +143,7 @@ void FrameExtractor::inspectFrameBoundary(const std::vector<uint8_t>& fileData) 
     }
 }
 
-void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
+void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
     std::cout << "Starting first-principles hardware extraction...\n\n";
 
     size_t i = 0;
@@ -153,10 +153,10 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
     int frameCount = 0;
     int lastFrameId = -1;
 
-    while (i + USB::TOTAL_HEADER_SIZE <= fileData.size()) {
+    while (i + USB::TOTAL_USB_HEADER_SIZE <= fileData.size()) {
 
-        const USB::PacketHeader* header = 
-            reinterpret_cast<const USB::PacketHeader*>(
+        const USB::UsbPacketHeader* header = 
+            reinterpret_cast<const USB::UsbPacketHeader*>(
                 &fileData[i]
             );
 
@@ -193,15 +193,15 @@ void FrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
             continue;
         }
 
-        size_t packetSize = USB::PACKET_HEADER_SIZE + header->getLength();
+        size_t packetSize = USB::USB_PACKET_HEADER_SIZE + header->getLength();
         if (i + packetSize > fileData.size()) {
             std::cout << "Reached incomplete hardware block at end of file. Stopping.\n";
             break; 
         }
 
-        const USB::PayloadHeader* meta = 
-            reinterpret_cast<const USB::PayloadHeader*>(
-                &fileData[i + USB::PACKET_HEADER_SIZE]
+        const USB::UsbPayloadHeader* meta = 
+            reinterpret_cast<const USB::UsbPayloadHeader*>(
+                &fileData[i + USB::USB_PACKET_HEADER_SIZE]
             );
 
         if (lastFrameId != -1 && meta->getFrameId() != lastFrameId) {
