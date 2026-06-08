@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
-#include "device_info.hpp"
+#include "usb_device_info.hpp"
 
 /**
  * @brief The direct hardware connection to the physical USB endoscope.
@@ -27,7 +27,7 @@ public:
      * @param target The specific camera hardware to connect to (usually found via listAvailable).
      * @throws std::runtime_error If the camera isn't plugged in, or if the OS refuses to let go of it.
      */
-    explicit UsbCamera(const DeviceInfo& target);
+    explicit UsbCamera(const UsbDeviceInfo& target);
 
     /**
      * @brief Safely power down the connection and give the camera back to the OS.
@@ -70,7 +70,7 @@ public:
      * @brief List all available USB cameras
      * @return A vector of available USB camera devices
      */
-    static std::vector<DeviceInfo> listCameras();
+    static std::vector<UsbDeviceInfo> listCameras();
 
     /**
      * @brief Scan the computer for any plugged-in borescopes.
@@ -79,7 +79,7 @@ public:
      * @param context The active libusb environment.
      * @return A list of all connected devices that match the borescope's hardware ID.
      */
-    static std::vector<DeviceInfo> listAvailable(libusb_context *context);
+    static std::vector<UsbDeviceInfo> listAvailable(libusb_context *context);
 
     /**
      * @brief Get the Raw Handle object
