@@ -64,7 +64,7 @@ int main(int argc, const char* argv[]) {
     }
     
     const Usb
-    DeviceInfo& camera = cameras[0];
+    UsbDeviceInfo& camera = cameras[0];
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
