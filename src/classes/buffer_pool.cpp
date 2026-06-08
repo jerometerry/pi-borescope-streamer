@@ -41,7 +41,7 @@ BufferPtr BufferPool::borrow() {
     }
 
     if (!buffer) {
-        buffer = Buffer::unique();
+        buffer = Buffer::create();
         buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);
@@ -79,7 +79,7 @@ void BufferPool::initialize() {
     pool_.reserve(maxPoolSize_);
     
     for (size_t i = 0; i < initialPoolSize_; ++i) {
-        auto buffer = Buffer::unique();
+        auto buffer = Buffer::create();
         buffer->reserve(bufferReserveSize_);
         buffer->setPoolContext(this);
         buffer->setReturnCallback(recycleFrameBridge);

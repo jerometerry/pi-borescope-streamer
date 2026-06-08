@@ -14,11 +14,11 @@ Buffer::Buffer(const size_t paddingSize) : paddingSize_(paddingSize) {
 	}
 }
 
-std::unique_ptr<Buffer> Buffer::unique() {
+std::unique_ptr<Buffer> Buffer::create() {
 	return std::make_unique<Buffer>(BufferPoolConfig::BUFFER_PADDING);
 }
 
-std::unique_ptr<Buffer> Buffer::unique(size_t padding) {
+std::unique_ptr<Buffer> Buffer::create(size_t padding) {
 	return std::make_unique<Buffer>(padding);
 }
 
