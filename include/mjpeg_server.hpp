@@ -42,6 +42,12 @@ private:
         uint32_t lagStartFrameId{0};
     };
 
+    struct CorkState {
+        uWS::HttpResponse<false>* res;
+        std::string_view payload;
+        bool ok;
+    };
+
     const int port_;
     const std::atomic<bool>& running_;
     FrameSource frameSource_;

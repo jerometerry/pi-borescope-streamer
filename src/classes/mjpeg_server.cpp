@@ -10,6 +10,7 @@
 #include <functional>
 #include <future>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -84,14 +85,17 @@ void MjpegServer::onTimer(us_timer_t *t) {
                         viewer.isLagging = false;
                     }
 
-                    Buffer* rawBuffer = currentFrame.get();
+                    CorkState state {
+                        res,
+                        ZeroAllocationResponseBuilder::build(currentFrame.get()),
+                        false
+                    };
 
-                    auto payload = ZeroAllocationResponseBuilder::build(rawBuffer);
-                    bool ok = false;
-                    res->cork([res, payload, &ok]() {
-                        ok = res->write(payload);
+                    state.res->cork([&state]() {
+                        state.ok = state.res->write(state.payload);
                     });
-                    if (!ok) {
+
+                    if (!state.ok) {
                         std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "
                                 << "uWebSockets just executed a user-space malloc to queue this frame.\n";
                     }
