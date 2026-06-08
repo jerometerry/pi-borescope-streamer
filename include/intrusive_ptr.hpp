@@ -10,6 +10,7 @@ public:
 
     constexpr IntrusivePtr() noexcept : ptr_(nullptr) {}
 
+    // cppcheck-suppress noExplicitConstructor
     constexpr IntrusivePtr(std::nullptr_t) noexcept : ptr_(nullptr) {}
 
     explicit IntrusivePtr(T* p) : ptr_(p) {

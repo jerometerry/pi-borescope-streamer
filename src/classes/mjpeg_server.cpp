@@ -21,6 +21,7 @@
 #include "constants.hpp"
 #include "device_finder.hpp"
 #include "index_html.hpp"
+#include "intrusive_ptr.hpp"
 #include "mjpeg_server.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameSource frameSource)

@@ -1,12 +1,10 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <span>
 #include <stdexcept>
 #include <vector>
 #include "buffer.hpp"
-#include "constants.hpp"
 
 Buffer::Buffer(const size_t paddingSize) : paddingSize_(paddingSize) {
 	if (data_.size() < paddingSize) {

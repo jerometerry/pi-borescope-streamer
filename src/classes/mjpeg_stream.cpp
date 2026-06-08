@@ -9,8 +9,9 @@
 #include <vector>
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
-#include "constants.hpp"
 #include "buffer_ptr.hpp"
+#include "constants.hpp"
+#include "intrusive_ptr.hpp"
 #include "mjpeg_stream.hpp"
 #include "packet_header.hpp"
 #include "payload_header.hpp"

@@ -19,6 +19,7 @@
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
+#include "intrusive_ptr.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_buffer.hpp"
 

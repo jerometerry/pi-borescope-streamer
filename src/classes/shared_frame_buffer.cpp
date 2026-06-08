@@ -3,6 +3,7 @@
 
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
+#include "intrusive_ptr.hpp"
 #include "shared_frame_buffer.hpp"
 #include "thread_safety_mutex.hpp"
 

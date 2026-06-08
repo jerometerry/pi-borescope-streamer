@@ -46,6 +46,7 @@ if(CPPCHECK_EXE)
         "--suppress=unusedFunction"
         "--suppress=unmatchedSuppression"
         "--suppress=style" 
+        "--inline-suppr"
         "--check-level=exhaustive"
     )
 else()

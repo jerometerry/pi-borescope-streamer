@@ -12,6 +12,7 @@
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
+#include "intrusive_ptr.hpp"
 #include "shared_frame_buffer.hpp"
 
 static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {

@@ -12,10 +12,11 @@
 #include <vector>
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
+#include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "device_info.hpp"
 #include "device_finder.hpp"
-#include "buffer_ptr.hpp"
+#include "intrusive_ptr.hpp"
 #include "libusb_async_driver.hpp"
 #include "mjpeg_stream.hpp"
 #include "shared_frame_buffer.hpp"
