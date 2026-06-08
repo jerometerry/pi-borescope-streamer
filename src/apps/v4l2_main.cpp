@@ -14,12 +14,12 @@
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "device_info.hpp"
-#include "device_finder.hpp"
 #include "intrusive_ptr.hpp"
-#include "libusb_async_driver.hpp"
 #include "mjpeg_stream.hpp"
 #include "shared_frame_buffer.hpp"
+#include "usb_device_info.hpp"
+#include "usb_device_finder.hpp"
+#include "usb_driver.hpp"
 #include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
 
@@ -57,13 +57,14 @@ int main(int argc, const char* argv[]) {
               << "  -> Max Buffer  : " << config.sizeImage << " bytes\n"
               << "=================================================\n";
 
-    auto cameras = DeviceFinder::superCameras();
+    auto cameras = UsbDeviceFinder::superCameras();
     if (cameras.empty()) {
         std::cerr << "[Fatal] No compatible Useeplus cameras found on the USB bus.\n";
         return EXIT_FAILURE;
     }
     
-    const DeviceInfo& camera = cameras[0];
+    const Usb
+    DeviceInfo& camera = cameras[0];
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
@@ -84,7 +85,7 @@ int main(int argc, const char* argv[]) {
         return status != USB::TransferStatus::Disconnected; 
     };
 
-    LibusbAsyncDriver<decltype(usbRouter)> usbDriver(usbRouter, &running);
+    UsbDrivee<decltype(usbRouter)> usbDriver(usbRouter, &running);
     usbDriver.start(camera);
 
     V4l2Publisher publisher(config);
