@@ -6,6 +6,7 @@
 
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
+#include "buffer_recycler.hpp"
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 
@@ -14,7 +15,7 @@
  * the hot paths. Buffers are wrapped with IntrusivePtr, and are automatically returned to the pool if the pool size 
  * is less than the max size, otherwise the Buffer is deleted.
  */
-class BufferPool : public std::enable_shared_from_this<BufferPool> {
+class BufferPool final : public BufferRecycler, public std::enable_shared_from_this<BufferPool> {
 public:
     struct BufferPoolArgs {
         size_t maxPoolSize;
@@ -32,13 +33,12 @@ public:
 
     size_t getFreeBuffers() const;
 
-private:
-    friend Buffer;  
+    void recycle(Buffer* buffer) override;
 
-    void recycle(Buffer* buffer);
+private:
+    friend Buffer;
 
     void initialize();
-    static void recycleFrameBridge(void* context, Buffer* buffer);
     
     mutable Mutex poolMutex_;
     std::vector<std::unique_ptr<Buffer>> pool_ GUARDED_BY(poolMutex_);

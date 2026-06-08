@@ -31,7 +31,16 @@ public:
     }
 
     IntrusivePtr& operator=(const IntrusivePtr& other) {
-        IntrusivePtr(other).swap(*this);
+        if (this != &other) {
+            T* old_ptr = ptr_;
+            ptr_ = other.ptr_;
+            if (ptr_) {
+                intrusive_ptr_add_ref(ptr_);
+            }
+            if (old_ptr) {
+                intrusive_ptr_release(old_ptr);
+            }
+        }
         return *this;
     }
 

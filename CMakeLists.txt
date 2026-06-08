@@ -290,6 +290,7 @@ if(BUILD_TESTING)
     target_link_libraries(borescope_core INTERFACE gtest)
 
     add_executable(run_project_tests 
+        tests/test_buffer.cpp
         tests/test_buffer_pool.cpp
         tests/test_mjpeg_frame_queue.cpp
         tests/test_mjpeg_server.cpp

@@ -5,6 +5,7 @@
 #include <memory>
 #include <span>
 #include <vector>
+#include "buffer_recycler.hpp"
 
 /**
  * @brief Pre-allocated contiguous block of memory, used to prevent memory allocations on the hot paths. 
@@ -16,9 +17,9 @@
  */
 struct Buffer {
 public:
-    using ReturnCallback = void(*)(void*, Buffer*);
-
     explicit Buffer(const size_t paddingSize);
+
+    explicit Buffer(const size_t paddingSize, BufferRecycler* recycler);
 
     void retain();
     
@@ -31,10 +32,6 @@ public:
     void reserve(size_t size);
 
     void trim(size_t startOffset, size_t endOffset);
-
-    void setPoolContext(void* context);
-
-    void setReturnCallback(ReturnCallback callback);
 
     void insertContent(std::span<const uint8_t> content);
 
@@ -67,9 +64,9 @@ private:
 
     std::atomic<int> refCount_{0};
     std::vector<uint8_t> data_;
-    ReturnCallback returnCallback_{nullptr};
-    void* poolContext_{nullptr};
     const size_t paddingSize_;
+
+    BufferRecycler* recycler_;
 };
 
 inline void intrusive_ptr_add_ref(Buffer* b) {
@@ -78,8 +75,8 @@ inline void intrusive_ptr_add_ref(Buffer* b) {
 
 inline void intrusive_ptr_release(Buffer* b) {
     if (b->release()) {
-        if (b->returnCallback_ && b->poolContext_) {
-            b->returnCallback_(b->poolContext_, b);
+        if (b->recycler_) {
+            b->recycler_->recycle(b);
         } else {
             std::default_delete<Buffer>{}(b);
         }

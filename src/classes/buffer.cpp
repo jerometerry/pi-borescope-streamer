@@ -7,8 +7,17 @@
 #include <vector>
 // IWYU pragma: end_exports
 #include "buffer.hpp"
+#include "buffer_recycler.hpp"
 
-Buffer::Buffer(const size_t paddingSize) : paddingSize_(paddingSize) {
+Buffer::Buffer(const size_t paddingSize) : 
+	paddingSize_(paddingSize), recycler_(nullptr) {
+	if (data_.size() < paddingSize) {
+		data_.resize(paddingSize);
+	}
+}
+
+Buffer::Buffer(const size_t paddingSize, BufferRecycler* recycler) : 
+	paddingSize_(paddingSize), recycler_(recycler) {
 	if (data_.size() < paddingSize) {
 		data_.resize(paddingSize);
 	}
@@ -48,14 +57,6 @@ void Buffer::trim(size_t startOffset, size_t endOffset) {
 		size_t internalStart = paddingSize();
 		data_.erase(data_.begin() + internalStart, data_.begin() + internalStart + startOffset);
 	}
-}
-
-void Buffer::setPoolContext(void* context) {
-	poolContext_ = context;
-}
-
-void Buffer::setReturnCallback(ReturnCallback callback) {
-	returnCallback_ = callback;
 }
 
 void Buffer::insertContent(std::span<const uint8_t> content) {

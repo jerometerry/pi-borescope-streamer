@@ -268,7 +268,7 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
         std::vector<uint8_t> content = {0x01, 0x02, 0x03};
         underlyingPtr->insertContent(content);
         EXPECT_FALSE(underlyingPtr->empty());
-    } // BufferPtr dies, buffer is cleared and returned to pool via recycleFrameBridge
+    } // BufferPtr dies, buffer is cleared and returned to pool
 
     // Re-acquire to get the exact same buffer back
     BufferPtr reusedFrame = bufferPool->borrow();
