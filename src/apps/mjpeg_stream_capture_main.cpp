@@ -10,6 +10,7 @@
  * recording of the glitch, which they can then analyze later to figure out what went wrong.
  */
 
+#include <atomic>
 #include <csignal>
 #include <cstdlib>
 #include <exception>
@@ -17,7 +18,7 @@
 #include <limits>
 #include <string>
 #include <vector>
-#include <atomic>
+
 #include "device_finder.hpp"
 #include "device_info.hpp"
 #include "mjpeg_stream_capture.hpp"
