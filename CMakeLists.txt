@@ -27,31 +27,40 @@ add_custom_command(
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
 
-find_program(CLANG_TIDY_EXE NAMES "clang-tidy" PATHS "/opt/homebrew/opt/llvm/bin" "/usr/local/opt/llvm/bin")
+find_program(CLANG_TIDY_EXE NAMES "clang-tidy" 
+    PATHS "/opt/homebrew/opt/llvm/bin" 
+          "/usr/bin" 
+          "/usr/local/bin")
 if(CLANG_TIDY_EXE)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}" 
         "-checks=-*,performance-*,concurrency-*,bugprone-*,modernize-*,cppcoreguidelines-*,-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-avoid-c-arrays,-modernize-avoid-c-arrays,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-non-const-global-variables,-bugprone-throwing-static-initialization,-modernize-use-designated-initializers,-modernize-use-integer-sign-comparison,-modernize-use-auto,-modernize-use-ranges,-bugprone-narrowing-conversions,-cppcoreguidelines-narrowing-conversions,-modernize-avoid-c-style-cast,-cppcoreguidelines-pro-type-const-cast,-modernize-use-nodiscard,-modernize-use-equals-default,-cppcoreguidelines-special-member-functions,-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access"
         "-warnings-as-errors=*"
     )
 else()
-    message(WARNING "clang-tidy not found")
+    message(FATAL_ERROR "clang-tidy not found!")
 endif()
 
-find_program(CPPCHECK_EXE NAMES "cppcheck" PATHS "/opt/homebrew/bin" "/usr/local/bin")
+find_program(CPPCHECK_EXE NAMES "cppcheck" 
+    PATHS "/opt/homebrew/bin" 
+          "/usr/bin" 
+          "/usr/local/bin")
 if(CPPCHECK_EXE)
     set(CMAKE_CXX_CPPCHECK "${CPPCHECK_EXE}" 
         "--enable=all" 
-        "--inconclusive"
+        "--inconclusive" 
         "--inline-suppr"
         "--check-level=exhaustive"
         "--suppress=missingIncludeSystem"
         "--suppress=unmatchedSuppression"
     )
 else()
-    message(WARNING "cppcheck not found")
+    message(FATAL_ERROR "cppcheck not found!")
 endif()
 
-find_program(IWYU_EXE NAMES "include-what-you-use" PATHS "/opt/homebrew/bin" "/usr/local/bin")
+find_program(IWYU_EXE NAMES "include-what-you-use" 
+    PATHS "/opt/homebrew/bin" 
+          "/usr/bin" 
+          "/usr/local/bin")
 if(IWYU_EXE)
     set(IWYU_ARGS "${IWYU_EXE}")
 
@@ -74,9 +83,8 @@ if(IWYU_EXE)
 
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_ARGS}")
 else()
-    message(WARNING "include-what-you-use not found")
+    message(FATAL_ERROR "include-what-you-use not found!")
 endif()
-
 
 add_library(project_warnings INTERFACE)
 

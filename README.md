@@ -92,6 +92,14 @@ cmake . --preset release --fresh
 cmake --build --preset release
 ```
 
+**Run CMake using Homebrew Installed LLVM Compiler**
+```bash
+cmake . --preset debug --fresh \
+  -DCMAKE_C_COMPILER="/opt/homebrew/opt/llvm/bin/clang" \
+  -DCMAKE_CXX_COMPILER="/opt/homebrew/opt/llvm/bin/clang++"
+  cmake --build --preset debug
+```
+
 ### 3. Alternative: Manual Compile via CMake CLI
 If you want to configure build directories manually without using presets:
 ```bash
