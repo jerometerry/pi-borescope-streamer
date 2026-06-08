@@ -32,7 +32,7 @@ void signalHandler(int /*signum*/) {
 }
 
 bool selectCamera(UsbDeviceInfo& cameraInfo) {
-	std::vector<DeviceInfo> cameras = UsbDeviceFinder::superCameras();
+	std::vector<UsbDeviceInfo> cameras = UsbDeviceFinder::superCameras();
 	if (cameras.empty()) {
 		std::cerr << "[Error] No Useeplus supercamera devices found on the USB bus.\n";
 		return false;

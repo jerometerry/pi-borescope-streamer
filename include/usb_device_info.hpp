@@ -55,7 +55,7 @@ struct UsbDeviceInfo {
      * @param device The other ID badge to compare against.
      * @return True if both devices share the exact same Vendor and Product IDs.
      */
-    bool isSameDevice(const DeviceInfo& device) const {
+    bool isSameDevice(const UsbDeviceInfo& device) const {
         return vendorId == device.vendorId && productId == device.productId;
     }
 };

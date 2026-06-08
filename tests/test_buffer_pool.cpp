@@ -16,9 +16,9 @@
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "intrusive_ptr.hpp"
-#include "shared_frame_buffer.hpp"
+#include "mjpeg_frame_queue.hpp"
 
-static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
+static void pushFrame (MjpegFrameQueue& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
     BufferPtr frame = bp->borrow();
     frame->insertContent(data);
     sfb.push(frame);
@@ -26,7 +26,7 @@ static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>
 
 TEST(BufferPoolTest, BoundedPoolGrowth) {
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer;
+    MjpegFrameQueue frameBuffer;
 
     std::vector<BufferPtr> slowConsumers;
     std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
@@ -36,7 +36,7 @@ TEST(BufferPoolTest, BoundedPoolGrowth) {
     for (int i = 0; i < SPIKE_SIZE; ++i) {
         pushFrame(frameBuffer, bufferPool, dummyFrame);
         uint32_t id = 0;
-        slowConsumers.push_back(frameBuffer.getLatestFrame(id));
+        slowConsumers.push_back(frameBuffer.pop(id));
     }
 
     slowConsumers.clear();

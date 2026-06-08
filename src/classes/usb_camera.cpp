@@ -8,10 +8,10 @@
 #include <string>
 #include <vector>
 #include "constants.hpp"
-#include "device_info.hpp"
 #include "usb_camera.hpp"
+#include "usb_device_info.hpp"
 
-UsbCamera::UsbCamera(const DeviceInfo& target) {
+UsbCamera::UsbCamera(const UsbDeviceInfo& target) {
     if (libusb_init(&context_) < 0) {
         throw std::runtime_error("libusb_init failed");
     }
@@ -72,7 +72,7 @@ UsbCamera::~UsbCamera() {
     }
 }
 
-libusb_device_handle* UsbCamera::open(libusb_context *context, const DeviceInfo& target) {
+libusb_device_handle* UsbCamera::open(libusb_context *context, const UsbDeviceInfo& target) {
     libusb_device** devices = nullptr;
     ssize_t count = libusb_get_device_list(context, &devices);
     if (count < 0) return nullptr;
@@ -94,8 +94,8 @@ libusb_device_handle* UsbCamera::open(libusb_context *context, const DeviceInfo&
     return handle;
 }
 
-std::vector<DeviceInfo> UsbCamera::listCameras() {
-    std::vector<DeviceInfo> cameras;
+std::vector<UsbDeviceInfo> UsbCamera::listCameras() {
+    std::vector<UsbDeviceInfo> cameras;
     libusb_context* ctx = nullptr;
     
     if (libusb_init(&ctx) < 0) {
@@ -121,7 +121,7 @@ std::vector<DeviceInfo> UsbCamera::listCameras() {
             });
 
         if (isSupported) {
-            DeviceInfo info{
+            UsbDeviceInfo info{
                 .bus = libusb_get_bus_number(device),
                 .address = libusb_get_device_address(device),
                 .vendorId = desc.idVendor,

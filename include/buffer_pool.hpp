@@ -9,6 +9,11 @@
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 
+/**
+ * @brief BufferPool manages a collection of Buffers that are pre-allocated at startup to avoid memory allocations on 
+ * the hot paths. Buffers are wrapped with IntrusivePtr, and are automatically returned to the pool if the pool size 
+ * is less than the max size, otherwise the Buffer is deleted.
+ */
 class BufferPool : public std::enable_shared_from_this<BufferPool> {
 public:
     struct BufferPoolArgs {

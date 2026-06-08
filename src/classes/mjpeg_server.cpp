@@ -19,10 +19,10 @@
 #include <vector>
 #include "buffer.hpp"
 #include "constants.hpp"
-#include "device_finder.hpp"
 #include "index_html.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_server.hpp"
+#include "usb_device_finder.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameSource frameSource)
     : port_(port), running_(running), frameSource_(std::move(frameSource)) {}
@@ -166,76 +166,79 @@ void MjpegServer::start() {
     auto loopFuture = loopPromise.get_future();
 
     networkThread_ = std::thread([this, &loopPromise]() {
-        auto app = uWS::App()
-            .get("/", [](auto *res, auto *) {
-                res->writeHeader("Connection", "close")
+        auto app = uWS::App();
+        app.get("/", [](auto *res, auto *) {
+            res->writeHeader("Connection", "close")
                 ->writeHeader("Content-Type", "text/html")
                 ->end(Resources::index_html);
-            })
-            .get("/api/cameras", [](auto *res, auto *) {
-                auto cameras = DeviceFinder::superCameras();
-                std::string jsonPayload = DeviceFinder::toJson(cameras);
-                res->writeHeader("Connection", "close")
-                ->writeHeader("Content-Type", "application/json")
-                ->end(jsonPayload);
-            }).get("/favicon.ico", [](auto *res, auto *) {
-                res->writeStatus("404 Not Found")
+        });
+        app.get("/api/cameras", [](auto *res, auto *) {
+            auto cameras = UsbDeviceFinder::superCameras();
+            std::string jsonPayload = UsbDeviceFinder::toJson(cameras);
+            res->writeHeader("Connection", "close")
+            ->writeHeader("Content-Type", "application/json")
+            ->end(jsonPayload);
+        });
+        app.get("/favicon.ico", [](auto *res, auto *) {
+            res->writeStatus("404 Not Found")
+            ->writeHeader("Connection", "close")
+            ->writeHeader("Cache-Control", "public, max-age=31536000")
+            ->end();
+        });
+        app.get("/stream", [this](auto *res, auto *) {
+            if (activeViewers_.size() >= WebServerConfig::MAX_CLIENTS) {
+                std::cerr << "Server at capacity. Refused new viewer\n";
+                res->writeStatus("503 Service Unavailable")->end("Server Capacity Reached");
+                return;
+            }
+
+            std::cerr << "Viewer connected to stream\n";
+
+            res->writeStatus("200 OK")
                 ->writeHeader("Connection", "close")
-                ->writeHeader("Cache-Control", "public, max-age=31536000")
-                ->end();
-            }).get("/stream", [this](auto *res, auto *) {
-                if (activeViewers_.size() >= WebServerConfig::MAX_CLIENTS) {
-                    std::cerr << "Server at capacity. Refused new viewer\n";
-                    res->writeStatus("503 Service Unavailable")->end("Server Capacity Reached");
-                    return;
-                }
+                ->writeHeader("Cache-Control", "no-cache, private")
+                ->writeHeader("Pragma", "no-cache")
+                ->writeHeader("Content-Type", "multipart/x-mixed-replace; boundary=mjpegstream");
 
-                std::cerr << "Viewer connected to stream\n";
+            activeViewers_.push_back({res, 0, false});
 
-                res->writeStatus("200 OK")
-                   ->writeHeader("Connection", "close")
-                   ->writeHeader("Cache-Control", "no-cache, private")
-                   ->writeHeader("Pragma", "no-cache")
-                   ->writeHeader("Content-Type", "multipart/x-mixed-replace; boundary=mjpegstream");
+            res->onAborted([this, res]() {
+                std::cerr << "Viewer disconnected from stream\n";
 
-                activeViewers_.push_back({res, 0, false});
-
-                res->onAborted([this, res]() {
-                    std::cerr << "Viewer disconnected from stream\n";
-
-                    auto it = std::find_if(activeViewers_.begin(), activeViewers_.end(),
-                        [res](const Web::ViewerState& v) { return v.res == res; });
-                        
-                    if (it != activeViewers_.end()) {
-                        it->isClosed = true;
-                    }
-                });
-            }).any("/*", [](auto *res, auto *) {
-                res->writeStatus("404 Not Found")->end();
-            })
-            .listen(port_, [this](us_listen_socket_t *socket) {
-                if (socket) {
-                    listenSocket_ = socket;
-                    std::cout << "[Network Core] Asynchronous uWebSockets engine listening on port " << port_ << '\n';
-
-                    auto *loop = reinterpret_cast<struct us_loop_t *>(uWS::Loop::get());
-                    us_timer_t *timer = us_create_timer(
-                        loop, 
-                        WebServerConfig::TIMER_FALLTHROUGH, 
-                        sizeof(MjpegServer*)
-                    );
+                auto it = std::find_if(activeViewers_.begin(), activeViewers_.end(),
+                    [res](const ViewerState& v) { return v.res == res; });
                     
-                    *static_cast<MjpegServer**>(us_timer_ext(timer)) = this;
-                    us_timer_set(
-                        timer, 
-                        MjpegServer::onTimer, 
-                        WebServerConfig::TIMER_INTERVAL_MS, 
-                        WebServerConfig::TIMER_INTERVAL_MS
-                    );
-                } else {
-                    std::cerr << "[Network Core Error] Failed to bind to port " << port_ << '\n';
+                if (it != activeViewers_.end()) {
+                    it->isClosed = true;
                 }
             });
+        });
+        app.any("/*", [](auto *res, auto *) {
+            res->writeStatus("404 Not Found")->end();
+        });
+        app.listen(port_, [this](us_listen_socket_t *socket) {
+            if (socket) {
+                listenSocket_ = socket;
+                std::cout << "[Network Core] Asynchronous uWebSockets engine listening on port " << port_ << '\n';
+
+                auto *loop = reinterpret_cast<struct us_loop_t *>(uWS::Loop::get());
+                us_timer_t *timer = us_create_timer(
+                    loop, 
+                    WebServerConfig::TIMER_FALLTHROUGH, 
+                    sizeof(MjpegServer*)
+                );
+                
+                *static_cast<MjpegServer**>(us_timer_ext(timer)) = this;
+                us_timer_set(
+                    timer, 
+                    MjpegServer::onTimer, 
+                    WebServerConfig::TIMER_INTERVAL_MS, 
+                    WebServerConfig::TIMER_INTERVAL_MS
+                );
+            } else {
+                std::cerr << "[Network Core Error] Failed to bind to port " << port_ << '\n';
+            }
+        });
 
         loopPromise.set_value(); 
         app.run();

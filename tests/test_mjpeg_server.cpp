@@ -21,7 +21,7 @@
 #include "buffer_ptr.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_server.hpp"
-#include "shared_frame_buffer.hpp"
+#include "mjpeg_frame_queue.hpp"
 
 namespace {
     constexpr int TEST_PORT = 18080; 
@@ -36,19 +36,19 @@ class MjpegServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
     std::shared_ptr<BufferPool> bufferPool_;
-    std::shared_ptr<SharedFrameBuffer> frameBuffer_;
+    std::shared_ptr<MjpegFrameQueue> frameBuffer_;
     std::unique_ptr<MjpegServer> server_;
 
 protected:
     void SetUp() override {
         bufferPool_ = BufferPool::create();
-        frameBuffer_ = std::make_shared<SharedFrameBuffer>();
+        frameBuffer_ = std::make_shared<MjpegFrameQueue>();
 
         server_ = std::make_unique<MjpegServer>(
             TEST_PORT, 
             running_, 
             [this](uint32_t& id) {
-                return frameBuffer_->getLatestFrame(id); 
+                return frameBuffer_->pop(id); 
             }
         );
         

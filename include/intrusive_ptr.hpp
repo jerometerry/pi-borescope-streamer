@@ -3,6 +3,11 @@
 #include <utility>
 #include <concepts>
 
+/**
+ * @brief IntrusivePtr exists to eliminate malloc calls associated with std::shared_ptr for reference counting. 
+ * 
+ * @tparam T - the type to wrap with an IntrusivePtr, to give it referencing counting / auto deletion. 
+ */
 template <typename T>
 class IntrusivePtr {
 public:

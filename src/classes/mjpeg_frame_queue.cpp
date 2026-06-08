@@ -26,7 +26,13 @@ void MjpegFrameQueue::push(BufferPtr frame) {
     }
 }
 
-BufferPtr MjpegFrameQueue::getLatestFrame(uint32_t& outFrameId) const {
+BufferPtr MjpegFrameQueue::peek(uint32_t& outFrameId) const {
+    MutexLock lock(activeMutex_);
+    outFrameId = frameId_;
+    return frame_;
+}
+
+BufferPtr MjpegFrameQueue::pop(uint32_t& outFrameId) const {
     MutexLock lock(activeMutex_);
     outFrameId = frameId_;
     return frame_;

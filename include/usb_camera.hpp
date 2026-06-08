@@ -64,7 +64,7 @@ public:
      * @param target The Vendor ID and Product ID we are looking for.
      * @return A raw handle to the USB device if found, or a null pointer if it's not plugged in.
      */
-    static libusb_device_handle *open(libusb_context *context, const DeviceInfo& target);
+    static libusb_device_handle *open(libusb_context *context, const UsbDeviceInfo& target);
 
     /** 
      * @brief List all available USB cameras

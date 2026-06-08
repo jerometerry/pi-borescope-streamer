@@ -62,9 +62,8 @@ int main(int argc, const char* argv[]) {
         std::cerr << "[Fatal] No compatible Useeplus cameras found on the USB bus.\n";
         return EXIT_FAILURE;
     }
-    
-    const Usb
-    UsbDeviceInfo& camera = cameras[0];
+
+    const UsbDeviceInfo& camera = cameras[0];
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
@@ -87,7 +86,7 @@ int main(int argc, const char* argv[]) {
         return status != USB::TransferStatus::Disconnected; 
     };
 
-    UsbDrivee<decltype(usbRouter)> usbDriver(usbRouter, &running);
+    UsbDriver<decltype(usbRouter)> usbDriver(usbRouter, &running);
     usbDriver.start(camera);
 
     V4l2Publisher publisher(config);
@@ -98,7 +97,7 @@ int main(int argc, const char* argv[]) {
 
     while (running.load(std::memory_order_relaxed)) {
         uint32_t currentFrameId = 0;
-        auto currentFrame = frameQueue.getLatestFrame(currentFrameId);
+        auto currentFrame = frameQueue.pop(currentFrameId);
 
         if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
             publisher.writeFrame(currentFrame);

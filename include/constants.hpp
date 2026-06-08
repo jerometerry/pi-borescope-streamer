@@ -171,34 +171,6 @@ namespace WebServerConfig {
     inline const size_t MAX_OUTGOING_CLIENT_BUFFER_SIZE = Units::TWO_MEGABYTES;
 }
 
-namespace HttpHeaders {
-	/**
-     * @brief The HTTP label that separates one picture from the next.
-     * @details Web browsers need this exact text boundary to know when one JPEG ends 
-     * and the next one begins, which creates the illusion of smooth video.
-     */
-    inline constexpr std::string_view MJPEG_CHUNK_PREFIX = 
-        "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: ";
-    
-    /** 
-     * @brief The suffix for MJPEG chunks
-     */
-    inline constexpr std::string_view MJPEG_CHUNK_SUFFIX = "\r\n\r\n";
-}
-
-namespace uWS { template <bool SSL> struct HttpResponse; }
-
-namespace Web {
-    struct ViewerState {
-        uWS::HttpResponse<false>* res{};
-        uint32_t lastSentFrameId{0};
-        bool isClosed{false};
-
-        bool isLagging{false};
-        uint32_t lagStartFrameId{0};
-    };
-}
-
 namespace Arguments {
 	enum class ParseResult : std::uint8_t {
 		Success,
@@ -214,7 +186,7 @@ namespace USB {
         Error
     };
 
-    inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(USB::UsbPacketHeader);
-    inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(USB::UsbPayloadHeader);
+    inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(UsbPacketHeader);
+    inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(UsbPayloadHeader);
     inline constexpr size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
 }

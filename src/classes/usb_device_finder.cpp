@@ -76,7 +76,7 @@ std::vector<UsbDeviceInfo> UsbDeviceFinder::find(bool onlySuperCameras) {
     return foundDevices;
 }
 
-libusb_device_handle* UsbDeviceFinder::open(UsbContext& context, const DeviceInfo& target) {
+libusb_device_handle* UsbDeviceFinder::open(UsbContext& context, const UsbDeviceInfo& target) {
     UsbDeviceList attachedDevices(context);
     
     for (libusb_device* device : attachedDevices.get()) {

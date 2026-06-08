@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace USB {
+namespace EndianConversion {
 	/**
     * @brief Single-byte bypass for wire translation.
     * @details A single byte (8 bits) has no endianness. This overload ensures that 

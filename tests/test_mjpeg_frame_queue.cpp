@@ -13,31 +13,31 @@
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "intrusive_ptr.hpp"
-#include "shared_frame_buffer.hpp"
+#include "mjpeg_frame_queue.hpp"
 
-static void pushFrame (SharedFrameBuffer& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
+static void pushFrame (MjpegFrameQueue& sfb, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
     BufferPtr frame = bp->borrow();
     frame->insertContent(data);
     sfb.push(frame);
 };
 
 TEST(SharedFrameBufferTest, InitializesWithCorrectBufferState) {
-    SharedFrameBuffer frameBuffer;
+    MjpegFrameQueue frameBuffer;
 
     uint32_t frameId = 99;
 
-    auto activeFrame = frameBuffer.getLatestFrame(frameId);
+    auto activeFrame = frameBuffer.pop(frameId);
     
     EXPECT_EQ(activeFrame.get(), nullptr);
     EXPECT_EQ(frameId, 0) << "BufferPtr ID should start strictly at 0";
 }
 
 TEST(SharedFrameBufferTest, SafelyHandlesImmediatePollingWithoutSegfault) {
-    SharedFrameBuffer frameBuffer;
+    MjpegFrameQueue frameBuffer;
 
     uint32_t frameId = 0;
 
-    auto activeFrame = frameBuffer.getLatestFrame(frameId);
+    auto activeFrame = frameBuffer.pop(frameId);
 
     ASSERT_FALSE(activeFrame) << "BufferPtr should safely evaluate to false when empty.";
 
@@ -47,10 +47,10 @@ TEST(SharedFrameBufferTest, SafelyHandlesImmediatePollingWithoutSegfault) {
 }
 
 TEST(SharedFrameBufferTest, DereferencingEmptyFrameCausesDeath) {
-    SharedFrameBuffer frameBuffer;
+    MjpegFrameQueue frameBuffer;
 
     uint32_t frameId = 0;
-    auto activeFrame = frameBuffer.getLatestFrame(frameId);
+    auto activeFrame = frameBuffer.pop(frameId);
 
     EXPECT_DEATH({
         activeFrame->contentSize(); 
@@ -59,13 +59,13 @@ TEST(SharedFrameBufferTest, DereferencingEmptyFrameCausesDeath) {
 
 TEST(SharedFrameBufferTest, frameBuffer) {
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer;
+    MjpegFrameQueue frameBuffer;
 
     std::vector<uint8_t> frame = { 0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9 };
     pushFrame(frameBuffer, bufferPool, frame);
 
     uint32_t currentId = 0;
-    auto currentFrame = frameBuffer.getLatestFrame(currentId);
+    auto currentFrame = frameBuffer.pop(currentId);
 
     EXPECT_EQ(currentId, 1);
     ASSERT_NE(currentFrame->getContentSlice().data(), nullptr);
@@ -83,20 +83,20 @@ TEST(SharedFrameBufferTest, frameBuffer) {
 
 TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer;
+    MjpegFrameQueue frameBuffer;
 
     std::vector<uint8_t> frameData = { 0x01, 0x02, 0x03 };
     pushFrame(frameBuffer, bufferPool, frameData);
     
     uint32_t initialId = 0;
-    auto initialFrame = frameBuffer.getLatestFrame(initialId);
+    auto initialFrame = frameBuffer.pop(initialId);
     EXPECT_EQ(initialId, 1);
 
     std::vector<uint8_t> emptyFrame = {};
     pushFrame(frameBuffer, bufferPool, emptyFrame);    
     
     uint32_t nextId = 0;
-    auto nextFrame = frameBuffer.getLatestFrame(nextId);
+    auto nextFrame = frameBuffer.pop(nextId);
     
     EXPECT_EQ(initialId, nextId) << "BufferPtr ID should not increment for empty frames.";
 
@@ -111,7 +111,7 @@ TEST(SharedFrameBufferTest, SafelyRejectsEmptyFrames) {
 
 TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
     auto bufferPool = BufferPool::create();
-    SharedFrameBuffer frameBuffer;
+    MjpegFrameQueue frameBuffer;
 
     std::atomic<bool> producerDone{false};
     std::atomic<int> framesProduced{0};
@@ -137,7 +137,7 @@ TEST(SharedFrameBufferTest, ConcurrentProducersAndConsumers) {
         while (!producerDone.load(std::memory_order_acquire) || lastSeenId < TARGET_FRAMES) {
             
             uint32_t currentId = 0;
-            auto frame = frameBuffer.getLatestFrame(currentId);
+            auto frame = frameBuffer.pop(currentId);
             
             if (frame && currentId > lastSeenId) {
                 localConsumed++;

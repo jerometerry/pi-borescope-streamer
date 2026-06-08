@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #include "constants.hpp"
-#include "mjpeh_frame_extractor.hpp"
+#include "mjpeg_frame_extractor.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
 
@@ -155,8 +155,8 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
 
     while (i + USB::TOTAL_USB_HEADER_SIZE <= fileData.size()) {
 
-        const USB::UsbPacketHeader* header = 
-            reinterpret_cast<const USB::UsbPacketHeader*>(
+        const UsbPacketHeader* header = 
+            reinterpret_cast<const UsbPacketHeader*>(
                 &fileData[i]
             );
 
@@ -199,8 +199,8 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
             break; 
         }
 
-        const USB::UsbPayloadHeader* meta = 
-            reinterpret_cast<const USB::UsbPayloadHeader*>(
+        const UsbPayloadHeader* meta = 
+            reinterpret_cast<const UsbPayloadHeader*>(
                 &fileData[i + USB::USB_PACKET_HEADER_SIZE]
             );
 
@@ -252,8 +252,8 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
         lastFrameId = meta->getFrameId();
 
         if (!meta->hasGravitySensor() && meta->getOtherFlags() == 0 && meta->getCameraNumber() < 2) {
-            size_t payloadStart = i + USB::TOTAL_HEADER_SIZE;
-            size_t payloadSize = packetSize - USB::TOTAL_HEADER_SIZE;
+            size_t payloadStart = i + USB::TOTAL_USB_HEADER_SIZE;
+            size_t payloadSize = packetSize - USB::TOTAL_USB_HEADER_SIZE;
             
             currentFrame.insert(
                 currentFrame.end(), 

@@ -5,7 +5,7 @@
 #include <mutex>
 #include <vector>
 #include "buffer.hpp"
-#include "frame_ring_buffer.hpp"
+#include "mjpeg_frame_ring_buffer.hpp"
 #include "constants.hpp"
 
 MjpegFrameRingBuffer::MjpegFrameRingBuffer(
@@ -29,6 +29,23 @@ void MjpegFrameRingBuffer::push(const std::shared_ptr<Buffer>& frame) {
 	}
 	
 	cv_.notify_one();
+}
+
+std::shared_ptr<Buffer> MjpegFrameRingBuffer::peek() {
+	std::unique_lock<std::mutex> lock(mtx_);
+	
+	cv_.wait(lock, [this]() { 
+		return head_ != tail_ || !running_; 
+	});
+
+	if (!running_) {
+		return nullptr;
+	}
+
+	auto frame = pool_[tail_];
+	tail_ = (tail_ + 1) % capacity_;
+	
+	return frame;
 }
 
 std::shared_ptr<Buffer> MjpegFrameRingBuffer::pop() {

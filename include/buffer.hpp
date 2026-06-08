@@ -6,6 +6,14 @@
 #include <span>
 #include <vector>
 
+/**
+ * @brief Pre-allocated contiguous block of memory, used to prevent memory allocations on the hot paths. 
+ * 
+ * @details A small block of memory is reserved at the beginning of the contiguous memory block for use by 
+ * HTTP web servers sending payloads to clients. The web server can use this reserved block of memory to construct 
+ * the necessary HTTP headers, so that only one send is necessary, allowing the web servers zero-byte allocation 
+ * routines to be leveraged when possible.
+ */
 struct Buffer {
 public:
     using ReturnCallback = void(*)(void*, Buffer*);

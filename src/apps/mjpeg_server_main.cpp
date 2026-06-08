@@ -136,7 +136,7 @@ int main(int argc, const char* argv[]) {
         UsbDriver<decltype(usbRouter)> usbDriver(usbRouter, &globalRunning);
 
         MjpegServer server(port, globalRunning, [&frameQueue](uint32_t& id) {
-            return frameQueue.getLatestFrame(id);
+            return frameQueue.pop(id);
         });
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";

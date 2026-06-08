@@ -5,12 +5,12 @@
 #include <iostream>
 #include <vector>
 #include <atomic>
-#include "binary_stream_capture.hpp"
+#include "mjpeg_stream_capture.hpp"
 #include "constants.hpp"
 #include "usb_camera.hpp"
-struct DeviceInfo;
+#include "usb_device_info.hpp"
 
-int BinaryStreamCapture::capture(const std::atomic<bool>& running, const DeviceInfo& cameraInfo) {
+int MjpegStreamCapture::capture(const std::atomic<bool>& running, const UsbDeviceInfo& cameraInfo) {
 	std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
 	if (!outFile.is_open()) {
 		std::cerr << "[Fatal] Could not open output file for writing.\n";

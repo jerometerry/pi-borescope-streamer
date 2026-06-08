@@ -13,8 +13,7 @@ struct us_listen_socket_t;
 struct us_timer_t;
 // IWYU pragma: end_exports
 
-
-namespace Web { struct ViewerState; }
+namespace uWS { template <bool SSL> struct HttpResponse; }
 
 /**
  * @brief The server that streams the USB camera video to your web browser or video player.
@@ -37,6 +36,15 @@ public:
     static std::string_view buildMjpegResponse(Buffer* frame);
 
 private:
+    struct ViewerState {
+        uWS::HttpResponse<false>* res{};
+        uint32_t lastSentFrameId{0};
+        bool isClosed{false};
+
+        bool isLagging{false};
+        uint32_t lagStartFrameId{0};
+    };
+
     const int port_;
     const std::atomic<bool>& running_;
     FrameSource frameSource_;
@@ -44,7 +52,7 @@ private:
     std::thread networkThread_;
     us_listen_socket_t* listenSocket_{nullptr};
 
-    std::vector<Web::ViewerState> activeViewers_;
+    std::vector<ViewerState> activeViewers_;
     uint32_t lastBroadcastedFrameId_{0};
 
     static void onTimer(us_timer_t *t);

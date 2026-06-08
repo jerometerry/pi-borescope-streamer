@@ -47,5 +47,5 @@ namespace UsbDeviceFinder {
     * @brief Scans the USB bus and builds a JSON array of all connected Useeplus cameras.
     * @return A formatted JSON string ready to be sent over the network.
     */
-    std::string toJson(const std::vector<DeviceInfo>& devices);
+    std::string toJson(const std::vector<UsbDeviceInfo>& devices);
 };

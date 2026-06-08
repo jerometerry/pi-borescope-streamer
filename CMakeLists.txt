@@ -125,7 +125,6 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 add_library(borescope_core STATIC
     src/classes/buffer.cpp
     src/classes/buffer_pool.cpp
-    src/classes/device_finder.cpp
     src/classes/mjpeg_frame_extractor.cpp
     src/classes/mjpeg_frame_queue.cpp
     src/classes/mjpeg_frame_ring_buffer.cpp
@@ -134,6 +133,7 @@ add_library(borescope_core STATIC
     src/classes/mjpeg_stream_capture.cpp
     src/classes/usb_camera.cpp 
     src/classes/usb_context.cpp
+    src/classes/usb_device_finder.cpp
     src/classes/v4l2.cpp
     ${GENERATED_HPP}
 )
@@ -251,10 +251,10 @@ if(BUILD_TESTING)
 
     add_executable(run_project_tests 
         tests/test_buffer_pool.cpp
-        tests/test_device_finder.cpp
-        tests/test_shared_frame_buffer.cpp
-        tests/test_mjpeg_stream.cpp
+        tests/test_mjpeg_frame_queue.cpp
         tests/test_mjpeg_server.cpp
+        tests/test_mjpeg_stream.cpp
+        tests/test_usb_device_finder.cpp
         tests/test_v4l2.cpp
     )
 

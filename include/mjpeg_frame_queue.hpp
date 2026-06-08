@@ -8,11 +8,12 @@
 
 class BufferPool;
 
-class MjpegFrameQueue : public std::enable_shared_from_this<SharedFrameBuffer> {
+class MjpegFrameQueue : public std::enable_shared_from_this<MjpegFrameQueue> {
 public:
     MjpegFrameQueue() = default;
     void push(BufferPtr frame);
-    BufferPtr getLatestFrame(uint32_t& outFrameId) const;
+    BufferPtr peek(uint32_t& outFrameId) const;
+    BufferPtr pop(uint32_t& outFrameId) const;
 
 private:
     mutable Mutex activeMutex_;
