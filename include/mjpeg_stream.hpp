@@ -66,7 +66,7 @@ private:
      * data is coming from, so we don't accidentally stitch chunks from two different 
      * pictures together.
      */
-    USB::PayloadHeader payloadHeader_{};
+    USB::UsbPayloadHeader payloadHeader_{};
 
     /**
      * @brief A bookmark tracking how far we've read into the stream buffer.
