@@ -168,7 +168,7 @@ namespace WebServerConfig {
     /**
      * @brief 
      */
-    inline const size_t MAX_OUTGOING_CLIENT_BUFFER_SIZE = Units::TWO_MEGABYTES;
+    inline const size_t MAX_OUTGOING_CLIENT_BUFFER_SIZE = 0;
 }
 
 namespace Arguments {
