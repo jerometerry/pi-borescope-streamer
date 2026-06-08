@@ -29,7 +29,7 @@ MjpegServer::~MjpegServer() {
     if (networkThread_.joinable()) {
         networkThread_.join();
     }
-    std::cerr << "[Network Core] Network engine cleanly terminated.\n";
+    std::cout << "[Network Core] Network engine cleanly terminated.\n";
 }
 
 void MjpegServer::onTimer(us_timer_t *t) {
