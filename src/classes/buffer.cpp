@@ -3,7 +3,9 @@
 #include <cstdint>
 #include <span>
 #include <stdexcept>
+// IWYU pragma: begin_exports
 #include <vector>
+// IWYU pragma: end_exports
 #include "buffer.hpp"
 
 Buffer::Buffer(const size_t paddingSize) : paddingSize_(paddingSize) {
