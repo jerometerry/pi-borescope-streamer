@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <span>
 #include <string>
+#include <format>
 #include <vector>
 #include "constants.hpp"
 #include "usb_context.hpp"
