@@ -12,9 +12,9 @@ public:
 
     explicit Buffer(const size_t paddingSize);
 
-    static std::unique_ptr<Buffer> unique();
+    static std::unique_ptr<Buffer> create();
 
-    static std::unique_ptr<Buffer> unique(size_t padding);
+    static std::unique_ptr<Buffer> create(size_t padding);
 
     void retain();
     
