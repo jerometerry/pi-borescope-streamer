@@ -19,9 +19,9 @@
 #include <string>
 #include <vector>
 
-#include "device_finder.hpp"
-#include "device_info.hpp"
 #include "mjpeg_stream_capture.hpp"
+#include "usb_device_finder.hpp"
+#include "usb_device_info.hpp"
 
 namespace {
     static std::atomic<bool> keepRunning{true};
@@ -31,8 +31,8 @@ void signalHandler(int /*signum*/) {
     keepRunning = false;
 }
 
-bool selectCamera(DeviceInfo& cameraInfo) {
-	std::vector<DeviceInfo> cameras = DeviceFinder::superCameras();
+bool selectCamera(UsbDeviceInfo& cameraInfo) {
+	std::vector<DeviceInfo> cameras = UsbDeviceFinder::superCameras();
 	if (cameras.empty()) {
 		std::cerr << "[Error] No Useeplus supercamera devices found on the USB bus.\n";
 		return false;
@@ -69,7 +69,7 @@ int main() {
     std::signal(SIGINT, signalHandler);
 
     try {
-        DeviceInfo cameraInfo;
+        UsbDeviceInfo cameraInfo;
         
         if (!selectCamera(cameraInfo)) {
             return EXIT_FAILURE;
@@ -78,7 +78,7 @@ int main() {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(cameraInfo.bus)
                   << " Address " << static_cast<int>(cameraInfo.address) << "...\n";
 
-        return BinaryStreamCapture::capture(keepRunning, cameraInfo);
+        return MjpegStreamCapture::capture(keepRunning, cameraInfo);
 
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";
