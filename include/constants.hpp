@@ -8,8 +8,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include "packet_header.hpp"
-#include "payload_header.hpp"
+#include "usb_packet_header.hpp"
+#include "usb_payload_header.hpp"
 
 namespace UsbProtocol {
     /**
@@ -214,7 +214,7 @@ namespace USB {
         Error
     };
 
-    inline constexpr size_t PACKET_HEADER_SIZE = sizeof(USB::PacketHeader);
-    inline constexpr size_t PAYLOAD_HEADER_SIZE = sizeof(USB::PayloadHeader);
-    inline constexpr size_t TOTAL_HEADER_SIZE = PACKET_HEADER_SIZE + PAYLOAD_HEADER_SIZE;
+    inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(USB::UsbPacketHeader);
+    inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(USB::UsbPayloadHeader);
+    inline constexpr size_t TOTAL_USB_HEADER_SIZE = PACKET_HEADER_SIZE + PAYLOAD_HEADER_SIZE;
 }
