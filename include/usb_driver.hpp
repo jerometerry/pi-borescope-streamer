@@ -16,7 +16,7 @@
  * @tparam FrameProcessor A class implementing `bool processTransfer(USB::TransferStatus, std::span<const uint8_t>)`
  */
 template <typename Callable>
-class LibusbAsyncDriver {
+class UsbDriver {
 public:
     UsbDriver(Callable transferHandler, std::atomic<bool>* running)
         : transferHandler_(std::move(transferHandler)), running_(running) {}
@@ -42,7 +42,7 @@ private:
     std::vector<libusb_transfer*> transferPool_;
     std::vector<uint8_t> transferMemory_;
 
-    void loop(const Usb  DeviceInfo& target) {
+    void loop(const UsbDeviceInfo& target) {
         try {
             camera_ = std::make_unique<UsbCamera>(target);
 
@@ -147,7 +147,7 @@ private:
     }
 
     static void LIBUSB_CALL transferCallback(struct libusb_transfer* transfer) {
-        auto* driver = static_cast<LibusbAsyncDriver*>(transfer->user_data);
+        auto* driver = static_cast<UsbDriver*>(transfer->user_data);
         if (!driver) return;
 
         const size_t remainingTransfers = driver->activeTransfers_.fetch_sub(1, std::memory_order_acq_rel) - 1;
@@ -172,7 +172,6 @@ private:
         }
 
         bool shouldResubmit = driver->transferHandler_(status, payload);
-
         if (!shouldResubmit) {
             driver->running_->store(false, std::memory_order_release);
         } else if (driver->running_->load(std::memory_order_relaxed)) {
