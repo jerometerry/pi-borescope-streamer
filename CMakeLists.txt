@@ -172,6 +172,7 @@ add_library(borescope_core STATIC
     src/classes/usb_camera.cpp 
     src/classes/usb_context.cpp
     src/classes/usb_device_finder.cpp
+    src/classes/usb_driver.cpp
     src/classes/v4l2.cpp
     src/classes/zero_allocation_response_builder.cpp
     ${GENERATED_HPP}
