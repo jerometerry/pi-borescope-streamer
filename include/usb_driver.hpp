@@ -8,8 +8,8 @@
 #include <vector>
 #include <span>
 #include "constants.hpp"
-#include "device_info.hpp"
 #include "usb_camera.hpp"
+#include "usb_device_info.hpp"
 
 /**
  * @brief A zero-cost template wrapper that manages the libusb event loop.
@@ -18,13 +18,13 @@
 template <typename Callable>
 class LibusbAsyncDriver {
 public:
-    LibusbAsyncDriver(Callable transferHandler, std::atomic<bool>* running)
+    UsbDriver(Callable transferHandler, std::atomic<bool>* running)
         : transferHandler_(std::move(transferHandler)), running_(running) {}
 
-    ~LibusbAsyncDriver() { stop(); }
+    ~UsbDriver() { stop(); }
 
-    void start(const DeviceInfo& target) {
-        workerThread_ = std::thread(&LibusbAsyncDriver::loop, this, target);
+    void start(const UsbDeviceInfo& target) {
+        workerThread_ = std::thread(&UsbDriver::loop, this, target);
     }
 
     void stop() {
@@ -42,7 +42,7 @@ private:
     std::vector<libusb_transfer*> transferPool_;
     std::vector<uint8_t> transferMemory_;
 
-    void loop(const DeviceInfo& target) {
+    void loop(const Usb  DeviceInfo& target) {
         try {
             camera_ = std::make_unique<UsbCamera>(target);
 
