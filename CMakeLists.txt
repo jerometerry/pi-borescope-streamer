@@ -80,14 +80,12 @@ if(IWYU_EXE)
                   "/usr/share/llvm/include-what-you-use"
         )
         if(GCC_MAP_FILE)
-            list(APPEND IWYU_ARGS "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}")
+            list(APPEND IWYU_ARGS 
+                "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}"
+                "-Xiwyu" "--no_default_mappings"
+            )
         endif()
-
-        list(APPEND IWYU_ARGS 
-            "-Xiwyu" "--no_fwd_decls"
-            "-isystem" "/usr/include/c++/14"
-            "-isystem" "/usr/include/c++/14/aarch64-linux-gnu"
-        )
+        list(APPEND IWYU_ARGS "-Xiwyu" "--no_fwd_decls")
     endif()
 
     set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_ARGS}")
