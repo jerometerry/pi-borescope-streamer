@@ -26,14 +26,14 @@
 #include <vector>
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
-#include "constants.hpp"
-#include "device_info.hpp"
 #include "buffer_ptr.hpp"
-#include "libusb_async_driver.hpp"
+#include "constants.hpp"
 #include "mjpeg_stream.hpp"
 #include "mjpeg_server.hpp"
 #include "shared_frame_buffer.hpp"
 #include "usb_camera.hpp"
+#include "usb_device_info.hpp"
+#include "usb_driver.hpp"
 
 namespace {
     constexpr int DEFAULT_PORT = 8080;
@@ -82,13 +82,13 @@ int main(int argc, const char* argv[]) {
     std::signal(SIGPIPE, SIG_IGN);
 
     try {
-        std::vector<DeviceInfo> cameras = UsbCamera::listCameras();
+        std::vector<UsbDeviceInfo> cameras = UsbCamera::listCameras();
         if (cameras.empty()) {
             std::cerr << "[Fatal] No Useeplus supercamera devices found on the USB bus.\n";
             return EXIT_FAILURE;
         }
 
-        DeviceInfo camera = cameras.front();
+        UsbDeviceInfo camera = cameras.front();
 
         if (cameras.size() > 1) {
             std::cout << "\nMultiple cameras detected:\n";
@@ -131,7 +131,7 @@ int main(int argc, const char* argv[]) {
             }
             return status != USB::TransferStatus::Disconnected; 
         };
-        LibusbAsyncDriver<decltype(usbRouter)> usbDriver(usbRouter, &globalRunning);
+        UsbDriver<decltype(usbRouter)> usbDriver(usbRouter, &globalRunning);
 
         MjpegServer server(port, globalRunning, [&frameBuffer](uint32_t& id) {
             return frameBuffer.getLatestFrame(id);
