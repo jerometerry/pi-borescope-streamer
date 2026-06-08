@@ -1,8 +1,8 @@
 #pragma once
 #include <atomic>
-struct DeviceInfo;
+struct UsbDeviceInfo;
 
 namespace BinaryStreamCapture {
-	int capture(const std::atomic<bool>& running, const DeviceInfo& cameraInfo);
+	int capture(const std::atomic<bool>& running, const UsbkDeviceInfo& cameraInfo);
 	int capture();
 }
