@@ -11,9 +11,9 @@
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 
-class FrameRingBuffer {
+class MjpegFrameRingBuffer {
 public:
-    explicit FrameRingBuffer(size_t size, const std::atomic<bool>& running);
+    explicit MjpegFrameRingBuffer(size_t size, const std::atomic<bool>& running);
     void push(const std::shared_ptr<Buffer>& frame);
     std::shared_ptr<Buffer> pop();
 
