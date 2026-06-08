@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #include "constants.hpp"
-#include "frame_extractor.hpp"
+#include "mjpeh_frame_extractor.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
 
