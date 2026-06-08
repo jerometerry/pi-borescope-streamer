@@ -15,8 +15,8 @@
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "intrusive_ptr.hpp"
+#include "mjpeg_frame_queue.hpp"
 #include "mjpeg_stream.hpp"
-#include "shared_frame_buffer.hpp"
 #include "usb_device_info.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_driver.hpp"
@@ -70,9 +70,11 @@ int main(int argc, const char* argv[]) {
 
     auto bufferPool = BufferPool::create();
 
-    SharedFrameBuffer frameBuffer;
-    MjpegStream mjpegStream(bufferPool, [&frameBuffer](const BufferPtr& frame) {
-        frameBuffer.push(frame);
+    // MjpegFrameQueue HAS to be initialized after BufferPool!
+    // Prevents segfaults if MjpegFrameQueue goes out of scope before program terminates. 
+    MjpegFrameQueue frameQueue;
+    MjpegStream mjpegStream(bufferPool, [&frameQueue](const BufferPtr& frame) {
+        frameQueue.push(frame);
     });
 
     auto usbRouter = [&mjpegStream](USB::TransferStatus status, std::span<const uint8_t> payload) -> bool {
@@ -96,7 +98,7 @@ int main(int argc, const char* argv[]) {
 
     while (running.load(std::memory_order_relaxed)) {
         uint32_t currentFrameId = 0;
-        auto currentFrame = frameBuffer.getLatestFrame(currentFrameId);
+        auto currentFrame = frameQueue.getLatestFrame(currentFrameId);
 
         if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
             publisher.writeFrame(currentFrame);
