@@ -4,10 +4,10 @@
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "intrusive_ptr.hpp"
-#include "shared_frame_buffer.hpp"
+#include "mjpeg_frame_queue.hpp"
 #include "thread_safety_mutex.hpp"
 
-void SharedFrameBuffer::push(BufferPtr frame) {
+void MjpegFrameQueue::push(BufferPtr frame) {
     if (!frame || frame->empty()) { 
         return;
     }
@@ -26,7 +26,7 @@ void SharedFrameBuffer::push(BufferPtr frame) {
     }
 }
 
-BufferPtr SharedFrameBuffer::getLatestFrame(uint32_t& outFrameId) const {
+BufferPtr MjpegFrameQueue::getLatestFrame(uint32_t& outFrameId) const {
     MutexLock lock(activeMutex_);
     outFrameId = frameId_;
     return frame_;
