@@ -87,10 +87,13 @@ void MjpegServer::onTimer(us_timer_t *t) {
                     Buffer* rawBuffer = currentFrame.get();
 
                     auto payload = ZeroAllocationResponseBuilder::build(rawBuffer);
-                    bool ok = res->write(payload);
+                    bool ok = false;
+                    res->cork([res, payload, &ok]() {
+                        ok = res->write(payload);
+                    });
                     if (!ok) {
                         std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "
-                                    << "uWebSockets just executed a user-space malloc to queue this frame.\n";
+                                << "uWebSockets just executed a user-space malloc to queue this frame.\n";
                     }
 
                     size_t postWriteBackpressure = res->getWriteOffset();
