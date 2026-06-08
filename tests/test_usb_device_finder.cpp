@@ -18,10 +18,6 @@ protected:
         mockCameras_.push_back(device);
     }
 
-    std::vector<UsbDeviceInfo> devices() const {
-        return const_cast<std::vector<UsbDeviceInfo>&>(mockCameras_);
-    }
-
     std::string devicesToJson() const {
         return UsbDeviceFinder::toJson(mockCameras_);
     }

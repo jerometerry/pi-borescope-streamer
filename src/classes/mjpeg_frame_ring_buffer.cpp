@@ -31,23 +31,6 @@ void MjpegFrameRingBuffer::push(const std::shared_ptr<Buffer>& frame) {
 	cv_.notify_one();
 }
 
-std::shared_ptr<Buffer> MjpegFrameRingBuffer::peek() {
-	std::unique_lock<std::mutex> lock(mtx_);
-	
-	cv_.wait(lock, [this]() { 
-		return head_ != tail_ || !running_; 
-	});
-
-	if (!running_) {
-		return nullptr;
-	}
-
-	auto frame = pool_[tail_];
-	tail_ = (tail_ + 1) % capacity_;
-	
-	return frame;
-}
-
 std::shared_ptr<Buffer> MjpegFrameRingBuffer::pop() {
 	std::unique_lock<std::mutex> lock(mtx_);
 	

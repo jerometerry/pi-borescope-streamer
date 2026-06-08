@@ -49,13 +49,4 @@ struct UsbDeviceInfo {
      * @brief A quick-check flag verifying if this device's ID matches our supported endoscopes.
      */
     bool isSuperCamera{false};
-
-    /**
-     * @brief Verify if two ID badges belong to the exact same brand and model of camera.
-     * @param device The other ID badge to compare against.
-     * @return True if both devices share the exact same Vendor and Product IDs.
-     */
-    bool isSameDevice(const UsbDeviceInfo& device) const {
-        return vendorId == device.vendorId && productId == device.productId;
-    }
 };

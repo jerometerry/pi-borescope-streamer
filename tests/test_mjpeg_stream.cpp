@@ -51,6 +51,8 @@ protected:
 
     MockHandlers& GetOutputHandler() { return handler_; }
     MjpegStream& GetStream() { return *stream_; }
+
+    std::shared_ptr<BufferPool> GetBufferPool() { return bufferPool_; }
 };
 
 // NOLINTBEGIN(cppcoreguidelines-avoid-const-or-ref-data-members)
@@ -85,6 +87,44 @@ MATCHER_P(FrameStartsWith, expectedFront, "BufferPtr internal data starts with e
     );
 }
 // NOLINTEND(cppcoreguidelines-avoid-const-or-ref-data-members)
+
+TEST_F(MjpegStreamTest, TestUsbPayloadHeaderGettersAndSetters) {
+    std::vector<uint8_t> packet(1024, 0xDD); 
+    
+    auto* packetHeader = getPacketHeader(packet);
+
+    packetHeader->setHeader(UsbProtocol::USB_FRAME_HEADER);
+    packetHeader->setCameraId(UsbProtocol::VIDEO_CAMERA_ID);
+    packetHeader->setLength( 939);
+
+    auto* payloadHeader = getPayloadHeader(packet);
+
+    payloadHeader->setFrameId(9); 
+    payloadHeader->setCameraNumber(8); 
+    payloadHeader->setGravitySensor(7);    
+    payloadHeader->setHasGravitySensor(true);
+    payloadHeader->setButtonPressed(true);
+    payloadHeader->setOtherFlags(3);
+
+    packet[TOTAL_USB_HEADER_SIZE] = UsbProtocol::BOUNDARY_MARKER;
+    packet[TOTAL_USB_HEADER_SIZE + 1] = UsbProtocol::START_MARKER;
+    packet[USB_PACKET_HEADER_SIZE + packetHeader->getLength() - 2] = UsbProtocol::BOUNDARY_MARKER;
+    packet[USB_PACKET_HEADER_SIZE + packetHeader->getLength() - 1] = UsbProtocol::END_MARKER;
+
+    auto pool = GetBufferPool();
+    auto ptr = pool->borrow();
+    auto* buffer = ptr.get();
+    buffer->insertContent(packet);
+
+    auto content = buffer->getMutableContentSlice();
+    auto* rebuiltPayload = getPayloadHeader(content);
+    EXPECT_EQ(rebuiltPayload->getFrameId(), 9);
+    EXPECT_EQ(rebuiltPayload->getCameraNumber(), 8);
+    EXPECT_EQ(rebuiltPayload->getGravitySensor(), 7);
+    EXPECT_EQ(rebuiltPayload->hasGravitySensor(), true);
+    EXPECT_EQ(rebuiltPayload->isButtonPressed(), true);
+    EXPECT_EQ(rebuiltPayload->getOtherFlags(), 3);
+}
 
 TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     std::vector<uint8_t> packet(1024, 0xDD); 
@@ -407,7 +447,7 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     GetStream().send(packet2);
 }
 
-TEST(UsbFrameDecoderEdgeTest, HandlesNullCallbacksSafely) {
+TEST_F(MjpegStreamTest, HandlesNullCallbacksSafely) {
     std::shared_ptr<BufferPool> pool = BufferPool::create();
     MjpegStream silentDecoder(pool, nullptr);
     std::vector<uint8_t> packet(100, 0x00);

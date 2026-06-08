@@ -15,7 +15,6 @@ class MjpegFrameRingBuffer {
 public:
     explicit MjpegFrameRingBuffer(size_t size, const std::atomic<bool>& running);
     void push(const std::shared_ptr<Buffer>& frame);
-    std::shared_ptr<Buffer> peek();
     std::shared_ptr<Buffer> pop();
 
 private:

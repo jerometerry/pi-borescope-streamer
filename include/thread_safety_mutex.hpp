@@ -16,10 +16,6 @@ public:
         return m_.try_lock(); 
     }
 
-    std::mutex& native() { 
-        return m_; 
-    }
-
 private:
     std::mutex m_;
 };
