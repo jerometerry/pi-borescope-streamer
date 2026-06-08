@@ -49,17 +49,11 @@ find_program(CPPCHECK_EXE NAMES "cppcheck"
 if(CPPCHECK_EXE)
     add_custom_target(run_cppcheck
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build"
-        COMMAND "${CPPCHECK_EXE}"
-            --project=${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json
-            --cppcheck-build-dir=${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build
-            --enable=all
-            --inconclusive
-            --inline-suppr
-            --check-level=exhaustive
-            --suppress=missingIncludeSystem
-            --suppress=unmatchedSuppression
+
+        COMMAND sh -c "\"${CPPCHECK_EXE}\" --project=\"${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json\" --cppcheck-build-dir=\"${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build\" -i\"${CMAKE_CURRENT_BINARY_DIR}/_deps\" --suppress=*:*googletest* --suppress=*:*gmock* --xml --enable=all --inconclusive --inline-suppr --check-level=exhaustive --suppress=missingIncludeSystem --suppress=unmatchedSuppression 2> \"${CMAKE_CURRENT_BINARY_DIR}/cppcheck_report.xml\""
+        
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMENT "Running whole-program Cppcheck analysis in a single pass"
+        COMMENT "Running single-pass whole-program Cppcheck analysis (excluding dependencies)"
         VERBATIM
     )
 else()

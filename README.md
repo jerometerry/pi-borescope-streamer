@@ -94,8 +94,20 @@ cmake --build --preset release
 
 **Run cppcheck**
 ```bash
+# required to run cppcheck-htmlreport
+pip3 install --user pygments
+
+# generate compiler_commands.json
 cmake -B build
+
+# run cppcheck, output XML file build/cppcheck_report.xm
 cmake --build build --target run_cppcheck
+
+# convert XML file to a HTML report: build/html_report/index.html
+cppcheck-htmlreport --file=build/cppcheck_report.xml --report-dir=build/html_report --source-dir=.
+
+# open the report
+open build/html_report/index.html
 ```
 
 **Run CMake using Homebrew Installed LLVM Compiler**
