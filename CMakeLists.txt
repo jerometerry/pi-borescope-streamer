@@ -293,6 +293,7 @@ if(BUILD_TESTING)
         tests/test_buffer.cpp
         tests/test_buffer_pool.cpp
         tests/test_mjpeg_frame_queue.cpp
+        tests/test_mjpeg_frame_ring_buffer.cpp
         tests/test_mjpeg_server.cpp
         tests/test_mjpeg_stream.cpp
         tests/test_usb_device_finder.cpp

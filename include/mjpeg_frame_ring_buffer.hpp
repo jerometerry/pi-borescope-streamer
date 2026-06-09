@@ -1,24 +1,27 @@
 #pragma once
 #include <atomic>
 #include <condition_variable>
-#include <memory>
+#include <cstddef>
 #include <mutex>
 #include <vector>
-#include "buffer.hpp"
 #include "buffer_ptr.hpp"
-#include "thread_safety.hpp"
-#include "thread_safety_mutex.hpp"
 
 class MjpegFrameRingBuffer {
 public:
     explicit MjpegFrameRingBuffer(size_t size, const std::atomic<bool>& running);
 
-    void push(const std::shared_ptr<Buffer>& frame);
+    void push(BufferPtr frame);
 
-    std::shared_ptr<Buffer> pop();
+    BufferPtr pop();
+
+    /**
+     * @brief Pokes the condition variable to wake up any blocked consumer threads 
+     * during a system teardown.
+     */
+    void shutdown();
 
 private:
-    std::vector<std::shared_ptr<Buffer>> pool_;
+    std::vector<BufferPtr> pool_;
 
     size_t head_ = 0;
     size_t tail_ = 0;
