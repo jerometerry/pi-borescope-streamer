@@ -1,5 +1,4 @@
 #pragma once
-
 #include "buffer.hpp"
 #include "intrusive_ptr.hpp"
 
