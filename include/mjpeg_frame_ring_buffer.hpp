@@ -1,11 +1,9 @@
 #pragma once
-
 #include <atomic>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <vector>
-
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "thread_safety.hpp"
