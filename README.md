@@ -118,6 +118,13 @@ cmake . --preset debug --fresh \
 cmake --build --preset debug
 ```
 
+**For running benchmarks**
+```bash
+cmake . --preset release --fresh
+cmake --build --preset release
+./out/build/release/disruptor_bench
+```
+
 ### 3. Alternative: Manual Compile via CMake CLI
 If you want to configure build directories manually without using presets:
 ```bash

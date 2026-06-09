@@ -321,3 +321,32 @@ if(ENABLE_COVERAGE)
     target_compile_options(borescope_core PUBLIC --coverage)
     target_link_options(borescope_core PUBLIC --coverage)
 endif()
+
+# 1. Automatically fetch Google Benchmark
+include(FetchContent)
+FetchContent_Declare(
+  googlebenchmark
+  URL https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz
+  DOWNLOAD_EXTRACT_TIMESTAMP true
+  SYSTEM
+)
+
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googlebenchmark)
+
+set_target_properties(benchmark benchmark_main PROPERTIES
+    CXX_CLANG_TIDY ""
+    CXX_INCLUDE_WHAT_YOU_USE ""
+    CXX_CPPCHECK ""
+)
+
+add_executable(disruptor_bench benchmark/disruptor_benchmark.cpp)
+
+target_link_libraries(disruptor_bench 
+    PRIVATE 
+        Borescope::Core
+        benchmark::benchmark
+        benchmark::benchmark_main
+        Threads::Threads
+        project_warnings
+)
