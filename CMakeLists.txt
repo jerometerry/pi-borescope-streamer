@@ -292,6 +292,7 @@ if(BUILD_TESTING)
     add_executable(run_project_tests 
         tests/test_buffer.cpp
         tests/test_buffer_pool.cpp
+        tests/test_disruptor.cpp
         tests/test_mjpeg_frame_queue.cpp
         tests/test_mjpeg_frame_ring_buffer.cpp
         tests/test_mjpeg_server.cpp
