@@ -5,7 +5,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "buffer_recycler.hpp"
