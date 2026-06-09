@@ -42,9 +42,9 @@ private:
     };
 
     struct CorkState {
-        uWS::HttpResponse<false>* res;
-        std::string_view payload;
-        bool ok;
+        uWS::HttpResponse<false>* res{};
+        std::string_view payload{};
+        bool ok{false};
     };
 
     const int port_;

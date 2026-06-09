@@ -76,9 +76,10 @@ TEST(IntrusivePtrTest, MoveAssignmentTransfersOwnership) {
     Buffer* rawPointer = ptr1.get();
 
     BufferPtr ptr2;
-    ptr2 = std::move(ptr1); // Move assignment
+    ptr2 = std::move(ptr1);
+    bool isNull = static_cast<bool>(ptr1);
 
-    EXPECT_FALSE(static_cast<bool>(ptr1)) << "Moved-from pointer should be empty"; // NOLINT
+    EXPECT_FALSE(isNull) << "Moved-from pointer should be empty";
     EXPECT_TRUE(static_cast<bool>(ptr2)) << "Target pointer should hold the resource";
     EXPECT_EQ(ptr2.get(), rawPointer) << "Underlying pointer address changed during move assignment";
     EXPECT_EQ(tracker.destroyedCount, 0) << "Destruction triggered during move";
