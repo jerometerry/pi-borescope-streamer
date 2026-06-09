@@ -24,5 +24,5 @@ void MjpegFrameQueue::push(BufferPtr frame) {
 BufferPtr MjpegFrameQueue::pop(uint32_t& outFrameId) {
     MutexLock lock(activeMutex_);
     outFrameId = frameId_;
-    return std::move(frame_); 
+    return std::move(frame_);
 }
