@@ -1,4 +1,10 @@
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <mutex>
 #include <utility>
+#include <vector>
+#include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_frame_ring_buffer.hpp"
