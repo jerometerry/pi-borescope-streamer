@@ -2,18 +2,18 @@
 #include <array>
 #include <bit>
 #include <concepts>
+#include <cstdint>
 #include <iostream>
 #include <new>
 #include <thread>
-#include <cstdint>
 
 namespace disruptor {
 
-#ifdef __cpp_lib_hardware_interference_size
-    inline constexpr size_t cache_line_size = 
-        (std::hardware_destructive_interference_size <= 64) 
-        ? std::hardware_destructive_interference_size : 64;
+// Skip the standard constant on ARM platforms to avoid compiler warning spam
+#if defined(__cpp_lib_hardware_interference_size) && !defined(__arm__) && !defined(__aarch64__)
+    inline constexpr size_t cache_line_size = std::hardware_destructive_interference_size;
 #else
+    // Safe, universal fallback for macOS, x86_64, and Raspberry Pi ARM
     inline constexpr size_t cache_line_size = 64;
 #endif
 
