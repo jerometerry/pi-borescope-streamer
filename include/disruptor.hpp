@@ -2,6 +2,7 @@
 #include <array>
 #include <bit>
 #include <concepts>
+#include <iostream>
 #include <new>
 #include <thread>
 #include <cstdint>
@@ -27,7 +28,7 @@ namespace disruptor {
             while (current < target) {
                 // Suspends the thread at the OS level if value == current.
                 // Wakes up instantly (no mutex lock required) when modified.
-                value.wait(current, std::memory_order_acquire); 
+                value.wait(current, std::memory_order_acquire);
                 current = value.load(std::memory_order_acquire);
             }
             return current;

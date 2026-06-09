@@ -168,7 +168,6 @@ add_library(borescope_core STATIC
     src/classes/mjpeg_frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp
     src/classes/mjpeg_stream.cpp
-    src/classes/mjpeg_stream_capture.cpp
     src/classes/usb_camera.cpp 
     src/classes/usb_context.cpp
     src/classes/usb_device_finder.cpp
@@ -204,7 +203,6 @@ add_executable(attached_usb_devices
 target_link_libraries(attached_usb_devices PRIVATE Borescope::Core project_warnings)
 
 add_executable(mjpeg_stream_capture
-    src/classes/mjpeg_stream_capture.cpp
     src/apps/mjpeg_stream_capture_main.cpp
 )
 target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
@@ -340,12 +338,21 @@ set_target_properties(benchmark benchmark_main PROPERTIES
     CXX_CPPCHECK ""
 )
 
-add_executable(disruptor_bench benchmark/disruptor_benchmark.cpp)
+add_executable(disruptor.bench benchmark/disruptor_benchmark.cpp)
 
-target_link_libraries(disruptor_bench 
+target_link_libraries(disruptor.bench
     PRIVATE 
         Borescope::Core
-        benchmark::benchmark
+        benchmark::benchmark_main
+        Threads::Threads
+        project_warnings
+)
+
+add_executable(mjpeg_pipeline.bench benchmark/benchmark_pipeline.cpp)
+
+target_link_libraries(mjpeg_pipeline.bench 
+    PRIVATE 
+        Borescope::Core
         benchmark::benchmark_main
         Threads::Threads
         project_warnings

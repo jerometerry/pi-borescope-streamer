@@ -10,17 +10,31 @@
  * recording of the glitch, which they can then analyze later to figure out what went wrong.
  */
 
+#include <libusb.h>
 #include <atomic>
+#include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <functional>
+#include <fstream>
 #include <iostream>
 #include <limits>
+#include <memory>
+#include <span>
 #include <string>
+#include <thread>
 #include <vector>
-#include "mjpeg_stream_capture.hpp"
+#include "buffer_pool.hpp"
+#include "buffer_ptr.hpp"
+#include "constants.hpp"
+#include "disruptor.hpp"
+#include "mjpeg_frame_queue.hpp"
+#include "mjpeg_stream.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
+#include "usb_driver.hpp"
 
 namespace {
     static std::atomic<bool> running{true};
@@ -66,23 +80,107 @@ bool selectCamera(UsbDeviceInfo& cameraInfo) {
 
 int main() {
     std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
+    std::signal(SIGPIPE, SIG_IGN);
 
     try {
-        UsbDeviceInfo cameraInfo;
+        UsbDeviceInfo camera;
         
-        if (!selectCamera(cameraInfo)) {
+        if (!selectCamera(camera)) {
             return EXIT_FAILURE;
         }
 
-        std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(cameraInfo.bus)
-                  << " Address " << static_cast<int>(cameraInfo.address) << "...\n";
+        std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
+                  << " Address " << static_cast<int>(camera.address) << "...\n";
 
-        return MjpegStreamCapture::capture(running, cameraInfo);
+        auto pool = BufferPool::create();
+
+		disruptor::SPSCDisruptor<BufferPtr, 65536> ringBuffer;
+
+		std::jthread diskWriter([&ringBuffer](const std::stop_token& st) {
+            std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
+            int64_t next_read = 0;
+            
+            while (!st.stop_requested()) {
+				int64_t available = ringBuffer.wait_for(next_read);
+
+				while (next_read <= available) {
+					BufferPtr buf = ringBuffer.get_by_sequence(next_read);
+
+					if (!buf) {
+						std::cerr << "[Consumer] Poison Pill received. Shutting down.\n";
+						outFile.close();
+						return;
+					}
+
+					auto content = buf->getMutableContentSlice();
+					size_t contentSize = buf->contentSize();
+					static int consumer_debug_count = 0;
+					if (++consumer_debug_count % 100 == 0) {
+						std::cerr << "[Consumer] Writing " 
+								  << contentSize 
+								  << " bytes (Packet " 
+								  << consumer_debug_count 
+								  << ")\n";
+					}
+
+					outFile.write(reinterpret_cast<const char*>(content.data()), contentSize);
+					next_read++;
+				}
+				ringBuffer.mark_consumed(next_read - 1);
+			}
+        });
+
+		auto transfer = [&](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
+			static int call_count = 0;
+    		if (call_count++ % 100 == 0) { 
+				std::cerr << "[DEBUG] Transfer callback fired. Status: " 
+						  << (int)status << " Size: " << payload.size() << "\n";
+			}
+
+			if (status == UsbTransferStatus::Completed && !payload.empty()) {
+                // 1. Acquire from pool
+                auto buf = pool->borrow();
+				if (!buf) {
+					std::cerr << "buf is null. skipping processing of this payload";
+					return true;
+				}
+
+				buf->insertContent(payload);
+                
+                // 3. Publish to Disruptor
+                int64_t seq = ringBuffer.claim();
+                ringBuffer.get_by_sequence(seq) = buf; 
+                ringBuffer.publish(seq);
+            } else {
+				std::cerr << "USB payload was not complete, or is empty. Skipping.";
+			}
+            return status != UsbTransferStatus::Disconnected; 
+        };
+
+        UsbDriver driver(transfer, &running);
+
+        std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
+
+        driver.start(camera);
+
+        std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
+        
+        while (running.load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
+
+        driver.stop();
+		int64_t seq = ringBuffer.claim();
+		ringBuffer.get_by_sequence(seq) = nullptr;
+		ringBuffer.publish(seq);
+
+		return EXIT_SUCCESS;
 
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";
         return EXIT_FAILURE;
     }
-
-    return EXIT_SUCCESS;
 }

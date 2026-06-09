@@ -98,12 +98,12 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& data) {
                     );
                     
                     std::string filename = std::format("frame_{:04d}.jpg", frameCount++);
-                    std::ofstream image(filename, std::ios::binary);
+                    // std::ofstream image(filename, std::ios::binary);
 
-                    image.write(
-                        reinterpret_cast<const char*>(cleanJpeg.data()), 
-                        cleanJpeg.size()
-                    );
+                    // image.write(
+                    //     reinterpret_cast<const char*>(cleanJpeg.data()), 
+                    //     cleanJpeg.size()
+                    // );
                     
                     std::cout << "[Success] Extracted " << filename << " (" << cleanJpeg.size() << " bytes)\n";
                 } else {

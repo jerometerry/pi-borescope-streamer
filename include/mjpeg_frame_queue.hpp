@@ -5,8 +5,6 @@
 #include "thread_safety.hpp"
 #include "thread_safety_mutex.hpp"
 
-class BufferPool;
-
 /**
  * @brief MjpegFrameQueue is a thread safe data structure that stores the latest MJPEG frame from the USB camera feed,
  * overwriting the previous frame.
