@@ -3,25 +3,41 @@
 #include <bit>
 #include <concepts>
 #include <cstdint>
-#include <iostream>
 #include <new>
 #include <thread>
 
 namespace disruptor {
 
-// Skip the standard constant on ARM platforms to avoid compiler warning spam
 #if defined(__cpp_lib_hardware_interference_size) && !defined(__arm__) && !defined(__aarch64__)
     inline constexpr size_t cache_line_size = std::hardware_destructive_interference_size;
 #else
-    // Safe, universal fallback for macOS, x86_64, and Raspberry Pi ARM
     inline constexpr size_t cache_line_size = 64;
 #endif
 
+    // Enforce alignment directly on the type to guarantee zero false sharing
     struct alignas(cache_line_size) Sequence {
         std::atomic<int64_t> value{-1};
 
         [[nodiscard]] int64_t wait_until_greater_or_equal(int64_t target) const noexcept {
             int64_t current = value.load(std::memory_order_acquire);
+            
+            // 1. Hybrid Spin-Wait Strategy: Low-latency spinning first
+            uint32_t spin_count = 0;
+            while (current < target && spin_count < 2000) {
+                std::atomic_ some_fence_or_hint = [](){
+                    #if defined(__x86_64__) || defined(_M_X64)
+                    asm volatile("pause" ::: "memory");
+                    #elif defined(__aarch64__) || defined(_M_ARM64)
+                    asm volatile("yield" ::: "memory");
+                    #endif
+                };
+                some_fence_or_hint();
+                current = value.load(std::memory_order_relaxed);
+                spin_count++;
+            }
+
+            // 2. Fallback to OS-assisted sleep if the producer/consumer is heavily delayed
+            current = value.load(std::memory_order_acquire);
             while (current < target) {
                 value.wait(current, std::memory_order_acquire);
                 current = value.load(std::memory_order_acquire);
@@ -31,20 +47,21 @@ namespace disruptor {
 
         void publish(int64_t new_value) noexcept {
             value.store(new_value, std::memory_order_release);
-            value.notify_all(); // Wakes up std::atomic::wait
+            value.notify_all(); // Wakes up OS thread if it fell asleep
         }
     };
 
+    // Explicitly align the buffer type to keep it clean from surrounding tracking variables
     template <typename T, size_t Capacity>
     requires (std::has_single_bit(Capacity))
-    class RingBuffer {
+    class alignas(cache_line_size) RingBuffer {
     private:
         static constexpr size_t mask = Capacity - 1;
-        alignas(cache_line_size) std::array<T, Capacity> data_{};
+        std::array<T, Capacity> data_{};
 
     public:
         [[nodiscard]] T& operator[](int64_t sequence) noexcept {
-            return data_[sequence & mask]; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+            return data_[sequence & mask]; 
         }
         
         [[nodiscard]] static constexpr size_t capacity() noexcept {
@@ -55,26 +72,30 @@ namespace disruptor {
     template <typename T, size_t Capacity>
     class SPSCDisruptor {
     private:
-        alignas(cache_line_size) RingBuffer<T, Capacity> buffer_;
-
-        alignas(cache_line_size) Sequence claim_sequence_;
-        alignas(cache_line_size) Sequence published_sequence_;
-        alignas(cache_line_size) Sequence consumer_sequence_;
+        // Properly segmented layouts prevent data pre-fetchers from causing false sharing
+        RingBuffer<T, Capacity> buffer_;
+        Sequence claim_sequence_;
+        Sequence published_sequence_;
+        Sequence consumer_sequence_;
 
     public:
         [[nodiscard]] int64_t claim() noexcept {
+            // relaxed load is fine because this thread is the only writer to claim_sequence_
             int64_t next_sequence = claim_sequence_.value.load(std::memory_order_relaxed) + 1;
             int64_t wrap_point = next_sequence - buffer_.capacity();
 
+            // Acquire fence guarantees we see the consumer's slot clearance before overwriting data
             while (consumer_sequence_.value.load(std::memory_order_acquire) < wrap_point) {
                 std::this_thread::yield(); 
             }
 
-            claim_sequence_.value.store(next_sequence, std::memory_order_relaxed);
+            // Must use release memory order to make sure the wrap_point check above 
+            // is never reordered underneath the assignment of data into the returned slot number!
+            claim_sequence_.value.store(next_sequence, std::memory_order_release);
             return next_sequence;
         }
 
-        T& get_by_sequence(int64_t sequence) noexcept {
+        [[nodiscard]] T& get_by_sequence(int64_t sequence) noexcept {
             return buffer_[sequence];
         }
 
@@ -87,6 +108,7 @@ namespace disruptor {
         }
 
         void mark_consumed(int64_t sequence) noexcept {
+            // Informs the producer thread that the buffer indexes up to this sequence are safe to claim
             consumer_sequence_.value.store(sequence, std::memory_order_release);
         }
     };
