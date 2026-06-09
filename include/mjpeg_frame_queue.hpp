@@ -52,7 +52,7 @@ public:
 
     void push(BufferPtr frame);
 
-    BufferPtr pop(uint32_t& outFrameId) const;
+    BufferPtr pop(uint32_t& outFrameId);
 
 private:
     mutable Mutex activeMutex_;
