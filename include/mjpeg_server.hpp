@@ -21,14 +21,28 @@ namespace uWS { template <bool SSL> struct HttpResponse; }
  */
 class MjpegServer {
 public:
+    /**
+     * @brief The callback signature used by the server to request the latest frame.
+     * @param[out] currentFrameId Passed by reference so the source can populate the latest ID.
+     * @return A managed pointer to the latest frame, or null if no new frame exists.
+     */
     using FrameSource = std::function<BufferPtr(uint32_t&)>;
 
+    /**
+     * @brief Initializes the web server configuration.
+     * @param port The HTTP port to bind to (e.g., 8080).
+     * @param running A reference to the global shutdown flag to monitor for graceful exit.
+     * @param frameSource The provider (usually MjpegFrameQueue) that supplies the video frames.
+     */
     explicit MjpegServer(int port, const std::atomic<bool>& running, FrameSource frameSource);
     ~MjpegServer();
 
     MjpegServer(const MjpegServer&) = delete;
     MjpegServer& operator=(const MjpegServer&) = delete;
 
+    /**
+     * @brief Blocks the calling thread and begins the uWebSockets epoll event loop.
+     */
     void start();
 
 private:

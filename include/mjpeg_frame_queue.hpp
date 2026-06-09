@@ -50,8 +50,24 @@ class MjpegFrameQueue : public std::enable_shared_from_this<MjpegFrameQueue> {
 public:
     MjpegFrameQueue() = default;
 
+    /**
+     * @brief Pushes a new frame into the queue, aggressively overwriting the previous frame.
+     * @details Safely rejects empty frames. Destroys the overwritten frame outside the internal 
+     * mutex lock to guarantee immunity from lock-inversion deadlocks with the BufferPool.
+     * 
+     * @param frame The latest MJPEG picture captured from the hardware.
+     */
     void push(BufferPtr frame);
 
+    /**
+     * @brief Destructively reads the latest frame from the queue.
+     * @details This acts as a destructive reader. The moment the frame is popped, ownership is 
+     * transferred via std::move, and the queue's internal state becomes empty until the next push().
+     * 
+     * @param[out] outFrameId Populates with the internal sequential ID of the queue's current state, 
+     * even if the queue is currently empty.
+     * @return The latest frame, or a null BufferPtr if the queue is empty.
+     */
     BufferPtr pop(uint32_t& outFrameId);
 
 private:

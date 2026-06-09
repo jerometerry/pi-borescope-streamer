@@ -16,10 +16,13 @@
  */
 class BufferPool final : public BufferRecycler, public std::enable_shared_from_this<BufferPool> {
 public:
+    /**
+     * @brief Configuration parameters for initializing the memory pool.
+     */
     struct BufferPoolArgs {
-        size_t maxPoolSize;
-        size_t initialPoolSize;
-        size_t bufferReserveSize;
+        size_t maxPoolSize;        ///< The maximum allowed size before falling back to heap allocation.
+        size_t initialPoolSize;    ///< The number of buffers to eagerly allocate at startup.
+        size_t bufferReserveSize;  ///< The default capacity (in bytes) of each buffer's data vector.
     };
 
     explicit BufferPool(const BufferPoolArgs& args);
@@ -28,6 +31,14 @@ public:
 
     static std::shared_ptr<BufferPool> create(const BufferPoolArgs& args);
     
+    /**
+     * @brief Retrieves an available Buffer from the pool.
+     * @details If the pool is empty but under maxPoolSize_, a new Buffer is allocated. 
+     * The returned Buffer is wrapped in an IntrusivePtr; when its reference count drops to 0, 
+     * it will automatically return itself to this pool.
+     * 
+     * @return A managed pointer to a zeroed-out, ready-to-use Buffer.
+     */
     BufferPtr borrow();
 
     size_t getFreeBuffers() const;

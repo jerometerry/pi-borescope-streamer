@@ -77,7 +77,8 @@ TEST(IntrusivePtrTest, MoveAssignmentTransfersOwnership) {
 
     BufferPtr ptr2;
     ptr2 = std::move(ptr1);
-    bool isNull = static_cast<bool>(ptr1);
+
+    bool isNull = static_cast<bool>(ptr1); // NOLINT(bugprone-use-after-move)
 
     EXPECT_FALSE(isNull) << "Moved-from pointer should be empty";
     EXPECT_TRUE(static_cast<bool>(ptr2)) << "Target pointer should hold the resource";

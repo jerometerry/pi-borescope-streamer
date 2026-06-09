@@ -12,21 +12,36 @@
 #include "usb_device_info.hpp"
 
 /**
- * @brief A zero-cost template wrapper that manages the libusb event loop.
- * @param transferHandler
- * @param running
+ * @brief A zero-cost wrapper that manages the libusb asynchronous event loop.
+ * @details Isolates the raw libusb C-API from the application logic, handling DMA memory 
+ * allocation, bulk transfer submissions, and safe teardown mechanics.
  */
 class UsbDriver {
 public:
-
+    /**
+     * @brief Signature for the callback fired when a USB payload arrives.
+     * @return true to automatically re-submit the transfer request, false to halt the loop.
+     */
     using TransferHandler = std::function<bool(UsbTransferStatus, std::span<const uint8_t>)>;
 
+    /**
+     * @brief Constructs the driver.
+     * @param transferHandler The callback to execute when a chunk of data is successfully read.
+     * @param running Pointer to the global atomic shutdown flag.
+     */
     explicit UsbDriver(TransferHandler transferHandler, std::atomic<bool>* running);
 
     ~UsbDriver();
 
+    /**
+     * @brief Spawns a background worker thread and begins polling the target hardware.
+     * @param target The verified USB device descriptor to connect to.
+     */
     void start(const UsbDeviceInfo& target);
 
+    /**
+     * @brief Safely cancels all active USB transfers and joins the worker thread.
+     */
     void stop();
 
 private:

@@ -110,17 +110,17 @@ namespace Units {
 
 namespace BufferPoolConfig {
     /**
-     * @brief 
+     * @brief The number of Buffer objects pre-allocated when the pool is created.
      */
     inline constexpr int INITIAL_POOL_SIZE = 4;
 
     /**
-     * @brief 
+     * @brief The hard limit on how many Buffers can exist. If exceeded, new Buffers fall back to heap allocation.
      */
     inline constexpr int MAX_POOL_SIZE = 8;
 
     /**
-     * @brief 
+     * @brief The number of bytes reserved at the front of every Buffer specifically for injecting HTTP chunk headers.
      */
     static constexpr size_t BUFFER_PADDING = 128;
 }
@@ -132,14 +132,33 @@ namespace UsbConfig {
     inline constexpr unsigned int USB_TIMEOUT = 1000;
 
     /**
-     * @brief How long (in ms) we will wait for the USB hardware to respond before assuming it disconnected.
+     * @brief The grace period (in ms) allowed for pending asynchronous USB transfers to cleanly cancel 
+     * before the driver thread forcibly exits during an application shutdown.
      */
     inline constexpr unsigned int SHUTDOWN_WAIT_TIMEOUT = 50;
 
+    /**
+     * @brief The number of asynchronous USB transfer requests kept simultaneously in-flight.
+     * @details Maintaining multiple active requests ensures the hardware host controller always has 
+     * a buffer ready to fill. If this drops to 1, the USB bus will idle between transfers, causing 
+     * micro-stutters and dropped video frames.
+     */
     inline constexpr size_t BULK_TRANSFER_COUNT = 4;
 
+    /**
+     * @brief The payload size of a single USB bulk transfer request.
+     * @details 16 KB is a highly optimized chunk size for USB 2.0 High-Speed bulk endpoints. 
+     * It is large enough to maintain high throughput bandwidth, but small enough to guarantee 
+     * minimal latency when passing chunks to the MjpegStream decoder.
+     */
     inline constexpr size_t BULK_TRANSFER_SIZE = Units::SIXTEEN_KILOBYTES;
 
+    /**
+     * @brief The total pre-allocated memory footprint locked by the USB ingestion driver.
+     * @details By strictly defining this upfront (64 KB total), libusb can perform Direct Memory 
+     * Access (DMA) routing straight into this user-space buffer array. This guarantees that 
+     * raw hardware ingestion requires zero heap allocations on the hot path.
+     */
     inline constexpr size_t DMA_BUFFER_SIZE = BULK_TRANSFER_COUNT * BULK_TRANSFER_SIZE;
 }
 
@@ -155,17 +174,22 @@ namespace WebServerConfig {
     inline constexpr size_t HEADER_BUFFER_SIZE = 128;
 
     /**
-     * @brief 
+     * @brief The delay (in ms) before the timer initially fires. 0 means execute immediately on loop start.
      */
     inline constexpr int TIMER_FALLTHROUGH = 0;
 
     /**
-     * @brief 
+     * @brief The polling interval (in ms) for the uWebSockets event loop to check the frame queue. 
+     * @details 15ms safely over-samples a 30 FPS (33ms) camera feed to prevent missed frames.
      */
     inline constexpr int TIMER_INTERVAL_MS = 15;
 
     /**
-     * @brief 
+     * @brief The threshold of queued bytes allowed in the OS network socket before the server assumes the viewer 
+     * is lagging.
+     *
+     * @details Set to 0 to strictly enforce a "drop-oldest" backpressure policy. This guarantees 
+     * real-time latency by immediately dropping frames for slow connections rather than queuing them in the heap.
      */
     inline const size_t MAX_OUTGOING_CLIENT_BUFFER_SIZE = 0;
 }

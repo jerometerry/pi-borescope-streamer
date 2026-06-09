@@ -18,6 +18,10 @@ class Buffer;
  */
 class BufferRecycler {
 public:
+    /**
+     * @brief Called automatically by IntrusivePtr when a Buffer's reference count hits zero.
+     * @param buffer The naked pointer to the Buffer that is ready to be reused.
+     */
     virtual void recycle(Buffer* buffer) = 0;
 
 protected:
