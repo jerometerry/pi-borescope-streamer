@@ -7,6 +7,16 @@
  * @brief IntrusivePtr exists to eliminate malloc calls associated with std::shared_ptr for reference counting. 
  * 
  * @tparam T - the type to wrap with an IntrusivePtr, to give it referencing counting / auto deletion. 
+ *
+ * @details  Buffer is wrapped in an IntrusivePtr<Buffer>, which is typedefed to BufferPtr = IntrusivePtr<Buffer>.
+ * IntrusivePtr implements the intrusive pointer pattern, which embeds the reference count inside the IntrusivePtr 
+ * class. BufferPool returns instances of BufferPtr (aka IntrusivePtr<Buffer>), which are allocated on the stack,
+ * avoiding heap allocations (via malloc) which occur when using std::shared_ptr<Buffer>.
+ *
+ * std::shared_ptr<Buffer> is perfectly fine to use, if you don't mind a small amount of memory being allocated on the 
+ * heap for the internal control block that shared_ptr uses. Arguably for this project the intrusive pointer pattern 
+ * is overkill. I wanted to see if I could get zero allocations on the hot path, and this was the last hurdle to
+ * overcome.
  */
 template <typename T>
 class IntrusivePtr {

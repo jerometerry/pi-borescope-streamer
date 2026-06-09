@@ -6,6 +6,14 @@
 #include <cstdint>
 #include <vector>
 
+/**
+ * @brief functions for converting between little endian and big endian. 
+ * 
+ * @details This is a bit of overkill to be honest. This matters mostly if this code were to run on big endian 
+ * systems. I highly doubt that this code base will ever run on a big endian system. Having said that, it isn't much
+ * trouble to add this.
+ * 
+ */
 namespace EndianConversion {
 	/**
     * @brief Single-byte bypass for wire translation.

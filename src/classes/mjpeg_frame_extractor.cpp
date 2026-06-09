@@ -10,21 +10,18 @@
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
 
-void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
-    std::cout << "Starting first-principles hardware extraction...\n\n";
-
+void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& data) {
     size_t i = 0;
     std::vector<uint8_t> currentFrame;
-    currentFrame.reserve(Units::TWO_HUNDRED_FIFTY_SIX_KILOBYTES); // Pre-allocate 256KB buffer for safety
+    currentFrame.reserve(Units::TWO_HUNDRED_FIFTY_SIX_KILOBYTES);
     
     int frameCount = 0;
     int lastFrameId = -1;
 
-    while (i + TOTAL_USB_HEADER_SIZE <= fileData.size()) {
-
+    while (i + TOTAL_USB_HEADER_SIZE <= data.size()) {
         const UsbPacketHeader* header = 
             reinterpret_cast<const UsbPacketHeader*>(
-                &fileData[i]
+                &data[i]
             );
 
         if (header->getHeader() != UsbProtocol::USB_FRAME_HEADER || 
@@ -41,14 +38,14 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
         size_t nextHeaderOffset = 0;
         size_t scanLimit = std::min<size_t>(
             UsbProtocol::MAX_SCAN_LIMIT, 
-            fileData.size() - i - 5
+            data.size() - i - 5
         );
         
         for (size_t d = 5; d <= scanLimit; ++d) {
-            if (fileData[i+d] == UsbProtocol::USB_FRAME_HEADER_A && 
-                fileData[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && 
-               (fileData[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
-                fileData[i+d+2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
+            if (data[i+d] == UsbProtocol::USB_FRAME_HEADER_A && 
+                data[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && 
+               (data[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
+                data[i+d+2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
                 isGhost = true;
                 nextHeaderOffset = d;
                 break;
@@ -61,14 +58,14 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
         }
 
         size_t packetSize = USB_PACKET_HEADER_SIZE + header->getLength();
-        if (i + packetSize > fileData.size()) {
+        if (i + packetSize > data.size()) {
             std::cout << "Reached incomplete hardware block at end of file. Stopping.\n";
             break; 
         }
 
         const UsbPayloadHeader* payloadHeader = 
             reinterpret_cast<const UsbPayloadHeader*>(
-                &fileData[i + USB_PACKET_HEADER_SIZE]
+                &data[i + USB_PACKET_HEADER_SIZE]
             );
 
         if (lastFrameId != -1 && payloadHeader->getFrameId() != lastFrameId) {
@@ -133,8 +130,8 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& fileData) {
             
             currentFrame.insert(
                 currentFrame.end(), 
-                fileData.begin() + payloadStart, 
-                fileData.begin() + payloadStart + payloadSize
+                data.begin() + payloadStart, 
+                data.begin() + payloadStart + payloadSize
             );
         }
 
