@@ -15,7 +15,7 @@
  * the necessary HTTP headers, so that only one send is necessary, allowing the web servers zero-byte allocation 
  * routines to be leveraged when possible.
  */
-struct Buffer {
+class Buffer {
 public:
     explicit Buffer(const size_t paddingSize);
 
