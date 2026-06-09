@@ -1,6 +1,6 @@
 #pragma once
 
-struct Buffer;
+class Buffer;
 
 /**
  * @brief Interface to break the cyclic dependency between BufferPool and Buffer for recycling Buffers once they are 
