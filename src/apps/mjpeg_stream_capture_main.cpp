@@ -18,7 +18,6 @@
 #include <limits>
 #include <string>
 #include <vector>
-
 #include "mjpeg_stream_capture.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
