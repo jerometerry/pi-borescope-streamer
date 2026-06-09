@@ -49,18 +49,17 @@ TEST(MjpegFrameQueueTest, SafelyHandlesImmediatePollingWithoutSegfault) {
     }
 }
 
-TEST(MjpegFrameQueueTest, DereferencingEmptyFrameCausesDeath) {
+TEST(MjpegFrameQueueTest, PopOnEmptyQueueReturnsNull) {
     MjpegFrameQueue frameQueue;
 
     uint32_t frameId = 0;
     auto activeFrame = frameQueue.pop(frameId);
 
-    EXPECT_DEATH({
-        activeFrame->contentSize(); 
-    }, "");
+    EXPECT_FALSE(activeFrame);
+    EXPECT_EQ(activeFrame.get(), nullptr);
 }
 
-TEST(MjpegFrameQueueTest, frameQueue) {
+TEST(MjpegFrameQueueTest, PopRetrievesPushedFrameIntact) {
     auto bufferPool = BufferPool::create();
     MjpegFrameQueue frameQueue;
 
@@ -90,26 +89,26 @@ TEST(MjpegFrameQueueTest, SafelyRejectsEmptyFrames) {
 
     std::vector<uint8_t> frameData = { 0x01, 0x02, 0x03 };
     queueFrame(frameQueue, bufferPool, frameData);
-    
-    uint32_t initialId = 0;
-    auto initialFrame = frameQueue.pop(initialId);
-    EXPECT_EQ(initialId, 1);
 
     std::vector<uint8_t> emptyFrame = {};
     queueFrame(frameQueue, bufferPool, emptyFrame);    
-    
-    uint32_t nextId = 0;
-    auto nextFrame = frameQueue.pop(nextId);
-    
-    EXPECT_EQ(initialId, nextId) << "BufferPtr ID should not increment for empty frames.";
 
-    std::span<const uint8_t> initialPayload = initialFrame->getContentSlice();
-    std::span<const uint8_t> nextPayload = nextFrame->getContentSlice();
+    uint32_t popId = 0;
+    auto poppedFrame = frameQueue.pop(popId);
+    
+    EXPECT_EQ(popId, 1) << "Frame ID should match the first valid push.";
+    ASSERT_TRUE(poppedFrame) << "Popped frame must not be null.";
+
+    std::span<const uint8_t> payload = poppedFrame->getContentSlice();
 
     EXPECT_THAT(
-        initialPayload, 
-        ::testing::ElementsAreArray(nextPayload.begin(), nextPayload.end())
-    ) << "Active frame pointer should remain unchanged.";
+        payload, 
+        ::testing::ElementsAre(0x01, 0x02, 0x03)
+    ) << "Queue should have retained the valid frame, ignoring the empty push.";
+
+    uint32_t emptyId = 0;
+    auto emptyPop = frameQueue.pop(emptyId);
+    EXPECT_FALSE(emptyPop) << "Queue should be empty after a destructive pop.";
 }
 
 TEST(MjpegFrameQueueTest, ConcurrentProducersAndConsumers) {
@@ -137,17 +136,16 @@ TEST(MjpegFrameQueueTest, ConcurrentProducersAndConsumers) {
         uint32_t lastSeenId = 0;
         int localConsumed = 0;
 
-        while (!producerDone.load(std::memory_order_acquire) || lastSeenId < TARGET_FRAMES) {
-            
+        while (true) {
             uint32_t currentId = 0;
             auto frame = frameQueue.pop(currentId);
             
             if (frame && currentId > lastSeenId) {
                 localConsumed++;
-                lastSeenId = currentId; // Update our bookmark
+                lastSeenId = currentId; 
             }
 
-            if (producerDone.load(std::memory_order_acquire) && lastSeenId >= TARGET_FRAMES) {
+            if (producerDone.load(std::memory_order_acquire) && currentId >= TARGET_FRAMES) {
                 break;
             }
 
