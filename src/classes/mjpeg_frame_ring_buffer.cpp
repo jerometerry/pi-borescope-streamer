@@ -1,5 +1,7 @@
-#include "mjpeg_frame_ring_buffer.hpp"
 #include <utility>
+#include "buffer_ptr.hpp"
+#include "intrusive_ptr.hpp"
+#include "mjpeg_frame_ring_buffer.hpp"
 
 MjpegFrameRingBuffer::MjpegFrameRingBuffer(
     size_t size, 

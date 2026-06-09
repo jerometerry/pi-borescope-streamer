@@ -1,8 +1,9 @@
 #include <gtest/gtest.h>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <string>
 #include <thread>
-#include <vector>
 #include "disruptor.hpp"
 
 using namespace disruptor;

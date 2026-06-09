@@ -1,6 +1,8 @@
 #include <benchmark/benchmark.h>
-#include <thread>
 #include <atomic>
+#include <cstdint>
+#include <vector>
+#include <thread>
 #include "disruptor.hpp"
 
 struct Event {

@@ -1,6 +1,5 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <span>

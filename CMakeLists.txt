@@ -348,7 +348,7 @@ target_link_libraries(disruptor.bench
         project_warnings
 )
 
-add_executable(mjpeg_pipeline.bench benchmark/benchmark_pipeline.cpp)
+add_executable(mjpeg_pipeline.bench benchmark/mjpeg_pipeline_benchmark.cpp)
 
 target_link_libraries(mjpeg_pipeline.bench 
     PRIVATE 

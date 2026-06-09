@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <mutex>
 #include <vector>
+#include "buffer.hpp"
 #include "buffer_ptr.hpp"
 
 class MjpegFrameRingBuffer {

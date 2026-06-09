@@ -10,28 +10,27 @@
  * recording of the glitch, which they can then analyze later to figure out what went wrong.
  */
 
-#include <libusb.h>
 #include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
-#include <functional>
 #include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <thread>
 #include <vector>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "disruptor.hpp"
-#include "mjpeg_frame_queue.hpp"
-#include "mjpeg_stream.hpp"
+#include "intrusive_ptr.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
