@@ -27,7 +27,7 @@ In our unified `CMakeLists.txt`, these options are mapped to targets built on Li
 
 ```cmake
 if(NOT APPLE)
-    target_compile_options(pi-borescope-streamer PRIVATE 
+    target_compile_options(mjpeg_server PRIVATE 
         -g                        # Generate debug symbols
         -fno-omit-frame-pointer   # Keep frame pointers for deep stack walks
     )
@@ -66,7 +66,7 @@ sudo apt install linux-perf
 
 ```bash
 # Locate the running instance of the new CMake-built server executable
-SERVER_PID=$(pgrep -f ./out/build/release/pi-borescope-streamer)
+SERVER_PID=$(pgrep -f ./out/build/release/mjpeg_server)
 
 echo "Generating memory allocation flame graph for PID $SERVER_PID. Put the server under load. Ctrl+C to output collected traces"
 
@@ -83,7 +83,7 @@ sudo bpftrace -e 'uprobe:libc:malloc { @[ustack] = sum(arg0); }' -p $SERVER_PID 
 
 ```bash
 # Locate the running instance of the new CMake-built server executable
-SERVER_PID=$(pgrep -f ./out/build/release/pi-borescope-streamer)
+SERVER_PID=$(pgrep -f ./out/build/release/mjpeg_server)
 
 echo "Generating CPU flame graph for PID $SERVER_PID. Put the server under load. Ctrl+C to output collected traces"
 
@@ -180,7 +180,7 @@ how long the kernel takes to accept that payload:
 
 ```bash
 # Locate the running instance of the new CMake-built server executable
-SERVER_PID=$(pgrep -f ./out/build/release/pi-borescope-streamer)
+SERVER_PID=$(pgrep -f ./out/build/release/mjpeg_server)
 
 # Capture write latency and write sizes, and print out a histogram of both metrics
 sudo bpftrace -e '
@@ -232,19 +232,19 @@ names from those numeric command codes?
 ## Locks 
 
 ```bash
-# Get the shared libraries used by pi-borescope-streamer
- ldd /home/jterry/github/pi-borescope-streamer/out/build/release/pi-borescope-streamer | grep libc.so
+# Get the shared libraries used by mjpeg_server
+ ldd /home/jterry/github/pi-borescope-streamer/out/build/release/mjpeg_server | grep libc.so
 ```
 
 ```bash
 # Capture lock attempts and amount of time locks are held (nanoseconds)
 sudo bpftrace -e '
-uprobe:/lib/aarch64-linux-gnu/libc.so.6:pthread_mutex_lock /comm == "pi-borescope-st"/ {
+uprobe:/lib/aarch64-linux-gnu/libc.so.6:pthread_mutex_lock /comm == "mjpeg_server"/ {
     @lock_attempts = count();
     @start[tid] = nsecs;
 }
 
-uprobe:/lib/aarch64-linux-gnu/libc.so.6:pthread_mutex_unlock /comm == "pi-borescope-st" && @start[tid]/ {
+uprobe:/lib/aarch64-linux-gnu/libc.so.6:pthread_mutex_unlock /comm == "mjpeg_server" && @start[tid]/ {
     $hold_time = (nsecs - @start[tid]);
     @lock_hold_duration_ns = hist($hold_time);
     delete(@start[tid]);
@@ -255,7 +255,7 @@ uprobe:/lib/aarch64-linux-gnu/libc.so.6:pthread_mutex_unlock /comm == "pi-boresc
 
 ```bash
 sudo bpftrace -e '
-tracepoint:syscalls:sys_enter_sendto /comm == "pi-borescope-st"/ {
+tracepoint:syscalls:sys_enter_sendto /comm == "mjpeg_server"/ {
     @bytes_per_sec = sum(args->len);
     @total_bytes = sum(args->len);
 }
@@ -288,12 +288,12 @@ drop frames or stall due to network congestion:
 
 ```bash
 sudo bpftrace -e '
-tracepoint:syscalls:sys_enter_sendto /comm == "pi-borescope-st"/ {
+tracepoint:syscalls:sys_enter_sendto /comm == "mjpeg_server"/ {
     @network_writes_per_sec = count();
 }
 
 // Track stdout (FD 1) and stderr (FD 2) text streams safely
-tracepoint:syscalls:sys_enter_write /comm == "pi-borescope-st" && (args->fd == 1 || args->fd == 2)/ {
+tracepoint:syscalls:sys_enter_write /comm == "mjpeg_server" && (args->fd == 1 || args->fd == 2)/ {
     $str = str(args->buf);
     if (strfind($str, "TCP stall") != -1) {
         @tcp_stalls_total = count();
@@ -323,11 +323,11 @@ sudo bpftrace -lv tracepoint:syscalls:sys_enter_write
 
 ```bash
 sudo bpftrace -e '
-tracepoint:syscalls:sys_enter_sendto /comm == "pi-borescope-st"/ {
+tracepoint:syscalls:sys_enter_sendto /comm == "mjpeg_server"/ {
     @network_writes_per_sec = count();
 }
 
-tracepoint:syscalls:sys_enter_write /comm == "pi-borescope-st" && (args->fd == 1 || args->fd == 2)/ {
+tracepoint:syscalls:sys_enter_write /comm == "mjpeg_server" && (args->fd == 1 || args->fd == 2)/ {
     $str = str(args->buf);
     if (strncmp($str, "[Network Telemetry]", 19) == 0) {
         @tcp_stalls_total = count();
