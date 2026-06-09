@@ -1,5 +1,4 @@
 #pragma once
-
 #include "buffer_ptr.hpp"
 
 namespace V4L2 { struct Config; }
