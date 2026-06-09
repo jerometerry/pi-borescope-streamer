@@ -74,13 +74,10 @@ TEST(MjpegFrameQueueTest, PopRetrievesPushedFrameIntact) {
 
     EXPECT_EQ(currentFrame->contentSize(), frame.size());
 
-    std::span<const uint8_t> actualPayload = currentFrame->getContentSlice();
-    std::span<const uint8_t> expectedPayload(frame.data(), frame.size());
-    bool areEqual = std::equal(
-        actualPayload.begin(), actualPayload.end(), 
-        expectedPayload.begin(), expectedPayload.end()
-    );
-    EXPECT_TRUE(areEqual);
+    EXPECT_THAT(
+        currentFrame->getContentSlice(), 
+        ::testing::ElementsAreArray(frame)
+    ) << "The popped payload did not perfectly match the pushed payload.";
 }
 
 TEST(MjpegFrameQueueTest, SafelyRejectsEmptyFrames) {
