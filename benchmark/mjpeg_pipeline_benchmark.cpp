@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -20,8 +21,12 @@
 #include "mjpeg_frame_queue.hpp"
 #include "zero_allocation_response_builder.hpp"
 
-static std::vector<uint8_t> readBinaryFile() {
-    std::ifstream file("camera_stream.mjpeg", std::ios::binary | std::ios::ate);
+namespace {
+    std::string fileName_ = "./test_data/camera_stream.mjpeg";
+}
+
+static std::vector<uint8_t> readBinaryFile(const std::string& fileName) {
+    std::ifstream file(fileName, std::ios::binary | std::ios::ate);
     
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file: camera_stream.mjpeg");
@@ -63,8 +68,7 @@ static std::vector<std::span<const uint8_t>> splitPages(
 }
 
 static void BM_Pipeline_Throughput(benchmark::State& state) {
-    // 1. PRE-LOAD (Outside the loop to keep benchmark clean)
-    static auto data = readBinaryFile();
+    static auto data = readBinaryFile(fileName_);
     static auto pages = splitPages(data);
 
     BufferPool::BufferPoolArgs args{
@@ -106,8 +110,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
 }
 
 static void BM_Pipeline_DiskBound(benchmark::State& state) {
-    // 1. Setup file handle OUTSIDE the loop
-    std::ifstream file("camera_stream.mjpeg", std::ios::binary);
+    std::ifstream file(fileName_, std::ios::binary);
     if (!file.is_open()) state.SkipWithError("Could not open file.");
 
     BufferPool::BufferPoolArgs args{
@@ -119,7 +122,6 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
     MjpegFrameQueue queue;
     std::atomic<bool> producer_running{true};
 
-    // Keep your existing consumer thread
     std::jthread consumer([&queue, &producer_running]() {
         while (producer_running.load(std::memory_order_relaxed)) {
             uint32_t frameId{0};
@@ -136,40 +138,53 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
         queue.push(frame);
     });
 
-    // 2. Throttled Producer Loop
     std::vector<uint8_t> chunk(4096);
     for (auto _ : state) {
-        // Read 4KB from "disk"
         file.read(reinterpret_cast<char*>(chunk.data()), 4096);
-        
-        // Handle file wrap-around (simulating continuous stream)
+
         if (file.eof()) {
             file.clear();
             file.seekg(0, std::ios::beg);
             file.read(reinterpret_cast<char*>(chunk.data()), 4096);
         }
 
-        // Send to pipeline
         stream.send(std::span<const uint8_t>(chunk.data(), file.gcount()));
     }
 
-    // 3. Cleanup
     producer_running = false;
     state.SetBytesProcessed(state.iterations() * 4096);
 }
 
 BENCHMARK(BM_Pipeline_Throughput)
     ->Unit(benchmark::kMillisecond)
-    ->Threads(1)   // Single client
-    ->Threads(4)   // 4 simultaneous clients
-    ->Threads(10)  // 10 simultaneous clients
+    ->Threads(1)
+    ->Threads(4)
+    ->Threads(10)
     ->Unit(benchmark::kMillisecond);
 
 BENCHMARK(BM_Pipeline_DiskBound)
     ->Unit(benchmark::kMillisecond)
-    ->Threads(1)   // Single client
-    ->Threads(4)   // 4 simultaneous clients
-    ->Threads(10)  // 10 simultaneous clients
+    ->Threads(1)
+    ->Threads(4)
+    ->Threads(10)
     ->Unit(benchmark::kMillisecond);
 
-BENCHMARK_MAIN();
+int main(int argc, char* argv[]) {
+    try {
+        for (int i = 1; i < argc; ++i) {
+            std::string arg = argv[i];
+
+            if (arg == "--file" && i + 1 < argc) {
+                fileName_ = argv[++i];
+            }
+        }
+
+        benchmark::Initialize(&argc, argv);
+        benchmark::RunSpecifiedBenchmarks();
+        benchmark::Shutdown();
+        return EXIT_SUCCESS;
+    } catch (const std::exception& e) {
+        std::cerr << "[Fatal] Unhandled exception in application core: " << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+}
