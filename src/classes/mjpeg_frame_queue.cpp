@@ -1,6 +1,5 @@
 #include <cstdint>
 #include <utility>
-
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "intrusive_ptr.hpp"
