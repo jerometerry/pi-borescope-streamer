@@ -1,9 +1,9 @@
 #include <benchmark/benchmark.h>
 #include <algorithm>
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <fstream>
 #include <functional>
 #include <iostream>
