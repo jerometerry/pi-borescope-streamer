@@ -1,20 +1,21 @@
 /**
  * @file mjpeg_frame_extractor.cpp
  * @brief An offline tool to pull clean JPEG pictures out of raw camera dumps.
- * @details Reuses production decoding pipelines by mocking USB hardware streaming.
+ * @details Corrected for extreme out-of-bounds target index deadlocks.
  */
 
-#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <fstream>
 #include <iostream>
-#include <span>
-#include <stop_token>
 #include <string>
-#include <thread>
 #include <vector>
+#include <span>
+#include <format>
+#include <print>
+#include <thread>
+#include <atomic>
 #include "constants.hpp"
 #include "frame.hpp"
 #include "frame_disruptor.hpp"
@@ -49,100 +50,64 @@ int main(int argc, const char* argv[]) {
 
         MjpegStream streamDecoder(ringBuffer);
 
-        std::atomic<bool> searching{true};
+        std::atomic<bool> file_feeding_active{true};
         std::atomic<bool> frameFound{false};
 
-        std::jthread extractorConsumer(
-        [&ringBuffer, &searching, &frameFound, targetFrameIndex]
-                (const std::stop_token& st) {
 
+        std::jthread extractorConsumer([&ringBuffer, &file_feeding_active, &frameFound, targetFrameIndex](const std::stop_token& st) {
             int64_t next_read = 0;
 
-            while ( ( searching.load(std::memory_order_relaxed) || 
-                      ringBuffer.getHighestPublished() >= next_read ) 
-                      && !st.stop_requested() ) {
-
-                int64_t available = ringBuffer.waitFor(next_read);
+            while ((file_feeding_active.load(std::memory_order_acquire) || ringBuffer.getHighestPublished() >= next_read) && !st.stop_requested()) {
+                int64_t available = ringBuffer.getHighestPublished();
 
                 if (next_read <= available) {
-
                     while (next_read <= available) {
-
                         Frame& slot = ringBuffer.getBySequence(next_read);
 
                         if (next_read == targetFrameIndex) {
-
                             if (slot.active_size > 0) {
-                                std::string outFilename = std::format(
-                                    "extracted_frame_{}.jpg", 
-                                    targetFrameIndex
-                                );
-                                std::ofstream outImage(
-                                    outFilename, 
-                                    std::ios::out | std::ios::binary
-                                );
+                                std::string outFilename = std::format("extracted_frame_{}.jpg", targetFrameIndex);
+                                std::ofstream outImage(outFilename, std::ios::out | std::ios::binary);
+                                outImage.write(reinterpret_cast<const char*>(slot.getContentSlice().data()), slot.active_size);
                                 
-                                outImage.write(
-                                    reinterpret_cast<const char*>(slot.getContentSlice().data()), 
-                                    slot.active_size
-                                );
-                                
-                                std::println(
-                                    std::cout, 
-                                    "[Success] Extracted target frame {} into '{}' ({} bytes)", 
-                                    targetFrameIndex, 
-                                    outFilename, 
-                                    slot.active_size
-                                );
+                                std::println(std::cout, "[Success] Extracted target frame {} ({} bytes)", targetFrameIndex, slot.active_size);
                                 frameFound.store(true, std::memory_order_release);
                             }
-                            searching.store(false, std::memory_order_release);
+                            file_feeding_active.store(false, std::memory_order_release);
                             return;
                         }
                         next_read++;
                     }
                     ringBuffer.markConsumed(next_read - 1);
                 } else {
-                    std::this_thread::yield();
+                    #if defined(__x86_64__) || defined(_M_X64)
+                        asm volatile("pause" ::: "memory");
+                    #else
+                        std::this_thread::yield();
+                    #endif
                 }
             }
         });
 
-        std::println(
-            std::cout, 
-            "[Feeder] Commencing high-speed injection from dump file..."
-        );
-
+        std::println(std::cout, "[Feeder] Commencing high-speed injection from dump file...");
         std::vector<uint8_t> virtualTransferBuffer(UsbConfig::BULK_TRANSFER_SIZE);
 
-        while (inFile && searching.load(std::memory_order_relaxed)) {
-            inFile.read(
-                reinterpret_cast<char*>(virtualTransferBuffer.data()), 
-                UsbConfig::BULK_TRANSFER_SIZE
-            );
-
+        while (inFile && file_feeding_active.load(std::memory_order_relaxed)) {
+            inFile.read(reinterpret_cast<char*>(virtualTransferBuffer.data()), UsbConfig::BULK_TRANSFER_SIZE);
             std::streamsize bytesRead = inFile.gcount();
 
             if (bytesRead > 0) {
-                std::span<const uint8_t> payload(
-                    virtualTransferBuffer.data(), 
-                    static_cast<size_t>(bytesRead)
-                );
-
+                std::span<const uint8_t> payload(virtualTransferBuffer.data(), static_cast<size_t>(bytesRead));
                 streamDecoder.send(payload); 
             }
         }
 
-        searching.store(false, std::memory_order_release);
+        file_feeding_active.store(false, std::memory_order_release);
         extractorConsumer.request_stop();
         extractorConsumer.join();
 
         if (!frameFound.load(std::memory_order_acquire)) {
-            std::println(
-                std::cerr, 
-                "[Warning] Processed file completely, but index {} was not reached or frame was invalid.", 
-                targetFrameIndex
-            );
+            std::println(std::cerr, "[Finished] File processed completely. Highest valid stream index found was: {}.", ringBuffer.getHighestPublished());
             return EXIT_FAILURE;
         }
 
