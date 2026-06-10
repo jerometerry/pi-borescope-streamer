@@ -24,17 +24,25 @@ public:
 
 class MjpegStreamTest : public ::testing::Test {
 private:
+    
     std::shared_ptr<BufferPool> bufferPool_;
     MockHandlers handler_;
-    std::unique_ptr<MjpegStream> stream_;
+
+    FrameDisruptor disruptor_;
+    MjpegStream stream_;
+
+public:
+    MjpegStreamTest() 
+        : disruptor_(), 
+          stream_(disruptor_)
+    {
+        for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+            disruptor_.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        }
+    }    
 
 protected:
     void SetUp() override {
-        FrameDisruptor ringBuffer;
-        for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-            ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        }
-        stream_ = std::make_unique<MjpegStream>(ringBuffer);
     }
 
     static UsbPacketHeader* getPacketHeader(std::span<uint8_t> buffer) {
@@ -48,7 +56,7 @@ protected:
     }
 
     MockHandlers& GetOutputHandler() { return handler_; }
-    MjpegStream& GetStream() { return *stream_; }
+    MjpegStream& GetStream() { return stream_; }
 
     std::shared_ptr<BufferPool> GetBufferPool() { return bufferPool_; }
 };

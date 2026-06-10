@@ -19,6 +19,7 @@
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
+#include "hardcore_video_frame.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_frame_queue.hpp"
@@ -35,41 +36,41 @@ namespace {
 class MjpegServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
-    std::shared_ptr<BufferPool> bufferPool_;
-    std::shared_ptr<MjpegFrameQueue> frameBuffer_;
-    std::unique_ptr<MjpegServer> server_;
+    FrameDisruptor disruptor_;
+    MjpegServer server_;
+
+public:
+    MjpegServerTest() :
+        disruptor_(), 
+        server_(TEST_PORT, running_, disruptor_)
+    {
+        for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+            disruptor_.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        }
+    }   
 
 protected:
     void SetUp() override {
-        bufferPool_ = BufferPool::create();
-        FrameDisruptor ringBuffer;
-        for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-            ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        }
-
-        server_ = std::make_unique<MjpegServer>(
-            TEST_PORT, 
-            running_, 
-            ringBuffer
-        );
-        
-        server_->start();
+        server_.start();
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     void TearDown() override {
         running_ = false;
-        server_.reset(); 
     }
 
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
-        auto frame = bufferPool_->borrow();
-        frame->insertContent(data);
-        frameBuffer_->push(frame);
+        int64_t seq = disruptor_.claim();
+        HardcoreVideoFrame& slot = disruptor_.get_by_sequence(seq);
+        slot.append_payload(data);
+        disruptor_.publish(seq);
     }
 
     void injectMockVideoFrame(const BufferPtr& frame) {
-        frameBuffer_->push(frame);
+        int64_t seq = disruptor_.claim();
+        HardcoreVideoFrame& slot = disruptor_.get_by_sequence(seq);
+        slot.append_payload(frame->getContentSlice());
+        disruptor_.publish(seq);
     }
 
     std::string fetchFromLocalhost(const std::string& route) {

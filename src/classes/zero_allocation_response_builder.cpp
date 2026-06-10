@@ -3,6 +3,7 @@
 #include <span>
 #include <string_view>
 #include "buffer.hpp"
+#include "hardcore_video_frame.hpp"
 #include "zero_allocation_response_builder.hpp"
 
 std::string_view ZeroAllocationResponseBuilder::build(HardcoreVideoFrame& frame) {
@@ -11,14 +12,8 @@ std::string_view ZeroAllocationResponseBuilder::build(HardcoreVideoFrame& frame)
     // buffer has 128 bytes reserved for zero-byte allocations
     // startPtr is offset 128 bytes from the start of the allocated buffer
 
-    //auto padding = frame->getMutablePaddingSlice().data();
-    //char* paddingStartPtr = reinterpret_cast<char*>(padding);
-    //char* paddingEndPtr = paddingStartPtr + frame->paddingSize();
-    //char* startPtr = paddingEndPtr;
-
-    // TODO
-    char* paddingStartPtr = reinterpret_cast<char*>(frame.storage.data());
-    char* startPtr = paddingStartPtr;
+    char* payloadPtr = reinterpret_cast<char*>(frame.storage.data()) + HardcoreVideoFrame::PADDING_SIZE;
+    char* startPtr = payloadPtr;
     char* cursor = startPtr;
     
     constexpr char newLines[4] = {'\r', '\n', '\r', '\n'};
