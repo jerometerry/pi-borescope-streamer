@@ -217,9 +217,13 @@ add_executable(mjpeg_frame_extractor
 target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_sources(borescope_core PRIVATE src/classes/v4l2_publisher.cpp)
+    target_sources(borescope_core PRIVATE 
+        src/classes/buffered_v4l2_publisher.cpp
+        src/classes/v4l2_publisher.cpp
+    )
     add_executable(v4l2-borescope-daemon
         src/classes/v4l2.cpp
+        src/classes/buffered_v4l2_publisher.cpp
         src/classes/v4l2_publisher.cpp
         src/apps/v4l2_main.cpp
     )
