@@ -80,10 +80,11 @@ int main(int argc, const char* argv[]) {
             return EXIT_FAILURE;
         }
 
-        std::vector<uint8_t> buffer(UsbConfig::BULK_TRANSFER_SIZE);
+        const size_t transferSize = Units::ONE_KILOBYTE;
+        std::vector<uint8_t> buffer(transferSize);
         char* bufferPtr = reinterpret_cast<char*>(buffer.data());
 
-        while (file.read(bufferPtr, UsbConfig::BULK_TRANSFER_SIZE) || file.gcount() > 0) {
+        while (file.read(bufferPtr, transferSize) || file.gcount() > 0) {
             std::streamsize bytesRead = file.gcount();
             std::cout << "Read page of " << bytesRead << " bytes.\n";
             
