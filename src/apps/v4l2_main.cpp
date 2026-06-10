@@ -19,7 +19,7 @@
 #include "v4l2_publisher.hpp"
 
 namespace {
-    std::atomic<bool> running{true};
+    static std::atomic<bool> running{true};
 }
 
 void signalHandler(int signal) {
@@ -34,7 +34,6 @@ int main(int argc, const char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     V4L2::Config config;
-    
     Arguments::ParseResult result = V4L2::parseArguments(argc, argv, config);
     if (result == Arguments::ParseResult::HelpRequested) {
         return EXIT_SUCCESS;
@@ -80,41 +79,34 @@ int main(int argc, const char* argv[]) {
     driver.start(camera);
 
     V4l2Publisher publisher(config);
-
     std::cout << "[V4L2 Core] Streaming daemon active and routing frames.\n";
 
-    uint32_t lastBroadcastedFrameId = 0;
-
     int64_t next_read = 0;
-    uint32_t currentFrameId = static_cast<uint32_t>(next_read);
+
     while (running.load(std::memory_order_relaxed)) {
         int64_t available = ringBuffer.waitFor(next_read);
 
-        while (next_read <= available) {
-            Frame& slot = ringBuffer.getBySequence(next_read);
+        if (next_read <= available) {
+            while (next_read <= available) {
+                Frame& slot = ringBuffer.getBySequence(next_read);
 
-            if (slot.active_size > 0) {
-                if (currentFrameId != lastBroadcastedFrameId) {
+                if (slot.active_size > 0) [[likely]] {
                     publisher.writeFrame(slot);
-                    lastBroadcastedFrameId = currentFrameId;
-                } else {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 }
+                next_read++;
             }
-
-            next_read++;
+            ringBuffer.markConsumed(next_read - 1);
+        } else {
+            #if defined(__x86_64__) || defined(_M_X64)
+                asm volatile("pause" ::: "memory");
+            #else
+                std::this_thread::yield();
+            #endif
         }
-        ringBuffer.markConsumed(next_read - 1);
     }
-    ringBuffer.markConsumed(next_read - 1);
 
+    std::cout << "[System Cleanup] Stopping hardware threads and flushing driver allocations...\n";
     driver.stop();
-
-    int64_t seq = ringBuffer.claim();
-    Frame& slot = ringBuffer.getBySequence(seq);
-    slot.clear();
-    ringBuffer.publish(seq);
-    
     std::cout << "[System Termination] V4L2 daemon exited cleanly.\n";
     return EXIT_SUCCESS;
 }
