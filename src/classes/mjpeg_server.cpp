@@ -54,12 +54,13 @@ void MjpegServer::onTimer(us_timer_t *t) {
         return;
     }
 
-    uint32_t currentFrameId = 0;
-    int64_t next_read = 0;
-    int64_t available = server->disruptor_->wait_for(next_read);
+    int64_t available = server->disruptor_->wait_for(server->nextReadSequence_);
+    bool processedAny = false;
 
-    while (next_read <= available) {
-        HardcoreVideoFrame& currentFrame = server->disruptor_->get_by_sequence(next_read);
+    while (server->nextReadSequence_ <= available) {
+        HardcoreVideoFrame& currentFrame = server->disruptor_->get_by_sequence(server->nextReadSequence_);
+
+        const uint32_t currentFrameId = static_cast<uint32_t>(server->nextReadSequence_);
 
         if (currentFrame.active_size > 0) {
             for (size_t i = 0; i < server->activeViewers_.size(); ) {
@@ -67,14 +68,15 @@ void MjpegServer::onTimer(us_timer_t *t) {
                 auto* res = viewer.res;
 
                 if (viewer.isClosed) {
-                    server->activeViewers_.erase(server->activeViewers_.begin() + i);
+                    ++i;
                     continue;
                 }
 
                 if (res->getWriteOffset() > WebServerConfig::MAX_OUTGOING_CLIENT_BUFFER_SIZE) {
                     std::cerr << "[Network Core] Evicting lagging viewer on /stream.\n";
                     res->end();
-                    server->activeViewers_.erase(server->activeViewers_.begin() + i);
+                    viewer.isClosed = true;
+                    ++i;
                     continue;
                 }
 
@@ -125,9 +127,17 @@ void MjpegServer::onTimer(us_timer_t *t) {
             }
         }
 
-        next_read++;
+        server->nextReadSequence_++;
+        processedAny = true;
     }
-    server->disruptor_->mark_consumed(next_read - 1);
+
+    if (processedAny) {
+        server->disruptor_->mark_consumed(server->nextReadSequence_ -1);
+    }
+
+    std::erase_if(server->activeViewers_, [](const auto& viewer) {
+        return viewer.isClosed;
+    });
 }
 
 void MjpegServer::start() {

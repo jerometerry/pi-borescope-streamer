@@ -57,6 +57,7 @@ private:
     const int port_;
     const std::atomic<bool>& running_;
     FrameDisruptor* disruptor_;
+    int64_t nextReadSequence_{0};
 
     std::thread networkThread_;
     us_listen_socket_t* listenSocket_{nullptr};
