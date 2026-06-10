@@ -53,58 +53,76 @@ int main(int argc, const char* argv[]) {
         std::atomic<bool> file_feeding_active{true};
         std::atomic<bool> frameFound{false};
 
-        std::jthread extractorConsumer([&ringBuffer, &file_feeding_active, &frameFound, targetFrameIndex](const std::stop_token& st) {
-            int64_t next_read = 0;
-            int64_t valid_image_counter = 0;
+        std::jthread extractorConsumer(
+            [&ringBuffer, &file_feeding_active, &frameFound, targetFrameIndex]
+                    (const std::stop_token& st) {
+
+            int64_t nextRead = 0;
+            int64_t validImageCounter = 0;
 
             while (!st.stop_requested()) {
                 int64_t available = ringBuffer.getHighestPublished();
 
-                if (next_read <= available) {
-                    while (next_read <= available) {
-                        Frame& slot = ringBuffer.getBySequence(next_read);
-
-                        if (next_read == targetFrameIndex || (slot.active_size > 0 && valid_image_counter == targetFrameIndex)) {
-                            
-                            if (slot.active_size > 0) {
-                                std::string outFilename = std::format("extracted_frame_{}.jpg", targetFrameIndex);
-                                std::ofstream outImage(outFilename, std::ios::out | std::ios::binary);
-                                outImage.write(reinterpret_cast<const char*>(slot.getContentSlice().data()), slot.active_size);
-                                
-                                std::println(std::cout, "[Success] Extracted target frame {} from pipeline sequence position {} ({} bytes)", 
-                                             targetFrameIndex, next_read, slot.active_size);
-                                frameFound.store(true, std::memory_order_release);
-                            } else {
-                                std::println(std::cerr, "[EMI Warning] Target sequence slot {} was processed but dropped by the MjpegStream filter due to corruption.", 
-                                             targetFrameIndex);
-                            }
-                            
-                            file_feeding_active.store(false, std::memory_order_release);
-                            return;
-                        }
+                if (nextRead <= available) {
+                    while (nextRead <= available) {
+                        Frame& slot = ringBuffer.getBySequence(nextRead);
 
                         if (slot.active_size > 0) {
-                            valid_image_counter++;
+                            validImageCounter++;
+
+                            if (validImageCounter == targetFrameIndex) {
+                                std::string outFilename = std::format(
+                                    "extracted_frame_{}.jpg", 
+                                    targetFrameIndex
+                                );
+
+                                std::ofstream outImage(outFilename, std::ios::out | std::ios::binary);
+                                outImage.write(
+                                    reinterpret_cast<const char*>(slot.getContentSlice().data()),
+                                    slot.active_size
+                                );
+                                
+                                std::println(
+                                    std::cout, 
+                                    "[Success] Extracted valid frame #{} from pipeline slot {} ({} bytes)", 
+                                    targetFrameIndex,
+                                    nextRead,
+                                    slot.active_size
+                                );
+                                
+                                frameFound.store(true, std::memory_order_release);
+                                file_feeding_active.store(false, std::memory_order_release);
+                                return;
+                            }
                         }
-                        next_read++;
+                        nextRead++;
                     }
-                    ringBuffer.markConsumed(next_read - 1);
+                    ringBuffer.markConsumed(nextRead - 1);
                 } else {
+                    if (!file_feeding_active.load(std::memory_order_acquire)) {
+                        break;
+                    }
                     disruptor::yieldCurrentThread();
                 }
             }
         });
 
-
         std::println(std::cout, "[Feeder] Commencing high-speed injection from dump file...");
+
         std::vector<uint8_t> virtualTransferBuffer(UsbConfig::BULK_TRANSFER_SIZE);
 
         while (inFile && file_feeding_active.load(std::memory_order_relaxed)) {
-            inFile.read(reinterpret_cast<char*>(virtualTransferBuffer.data()), UsbConfig::BULK_TRANSFER_SIZE);
+            inFile.read(
+                reinterpret_cast<char*>(virtualTransferBuffer.data()), 
+                UsbConfig::BULK_TRANSFER_SIZE
+            );
             std::streamsize bytesRead = inFile.gcount();
 
             if (bytesRead > 0) {
-                std::span<const uint8_t> payload(virtualTransferBuffer.data(), static_cast<size_t>(bytesRead));
+                std::span<const uint8_t> payload(
+                    virtualTransferBuffer.data(),
+                    static_cast<size_t>(bytesRead)
+                );
                 streamDecoder.send(payload); 
             }
         }
@@ -114,12 +132,16 @@ int main(int argc, const char* argv[]) {
         extractorConsumer.join();
 
         if (!frameFound.load(std::memory_order_acquire)) {
-            std::println(std::cerr, "[Finished] File processed completely. Highest valid stream index found was: {}.", ringBuffer.getHighestPublished());
+            int64_t total_slots = ringBuffer.getHighestPublished() + 1;
+            std::println(std::cerr, "\n[Finished] File processed completely.");
+            std::println(std::cerr, "  -> Total Pipeline Slots Parsed : {}", total_slots);
+            std::println(std::cerr, "  -> Valid JPEG Images Found     : {}", targetFrameIndex); 
+            std::println(std::cerr, "  -> Corrupt Frames Dropped (EMI): {}", total_slots - targetFrameIndex);
+            std::println(std::cerr, "  -> Error                       : Index {} is out of bounds for this file.", targetFrameIndex);
             return EXIT_FAILURE;
         }
 
         return EXIT_SUCCESS;
-
     } catch (const std::exception& e) {
         std::cerr << "[Fatal Error] Terminated via unhandled exception: " << e.what() << "\n";
         return EXIT_FAILURE;

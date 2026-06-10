@@ -5,9 +5,9 @@
 #include <iostream>
 #include <span>
 #include <string>
-#include <thread>
 #include <vector>
 #include "constants.hpp"
+#include "disruptor.hpp"
 #include "frame.hpp"
 #include "frame_disruptor.hpp"
 #include "mjpeg_stream.hpp"
