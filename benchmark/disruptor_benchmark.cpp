@@ -1,7 +1,5 @@
 #include <benchmark/benchmark.h>
-#include <atomic>
 #include <cstdint>
-#include <vector>
 #include <thread>
 #include "disruptor.hpp"
 
@@ -12,18 +10,19 @@ struct Event {
 static void BM_Disruptor_BatchThroughput(benchmark::State& state) {
     const int64_t items_to_process = state.range(0);
     disruptor::Disruptor<Event, 65536> pipeline;
-    std::atomic<bool> running{true};
 
-    std::jthread consumer([&pipeline, &running]() {
+    std::jthread consumer([&pipeline]() {
         int64_t next_read = 0;
-        while (running.load(std::memory_order_relaxed)) {
+        while (true) {
             int64_t available = pipeline.waitFor(next_read);
 
             while (next_read <= available) {
                 const Event& event = pipeline.getBySequence(next_read);
-                benchmark::DoNotOptimize(&event);
+                
+                benchmark::DoNotOptimize(event.id);
 
                 if (event.id == -1) {
+                    pipeline.markConsumed(next_read); 
                     return; 
                 }
                 next_read++;
@@ -41,8 +40,6 @@ static void BM_Disruptor_BatchThroughput(benchmark::State& state) {
         }
     }
 
-    running.store(false, std::memory_order_relaxed);
-
     int64_t seq = pipeline.claim();
     pipeline.getBySequence(seq).id = -1; // The Poison Pill
     pipeline.publish(seq);
@@ -51,10 +48,8 @@ static void BM_Disruptor_BatchThroughput(benchmark::State& state) {
 }
 
 BENCHMARK(BM_Disruptor_BatchThroughput)
-    ->Args({100})
-    ->Args({1000})
-    ->Args({5000})
-    ->Args({10000})
+    ->RangeMultiplier(10)
+    ->Range(100, 10000)
     ->Unit(benchmark::kMillisecond)
     ->UseRealTime();
 

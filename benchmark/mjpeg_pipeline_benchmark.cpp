@@ -43,26 +43,16 @@ static std::vector<uint8_t> readBinaryFile(const std::string& fileName) {
     return buffer;
 }
 
-static std::vector<std::span<const uint8_t>> splitPages(
-    const std::vector<uint8_t>& data) {
-
+static std::vector<std::span<const uint8_t>> splitPages(const std::vector<uint8_t>& data) {
     std::vector<std::span<const uint8_t>> packets;
     size_t chunkSize = Units::FOUR_KILOBYTES;
-
     auto reservationSize = (data.size() + chunkSize - 1) / chunkSize;
     packets.reserve(reservationSize);
 
     for (size_t i = 0; i < data.size(); i += chunkSize) {
-        auto endIndex = std::min(
-            i + chunkSize, 
-            data.size()
-        );
-        packets.emplace_back(
-            data.begin() + i, 
-            data.begin() + endIndex
-        );
+        auto endIndex = std::min(i + chunkSize, data.size());
+        packets.emplace_back(data.begin() + i, data.begin() + endIndex);
     }
-
     return packets;
 }
 
@@ -80,8 +70,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
     std::jthread consumer([&ringBuffer, &producer_running]() {
         int64_t next_read = 0;
 
-        while (producer_running.load(std::memory_order_relaxed)) {
-
+        while (producer_running.load(std::memory_order_acquire)) {
             int64_t available = ringBuffer.waitFor(next_read);
 
             while (next_read <= available) {
@@ -89,14 +78,13 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);
-                    benchmark::DoNotOptimize(slot);
+                    benchmark::DoNotOptimize(slot.contentSize());
+                    benchmark::ClobberMemory();
                 }
-
                 next_read++;
             }
             ringBuffer.markConsumed(next_read - 1);
         }
-        ringBuffer.markConsumed(next_read - 1);
     });
 
     MjpegStream stream(ringBuffer);
@@ -110,8 +98,12 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
 
     producer_running.store(false, std::memory_order_release);
 
+    int64_t seq = ringBuffer.claim();
+    ringBuffer.getBySequence(seq).clear(); 
+    ringBuffer.publish(seq);
+
     state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * data.size() / (pages.size())); 
+    state.SetBytesProcessed(state.iterations() * data.size() / pages.size()); 
 }
 
 static void BM_Pipeline_DiskBound(benchmark::State& state) {
@@ -127,9 +119,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
 
     std::jthread consumer([&ringBuffer, &producer_running]() {
         int64_t next_read = 0;
-
-        while (producer_running.load(std::memory_order_relaxed)) {
-
+        while (producer_running.load(std::memory_order_acquire)) {
             int64_t available = ringBuffer.waitFor(next_read);
 
             while (next_read <= available) {
@@ -137,9 +127,9 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);
-                    benchmark::DoNotOptimize(slot);
+                    benchmark::DoNotOptimize(slot.contentSize());
+                    benchmark::ClobberMemory();
                 }
-
                 next_read++;
             }
             ringBuffer.markConsumed(next_read - 1);
@@ -147,21 +137,27 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
     });
 
     MjpegStream stream(ringBuffer);
-
     std::vector<uint8_t> chunk(4096);
+    
     for (auto _ : state) {
-        file.read(reinterpret_cast<char*>(chunk.data()), 4096);
+        file.read(reinterpret_cast<char*>(chunk.data()), chunk.size());
+        std::streamsize bytes_read = file.gcount();
+
+        if (bytes_read > 0) {
+            stream.send(std::span<const uint8_t>(chunk.data(), bytes_read));
+        }
 
         if (file.eof()) {
             file.clear();
             file.seekg(0, std::ios::beg);
-            file.read(reinterpret_cast<char*>(chunk.data()), 4096);
         }
-
-        stream.send(std::span<const uint8_t>(chunk.data(), file.gcount()));
     }
 
-    producer_running = false;
+    producer_running.store(false, std::memory_order_release);
+    int64_t seq = ringBuffer.claim();
+    ringBuffer.getBySequence(seq).clear();
+    ringBuffer.publish(seq);
+
     state.SetBytesProcessed(state.iterations() * 4096);
 }
 
@@ -169,15 +165,13 @@ BENCHMARK(BM_Pipeline_Throughput)
     ->Unit(benchmark::kMillisecond)
     ->Threads(1)
     ->Threads(4)
-    ->Threads(10)
-    ->Unit(benchmark::kMillisecond);
+    ->Threads(10);
 
 BENCHMARK(BM_Pipeline_DiskBound)
     ->Unit(benchmark::kMillisecond)
     ->Threads(1)
     ->Threads(4)
-    ->Threads(10)
-    ->Unit(benchmark::kMillisecond);
+    ->Threads(10);
 
 int main(int argc, char* argv[]) {
     try {

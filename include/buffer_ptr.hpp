@@ -18,6 +18,6 @@
  */
 using BufferPtr = IntrusivePtr<Buffer>;
 
-inline constexpr int64_t FRAME_DISRUPTOR_CAPACITY = 64;
+inline constexpr int64_t FRAME_DISRUPTOR_CAPACITY = 128;
 
 using FrameDisruptor = disruptor::Disruptor<HardcoreVideoFrame, FRAME_DISRUPTOR_CAPACITY>;
