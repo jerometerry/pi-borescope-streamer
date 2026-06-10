@@ -7,40 +7,36 @@
 #include "disruptor.hpp"
 
 struct alignas(disruptor::cache_line_size) Event {
-    int64_t id;
+    int64_t id{0};
 };
 
-// Sustained Stream Throughput Benchmark
+template <typename WaitStrategy>
 static void BM_Disruptor_SustainedStream(benchmark::State& state) {
     constexpr size_t BufferSize = 65536;
-    disruptor::Disruptor<Event, BufferSize> pipeline;
+    disruptor::Disruptor<Event, BufferSize, WaitStrategy> pipeline;
 
-    std::atomic<bool> running{true};
-    std::atomic<int64_t> total_processed{0};
-
-    // Spin up a long-lived consumer thread for the duration of this state run
-    std::jthread consumer([&pipeline, &running, &total_processed]() {
+    std::jthread consumer([&pipeline]() {
         int64_t next_read = 0;
-        while (running || pipeline.getHighestPublished() >= next_read) {
-            // High frequency polling checks
-            int64_t available = pipeline.getHighestPublished();
-            
-            if (next_read <= available) {
-                // Batch drain optimization loop
-                while (next_read <= available) {
-                    Event& event = pipeline.getBySequence(next_read);
-                    benchmark::DoNotOptimize(event.id);
-                    next_read++;
-                    total_processed.fetch_add(1, std::memory_order_relaxed);
+        bool keep_running = true;
+
+        while (keep_running) {
+            int64_t available = pipeline.waitFor(next_read);
+
+            while (next_read <= available) {
+                Event& event = pipeline.getBySequence(next_read);
+
+                if (event.id == -1) {
+                    keep_running = false;
+                    break;
                 }
-                pipeline.markConsumed(next_read - 1);
-            } else {
-                disruptor::yieldCurrentThread();
+
+                benchmark::DoNotOptimize(event.id);
+                next_read++;
             }
+            pipeline.markConsumed(next_read - 1);
         }
     });
 
-    // Main Test execution loop
     int64_t current_seq = 0;
     for (auto _ : state) {
         int64_t seq = pipeline.claim();
@@ -49,44 +45,41 @@ static void BM_Disruptor_SustainedStream(benchmark::State& state) {
         pipeline.publish(seq);
     }
 
-    // Clean up termination signal safely
-    running = false;
-    
-    // Set explicit metrics tracking item throughput per second
+    int64_t shutdown_seq = pipeline.claim();
+    pipeline.getBySequence(shutdown_seq).id = -1;
+    pipeline.publish(shutdown_seq);
+
     state.SetItemsProcessed(state.iterations());
 }
 
-// 1. High-contention sustained stream
-BENCHMARK(BM_Disruptor_SustainedStream)
-    ->Unit(benchmark::kMicrosecond)
-    ->UseRealTime();
-
-
-// 2. Heavy Contention / Backpressure Benchmark
-// Exposes if the claim loop blocks or burns CPU cycles inefficiently
+template <typename WaitStrategy>
 static void BM_Disruptor_BackpressureBursts(benchmark::State& state) {
-    constexpr size_t BufferSize = 1024; // Small buffer forces extreme wrapping/polling conditions
-    disruptor::Disruptor<Event, BufferSize> pipeline;
+    constexpr size_t BufferSize = 1024;
+    disruptor::Disruptor<Event, BufferSize, WaitStrategy> pipeline;
     
     const int64_t burst_size = state.range(0);
-    std::atomic<bool> stop_consumer{false};
 
-    std::jthread consumer([&pipeline, &stop_consumer, burst_size]() {
+    std::jthread consumer([&pipeline, burst_size]() {
         int64_t next_read = 0;
-        while (!stop_consumer.load(std::memory_order_relaxed)) {
-            int64_t available = pipeline.getHighestPublished();
-            if (next_read <= available) {
-                // Artificially delay consumer slightly to force producer to experience wrap bounds
-                if (next_read % burst_size == 0) {
-                    std::this_thread::sleep_for(std::chrono::nanoseconds(50));
-                }
-                while (next_read <= available) {
-                    Event& event = pipeline.getBySequence(next_read);
-                    benchmark::DoNotOptimize(event.id);
-                    next_read++;
-                }
-                pipeline.markConsumed(next_read - 1);
+        bool keep_running = true;
+
+        while (keep_running) {
+            int64_t available = pipeline.waitFor(next_read);
+
+            if (next_read % burst_size == 0) {
+                std::this_thread::sleep_for(std::chrono::nanoseconds(50));
             }
+
+            while (next_read <= available) {
+                Event& event = pipeline.getBySequence(next_read);
+                if (event.id == -1) {
+                    keep_running = false;
+                    break;
+                }
+                benchmark::DoNotOptimize(event.id);
+                next_read++;
+            }
+            pipeline.markConsumed(next_read - 1);
         }
     });
 
@@ -98,11 +91,32 @@ static void BM_Disruptor_BackpressureBursts(benchmark::State& state) {
         }
     }
 
-    stop_consumer = true;
+    int64_t shutdown_seq = pipeline.claim();
+    pipeline.getBySequence(shutdown_seq).id = -1;
+    pipeline.publish(shutdown_seq);
+
     state.SetItemsProcessed(state.iterations() * burst_size);
 }
 
-BENCHMARK(BM_Disruptor_BackpressureBursts)
+BENCHMARK(BM_Disruptor_SustainedStream<disruptor::YieldingWaitStrategy>)
+    ->Name("BM_Disruptor_SustainedStream/Yielding")
+    ->Unit(benchmark::kMicrosecond)
+    ->UseRealTime();
+
+BENCHMARK(BM_Disruptor_SustainedStream<disruptor::BlockingWaitStrategy>)
+    ->Name("BM_Disruptor_SustainedStream/Blocking")
+    ->Unit(benchmark::kMicrosecond)
+    ->UseRealTime();
+
+BENCHMARK(BM_Disruptor_BackpressureBursts<disruptor::YieldingWaitStrategy>)
+    ->Name("BM_Disruptor_BackpressureBursts/Yielding")
+    ->Arg(500)
+    ->Arg(5000)
+    ->Unit(benchmark::kMillisecond)
+    ->UseRealTime();
+
+BENCHMARK(BM_Disruptor_BackpressureBursts<disruptor::BlockingWaitStrategy>)
+    ->Name("BM_Disruptor_BackpressureBursts/Blocking")
     ->Arg(500)
     ->Arg(5000)
     ->Unit(benchmark::kMillisecond)

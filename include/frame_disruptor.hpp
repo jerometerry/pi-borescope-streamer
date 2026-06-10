@@ -4,4 +4,8 @@
 
 inline constexpr int64_t FRAME_DISRUPTOR_CAPACITY = 128;
 
-using FrameDisruptor = disruptor::Disruptor<Frame, FRAME_DISRUPTOR_CAPACITY>;
+using FrameDisruptor = disruptor::Disruptor<
+    Frame, 
+    FRAME_DISRUPTOR_CAPACITY, 
+    disruptor::BlockingWaitStrategy
+>;

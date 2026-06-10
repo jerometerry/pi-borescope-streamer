@@ -1,9 +1,7 @@
 #pragma once
 
-#if defined(__x86_64__) || defined (_M_X64)
-#if defined(_MSC_VER)
+#if defined(__x86_64__) || defined(_M_X64)
 #include <immintrin.h>
-#endif
 #endif
 
 #include <atomic>
@@ -19,11 +17,7 @@ namespace disruptor {
 
 inline static void yieldCurrentThread() {
 #if defined(__x86_64__) || defined (_M_X64)
-    #if defined(_MSC_VER)
-        _mm_pause();
-    #else
-        asm volatile("pause" ::: "memory");
-    #endif
+    _mm_pause();
 #elif defined(__aarch64__) || defined(_M_ARM64)
     asm volatile("yield" ::: "memory");
 #else
@@ -40,29 +34,53 @@ inline static void yieldCurrentThread() {
     struct alignas(cache_line_size) Sequence {
         std::atomic<int64_t> value{-1};
 
-        [[nodiscard]] int64_t waitUntilGreaterOrEqual(int64_t target) const noexcept {
-            int64_t current = value.load(std::memory_order_acquire);
-            
-            // Hybrid Spin-Wait Strategy: Low-latency spinning first
-            uint32_t spinCount = 0;
-            while (current < target && spinCount < 2000) {
-                
-                current = value.load(std::memory_order_relaxed);
-                spinCount++;
-            }
+        [[nodiscard]] int64_t get() const noexcept {
+            return value.load(std::memory_order_acquire);
+        }
 
-            // Fallback to OS-assisted sleep if the producer/consumer is heavily delayed
-            current = value.load(std::memory_order_acquire);
-            while (current < target) {
-                value.wait(current, std::memory_order_acquire);
-                current = value.load(std::memory_order_acquire);
+        void set(int64_t newValue) noexcept {
+            value.store(newValue, std::memory_order_release);
+        }
+    };
+
+    template <typename T>
+    concept IsWaitStrategy = requires(T t, Sequence& sequence, int64_t target) {
+        { t.waitFor(sequence, target) } -> std::same_as<int64_t>;
+        { t.signalAllWhenBlocking(sequence) } -> std::same_as<void>;
+    };
+
+    class YieldingWaitStrategy {
+    public:
+        [[nodiscard]] int64_t waitFor(const Sequence& sequence, int64_t target) const noexcept {
+            int64_t current{0};
+            uint32_t counter = 2000;
+            
+            while ((current = sequence.get()) < target) {
+                if (counter == 0) {
+                    yieldCurrentThread();
+                } else {
+                    --counter;
+                }
             }
             return current;
         }
 
-        void publish(int64_t newValue) noexcept {
-            value.store(newValue, std::memory_order_release);
-            value.notify_all(); // Wakes up OS thread if it fell asleep
+        void signalAllWhenBlocking(Sequence& /*sequence*/) const noexcept {} 
+    };
+
+    class BlockingWaitStrategy {
+    public:
+        [[nodiscard]] int64_t waitFor(const Sequence& sequence, int64_t target) const noexcept {
+            int64_t current = sequence.get();
+            while (current < target) {
+                sequence.value.wait(current, std::memory_order_acquire);
+                current = sequence.get();
+            }
+            return current;
+        }
+
+        void signalAllWhenBlocking(Sequence& sequence) const noexcept {
+            sequence.value.notify_all();
         }
     };
 
@@ -83,51 +101,56 @@ inline static void yieldCurrentThread() {
         }
     };
 
-    template <typename T, size_t Capacity>
+    template <typename T, size_t Capacity, IsWaitStrategy StrategyType = YieldingWaitStrategy>
     class Disruptor {
     private:
         alignas(cache_line_size) RingBuffer<T, Capacity> buffer_;
         alignas(cache_line_size) Sequence publishedSequence_;
         alignas(cache_line_size) Sequence consumerSequence_;
 
-        alignas(cache_line_size) int64_t producerSequence_{-1};
-        alignas(cache_line_size) int64_t cachedConsumerSequence_{-1};
+        struct alignas(cache_line_size) ProducerState {
+            int64_t sequence{-1};
+            int64_t cachedConsumerSequence_{-1};
+        };
+        ProducerState producer_;
+        
+        [[no_unique_address]] StrategyType waitStrategy_;
 
     public:
         void preAllocate(const int64_t slotSize) {
             for (size_t i = 0; i < Capacity; i++) {
-                auto slot = getBySequence(i);
+                T& slot = getBySequence(i);
                 slot.preAllocate(slotSize);
             }
         }
 
         [[nodiscard]] int64_t claim() noexcept {
-            int64_t nextSequence = producerSequence_ + 1;
+            int64_t nextSequence = producer_.sequence + 1;
             int64_t wrapPoint = nextSequence - buffer_.capacity();
 
-            if (cachedConsumerSequence_ < wrapPoint) {
-                while ((cachedConsumerSequence_ = consumerSequence_.value.load(std::memory_order_acquire)) < wrapPoint) {
+            if (producer_.cachedConsumerSequence_ < wrapPoint) {
+                while ((producer_.cachedConsumerSequence_ = consumerSequence_.get()) < wrapPoint) {
                     yieldCurrentThread();
                 }
             }
 
-            producerSequence_ = nextSequence;
+            producer_.sequence = nextSequence;
             return nextSequence;
         }
 
         [[nodiscard]] std::optional<int64_t> tryClaim() noexcept {
-            int64_t nextSequence = producerSequence_ + 1;
+            int64_t nextSequence = producer_.sequence + 1;
             int64_t wrapPoint = nextSequence - buffer_.capacity();
 
-            if (cachedConsumerSequence_ < wrapPoint) {
-                cachedConsumerSequence_ = consumerSequence_.value.load(std::memory_order_relaxed);
+            if (producer_.cachedConsumerSequence_ < wrapPoint) {
+                producer_.cachedConsumerSequence_ = consumerSequence_.get();
 
-                if (cachedConsumerSequence_ < wrapPoint) {
+                if (producer_.cachedConsumerSequence_ < wrapPoint) {
                     return std::nullopt;
                 }
             }
 
-            producerSequence_ = nextSequence;
+            producer_.sequence = nextSequence;
             return nextSequence;
         }
 
@@ -136,19 +159,20 @@ inline static void yieldCurrentThread() {
         }
 
         void publish(int64_t sequence) noexcept {
-            publishedSequence_.publish(sequence);
+            publishedSequence_.set(sequence);
+            waitStrategy_.signalAllWhenBlocking(publishedSequence_);
         }
 
-        [[nodiscard]] int64_t waitFor(int64_t nextSequence) const noexcept {
-            return publishedSequence_.waitUntilGreaterOrEqual(nextSequence);
+        [[nodiscard]] int64_t waitFor(int64_t nextSequence) noexcept {
+            return waitStrategy_.waitFor(publishedSequence_, nextSequence);
         }
 
         void markConsumed(int64_t sequence) noexcept {
-            consumerSequence_.value.store(sequence, std::memory_order_release);
+            consumerSequence_.set(sequence);
         }
 
         [[nodiscard]] int64_t getHighestPublished() const noexcept {
-            return publishedSequence_.value.load(std::memory_order_acquire);
+            return publishedSequence_.get();
         }
     };
 }
