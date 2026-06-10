@@ -17,6 +17,20 @@
 
 namespace disruptor {
 
+inline static void yieldCurrentThread() {
+#if defined(__x86_64__) || defined (_M_X64)
+    #if defined(_MSC_VER)
+        _mm_pause();
+    #else
+        asm volatile("pause" ::: "memory");
+    #endif
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    asm volatile("yield" ::: "memory");
+#else
+    std::this_thread::yield();
+#endif
+}
+
 #if defined(__cpp_lib_hardware_interference_size) && !defined(__arm__) && !defined(__aarch64__)
     inline constexpr size_t cache_line_size = std::hardware_destructive_interference_size;
 #else
@@ -32,17 +46,7 @@ namespace disruptor {
             // Hybrid Spin-Wait Strategy: Low-latency spinning first
             uint32_t spinCount = 0;
             while (current < target && spinCount < 2000) {
-                #if defined(__x86_64__) || defined (_M_X64)
-                    #if defined(_MSC_VER)
-                        _mm_pause();
-                    #else
-                        asm volatile("pause" ::: "memory");
-                    #endif
-                #elif defined(__aarch64__) || defined(_M_ARM64)
-                    asm volatile("yield" ::: "memory");
-                #else
-                    std::this_thread::yield();
-                #endif
+                
                 current = value.load(std::memory_order_relaxed);
                 spinCount++;
             }
@@ -103,15 +107,7 @@ namespace disruptor {
 
             if (cachedConsumerSequence_ < wrapPoint) {
                 while ((cachedConsumerSequence_ = consumerSequence_.value.load(std::memory_order_acquire)) < wrapPoint) {
-                    #if defined(__x86_64__) || defined (_M_X64)
-                        #if defined(_MSC_VER)
-                            _mm_pause();
-                        #else
-                            asm volatile("pause" ::: "memory");
-                        #endif
-                    #else
-                        std::this_thread::yield(); 
-                    #endif
+                    yieldCurrentThread();
                 }
             }
 

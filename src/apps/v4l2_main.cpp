@@ -96,11 +96,7 @@ int main(int argc, const char* argv[]) {
             }
             ringBuffer.markConsumed(next_read - 1);
         } else {
-            #if defined(__x86_64__) || defined(_M_X64)
-                asm volatile("pause" ::: "memory");
-            #else
-                std::this_thread::yield();
-            #endif
+            disruptor::yieldCurrentThread();
         }
     }
 

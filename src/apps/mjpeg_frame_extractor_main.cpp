@@ -16,6 +16,7 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
+#include "disruptor.hpp"
 #include "frame.hpp"
 #include "frame_disruptor.hpp"
 #include "mjpeg_stream.hpp"
@@ -54,6 +55,7 @@ int main(int argc, const char* argv[]) {
 
         std::jthread extractorConsumer([&ringBuffer, &file_feeding_active, &frameFound, targetFrameIndex](const std::stop_token& st) {
             int64_t next_read = 0;
+            int64_t valid_image_counter = 0;
 
             while (!st.stop_requested()) {
                 int64_t available = ringBuffer.getHighestPublished();
@@ -62,33 +64,37 @@ int main(int argc, const char* argv[]) {
                     while (next_read <= available) {
                         Frame& slot = ringBuffer.getBySequence(next_read);
 
-                        if (next_read == targetFrameIndex) {
+                        if (next_read == targetFrameIndex || (slot.active_size > 0 && valid_image_counter == targetFrameIndex)) {
+                            
                             if (slot.active_size > 0) {
                                 std::string outFilename = std::format("extracted_frame_{}.jpg", targetFrameIndex);
                                 std::ofstream outImage(outFilename, std::ios::out | std::ios::binary);
                                 outImage.write(reinterpret_cast<const char*>(slot.getContentSlice().data()), slot.active_size);
                                 
-                                std::println(std::cout, "[Success] Extracted target frame {} ({} bytes)", targetFrameIndex, slot.active_size);
+                                std::println(std::cout, "[Success] Extracted target frame {} from pipeline sequence position {} ({} bytes)", 
+                                             targetFrameIndex, next_read, slot.active_size);
                                 frameFound.store(true, std::memory_order_release);
-                                return;
+                            } else {
+                                std::println(std::cerr, "[EMI Warning] Target sequence slot {} was processed but dropped by the MjpegStream filter due to corruption.", 
+                                             targetFrameIndex);
                             }
+                            
+                            file_feeding_active.store(false, std::memory_order_release);
+                            return;
+                        }
+
+                        if (slot.active_size > 0) {
+                            valid_image_counter++;
                         }
                         next_read++;
                     }
                     ringBuffer.markConsumed(next_read - 1);
                 } else {
-                    if (!file_feeding_active.load(std::memory_order_acquire)) {
-                        break;
-                    }
-
-                    #if defined(__x86_64__) || defined(_M_X64)
-                        asm volatile("pause" ::: "memory");
-                    #else
-                        std::this_thread::yield();
-                    #endif
+                    disruptor::yieldCurrentThread();
                 }
             }
         });
+
 
         std::println(std::cout, "[Feeder] Commencing high-speed injection from dump file...");
         std::vector<uint8_t> virtualTransferBuffer(UsbConfig::BULK_TRANSFER_SIZE);

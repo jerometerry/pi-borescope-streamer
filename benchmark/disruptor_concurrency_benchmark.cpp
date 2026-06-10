@@ -35,16 +35,7 @@ static void BM_Disruptor_SustainedStream(benchmark::State& state) {
                 }
                 pipeline.markConsumed(next_read - 1);
             } else {
-                // Mimic natural ultra-low latency spin backoff
-                #if defined(__x86_64__) || defined(_M_X64)
-                    #if defined(_MSC_VER)
-                        _mm_pause();
-                    #else
-                        asm volatile("pause" ::: "memory");
-                    #endif
-                #else
-                    std::this_thread::yield();
-                #endif
+                disruptor::yieldCurrentThread();
             }
         }
     });
