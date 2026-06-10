@@ -4,23 +4,21 @@
  * @details Reuses production decoding pipelines by mocking USB hardware streaming.
  */
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <fstream>
 #include <iostream>
-#include <string>
-#include <vector>
 #include <span>
-#include <format>
-#include <print>
+#include <stop_token>
+#include <string>
 #include <thread>
-#include <atomic>
+#include <vector>
 #include "constants.hpp"
 #include "frame.hpp"
 #include "frame_disruptor.hpp"
 #include "mjpeg_stream.hpp"
-#include "usb_driver.hpp"
 
 int main(int argc, const char* argv[]) {
     std::cout << std::unitbuf;
