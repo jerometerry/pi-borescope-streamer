@@ -1,5 +1,5 @@
 /**
- * @file binary_stream_capture.cpp
+ * @file mjpeg_stream_capture.cpp
  * @brief A hardcore debugging tool that rips raw data straight off the USB cable to a file.
  * @details This tool completely bypasses the video decoder and network server. It connects 
  * to the camera, wakes it up, and blindly dumps every single byte of data coming across 

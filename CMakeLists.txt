@@ -171,6 +171,7 @@ add_library(borescope_core STATIC
     src/classes/mjpeg_frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp
     src/classes/mjpeg_stream.cpp
+    src/classes/mjpeg_stream_capture.cpp
     src/classes/usb_camera.cpp 
     src/classes/usb_context.cpp
     src/classes/usb_device_finder.cpp
@@ -200,6 +201,11 @@ add_executable(mjpeg_server
 )
 target_link_libraries(mjpeg_server PRIVATE Borescope::Core project_warnings)
 
+add_executable(buffered_mjpeg_server
+    src/apps/buffered_mjpeg_server_main.cpp
+)
+target_link_libraries(buffered_mjpeg_server PRIVATE Borescope::Core project_warnings)
+
 add_executable(attached_usb_devices
     src/apps/attached_usb_devices.cpp
 )
@@ -209,6 +215,11 @@ add_executable(mjpeg_stream_capture
     src/apps/mjpeg_stream_capture_main.cpp
 )
 target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
+
+add_executable(buffered_mjpeg_stream_capture
+    src/apps/buffered_mjpeg_stream_capture_main.cpp
+)
+target_link_libraries(buffered_mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
 
 add_executable(mjpeg_frame_extractor
     src/classes/mjpeg_frame_extractor.cpp
@@ -228,6 +239,23 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         src/apps/v4l2_main.cpp
     )
     target_link_libraries(v4l2-borescope-daemon
+        PRIVATE 
+            borescope_core
+            project_warnings
+            ${LIBUSB_LIBRARIES}
+    )
+
+    target_sources(borescope_core PRIVATE 
+        src/classes/buffered_v4l2_publisher.cpp
+        src/classes/v4l2_publisher.cpp
+    )
+    add_executable(buffered-v4l2-borescope-daemon
+        src/classes/v4l2.cpp
+        src/classes/buffered_v4l2_publisher.cpp
+        src/classes/v4l2_publisher.cpp
+        src/apps/buffered_v4l2_main.cpp
+    )
+    target_link_libraries(buffered-v4l2-borescope-daemon
         PRIVATE 
             borescope_core
             project_warnings
