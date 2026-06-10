@@ -35,7 +35,7 @@ namespace disruptor {
                     #if defined(_MSC_VER)
                         _mm_pause();
                     #else
-                        asm volatile("pause" ::: ""memory");
+                        asm volatile("pause" ::: "memory");
                     #endif
                 #elif defined(__aarch64__) || defined(_M_ARM64)
                     asm volatile("yield" ::: "memory");
