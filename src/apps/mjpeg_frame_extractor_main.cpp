@@ -14,8 +14,6 @@
 #include <span>
 #include <string>
 #include <vector>
-#include <format>
-#include <print>
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
@@ -41,55 +39,63 @@ int main(int argc, const char* argv[]) {
             return EXIT_FAILURE;
         }
 
-        std::ifstream inFile(inputPath, std::ios::binary);
-        if (!inFile) {
-            std::println(std::cerr, "[Error] Failed to open input file: {}", inputPath);
-            return EXIT_FAILURE;
-        }
-
         auto pool = BufferPool::create();
 
+        int64_t totalFrames = 0;
         int64_t validFrames = 0;
         bool frameFound = false;
 
-        auto onFrameReady = [&validFrames, targetFrameNumber, &frameFound](const BufferPtr& ptr) {
-            if (ptr && ptr->contentSize() > 0) {
-                if (++validFrames == targetFrameNumber) {
-                    std::string filename = std::format("frame_{:04d}.jpg", validFrames);
-                    std::ofstream image(filename, std::ios::out | std::ios::binary);
+        auto onFrameReady = [
+            &validFrames, 
+            &totalFrames,
+            targetFrameNumber, 
+            &frameFound
+        ](const BufferPtr& ptr) {
+            totalFrames++;
+            std::cout << "Current Frame: " << totalFrames << "\n";
 
-                    image.write(
-                        reinterpret_cast<const char*>(ptr->getContentSlice().data()), 
-                        ptr->contentSize()
-                    );
-                    
-                    std::println(std::cout, "[Success] Extracted target frame #{} ({} bytes)", 
-                                 targetFrameNumber, ptr->contentSize());
-                    frameFound = true;
-                }
+            if (totalFrames == targetFrameNumber) {
+                std::cout << "Target Frame Found " << targetFrameNumber << "\n";
+
+                std::string filename = std::format("frame_{:04d}.jpg", validFrames);
+                std::ofstream image(filename, std::ios::out | std::ios::binary);
+
+                image.write(
+                    reinterpret_cast<const char*>(ptr->getContentSlice().data()), 
+                    ptr->contentSize()
+                );
+                
+                std::cout << "[Success] Extracted target frame # " << totalFrames 
+                          << " bytes " << ptr->contentSize() << "\n";
+                                
+                frameFound = true;
+            } else {
+                std::cout << "Target Frame Not Found " << targetFrameNumber << "\n";
             }
         };
         
         BufferedMjpegStream stream(pool, onFrameReady);
+        std::ifstream file(inputPath, std::ios::binary);
+        if (!file.is_open()) {
+            std::cerr << "Error opening file!" << std::endl;
+            return EXIT_FAILURE;
+        }
 
-        std::println(std::cout, "[Feeder] Commencing high-speed injection from dump file...");
-        std::vector<uint8_t> virtualTransferBuffer(UsbConfig::BULK_TRANSFER_SIZE);
+        std::vector<uint8_t> buffer(UsbConfig::BULK_TRANSFER_SIZE);
+        char* bufferPtr = reinterpret_cast<char*>(buffer.data());
 
-        while (inFile && !frameFound) {
-            inFile.read(
-                reinterpret_cast<char*>(virtualTransferBuffer.data()), 
-                UsbConfig::BULK_TRANSFER_SIZE
-            );
-            std::streamsize bytesRead = inFile.gcount();
-
+        while (file.read(bufferPtr, UsbConfig::BULK_TRANSFER_SIZE) || file.gcount() > 0) {
+            std::streamsize bytesRead = file.gcount();
+            std::cout << "Read page of " << bytesRead << " bytes.\n";
+            
             if (bytesRead > 0) {
                 std::span<const uint8_t> payload(
-                    virtualTransferBuffer.data(), 
+                    buffer.data(), 
                     static_cast<size_t>(bytesRead)
                 );
 
                 stream.send(payload);
-            }
+            }            
         }
 
         if (frameFound) {
