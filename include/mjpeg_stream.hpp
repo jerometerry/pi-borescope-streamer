@@ -45,14 +45,25 @@ public:
     void send(std::span<const uint8_t> data);
 
 private:
+    /**
+     * @brief 
+     */
     FrameDisruptor* disruptor_;
-    int64_t current_claim_sqe_{-1};
+
+    /**
+     * @brief 
+     */
+    int64_t currentClaimSequence_{-1};
+
+    /**
+     * @brief 
+     */
     bool frameActive_{false};
 
     /**
      * @brief The waiting room for raw bytes that haven't been sorted yet.
      */
-    std::vector<uint8_t> inputBuffer_;
+    std::vector<uint8_t> inputBuffer_{};
 
     /**
      * @brief A bookmark tracking how far we've read into the stream buffer.

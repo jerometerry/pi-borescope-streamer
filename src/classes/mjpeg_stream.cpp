@@ -17,7 +17,8 @@
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
 
-MjpegStream::MjpegStream(FrameDisruptor& disruptor): disruptor_(&disruptor) {
+MjpegStream::MjpegStream(FrameDisruptor& disruptor) :
+    disruptor_(&disruptor) {
     inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
 }
 
@@ -81,7 +82,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         );
 
         if (frameActive_ && 
-            disruptor_->get_by_sequence(current_claim_sqe_).active_size> 0 && 
+            disruptor_->get_by_sequence(currentClaimSequence_).active_size> 0 && 
             payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
             outputFrame();
         }
@@ -123,7 +124,7 @@ void MjpegStream::outputFrame() {
         return;
     }
 
-    HardcoreVideoFrame& slot = disruptor_->get_by_sequence(current_claim_sqe_);
+    HardcoreVideoFrame& slot = disruptor_->get_by_sequence(currentClaimSequence_);
     if (slot.active_size == 0) {
         frameActive_ = false;
         return;
@@ -156,8 +157,7 @@ void MjpegStream::outputFrame() {
 
         slot.trim(startTrim, endTrim);
 
-
-        disruptor_->publish(current_claim_sqe_);
+        disruptor_->publish(currentClaimSequence_);
     }
 
     frameActive_ = false;
@@ -165,12 +165,12 @@ void MjpegStream::outputFrame() {
 
 HardcoreVideoFrame& MjpegStream::getActiveFrameSlot() {
     if (!frameActive_) {
-        current_claim_sqe_ = disruptor_->claim();
-        HardcoreVideoFrame& slot = disruptor_->get_by_sequence(current_claim_sqe_);
+        currentClaimSequence_ = disruptor_->claim();
+        HardcoreVideoFrame& slot = disruptor_->get_by_sequence(currentClaimSequence_);
         slot.clear();
         frameActive_ = true;
         return slot;
     }
-    return disruptor_->get_by_sequence(current_claim_sqe_);
+    return disruptor_->get_by_sequence(currentClaimSequence_);
 }
     
