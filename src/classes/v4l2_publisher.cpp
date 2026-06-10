@@ -8,6 +8,7 @@
 #include <string>
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
+#include "hardcore_video_frame.hpp"
 #include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
 
@@ -48,9 +49,9 @@ V4l2Publisher::~V4l2Publisher() {
     }
 }
 
-void V4l2Publisher::writeFrame(const BufferPtr& frame) {
+void V4l2Publisher::writeFrame(const HardcoreVideoFrame& frame) {
     if (v4l2_fd_ >= 0) {
-        ssize_t bytesWritten = write(v4l2_fd_, frame->getContentSlice().data(), frame->contentSize());
+        ssize_t bytesWritten = write(v4l2_fd_, frame.getContentSlice().data(), frame.contentSize());
         if (bytesWritten < 0) {
             std::cerr << "[V4L2 Core] Warning: Failed to write frame to loopback device.\n";
         }

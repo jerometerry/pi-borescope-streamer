@@ -1,5 +1,5 @@
 #pragma once
-#include "buffer_ptr.hpp"
+#include "hardcore_video_frame.hpp"
 
 namespace V4L2 { struct Config; }
 
@@ -23,7 +23,7 @@ public:
     /**
      * @brief Writes a completed JPEG frame directly to the virtual video node.
      */
-    void writeFrame(const BufferPtr& frame);
+    void writeFrame(const HardcoreVideoFrame& frame);
 
 private:
     int v4l2_fd_{-1};

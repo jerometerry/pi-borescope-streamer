@@ -10,6 +10,11 @@
 #include <memory>
 #include <thread>
 #include <vector>
+#include "buffer_ptr.hpp"
+#include "constants.hpp"
+#include "disruptor.hpp"
+#include "hardcore_video_frame.hpp"
+#include "hardware_buffer.hpp"
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
@@ -67,14 +72,12 @@ int main(int argc, const char* argv[]) {
     std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
               << " Address " << static_cast<int>(camera.address) << "...\n";
 
-    auto pool = BufferPool::create();
+    FrameDisruptor ringBuffer;
+    for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+        ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+    }
 
-    // MjpegFrameQueue HAS to be initialized after BufferPool!
-    // Prevents segfaults if MjpegFrameQueue goes out of scope before program terminates. 
-    MjpegFrameQueue queue;
-    MjpegStream stream(pool, [&queue](const BufferPtr& frame) {
-        queue.push(frame);
-    });
+    MjpegStream stream(ringBuffer);
 
     auto transfer = [&stream](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
         if (status == UsbTransferStatus::Completed) {
@@ -95,19 +98,35 @@ int main(int argc, const char* argv[]) {
 
     uint32_t lastBroadcastedFrameId = 0;
 
+    int64_t next_read = 0;
+    uint32_t currentFrameId = static_cast<uint32_t>(next_read);
     while (running.load(std::memory_order_relaxed)) {
-        uint32_t currentFrameId = 0;
-        auto currentFrame = queue.pop(currentFrameId);
+        int64_t available = ringBuffer.waitFor(next_read);
 
-        if (currentFrame && !currentFrame->empty() && currentFrameId != lastBroadcastedFrameId) {
-            publisher.writeFrame(currentFrame);
-            lastBroadcastedFrameId = currentFrameId;
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        while (next_read <= available) {
+            HardcoreVideoFrame& slot = ringBuffer.getBySequence(next_read);
+
+            if (slot.active_size > 0) {
+                if (currentFrameId != lastBroadcastedFrameId) {
+                    publisher.writeFrame(slot);
+                    lastBroadcastedFrameId = currentFrameId;
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                }
+            }
+
+            next_read++;
         }
+        ringBuffer.markConsumed(next_read - 1);
     }
+    ringBuffer.markConsumed(next_read - 1);
 
     driver.stop();
+
+    int64_t seq = ringBuffer.claim();
+    HardcoreVideoFrame& slot = ringBuffer.getBySequence(seq);
+    slot.clear();
+    ringBuffer.publish(seq);
     
     std::cout << "[System Termination] V4L2 daemon exited cleanly.\n";
     return EXIT_SUCCESS;

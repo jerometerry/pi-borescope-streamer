@@ -19,18 +19,15 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
-#include <memory>
 #include <span>
 #include <stop_token>
 #include <string>
 #include <thread>
 #include <vector>
-#include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "disruptor.hpp"
-#include "hardware_buffer.hpp"
-#include "intrusive_ptr.hpp"
+#include "hardcore_video_frame.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
@@ -92,8 +89,8 @@ int main() {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-		disruptor::Disruptor<HardwareBuffer, 65536> ringBuffer;
-		for (int64_t i = 0; i < 65536; i++) {
+		FrameDisruptor ringBuffer;
+		for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
 			ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 		}
 
@@ -105,10 +102,13 @@ int main() {
 				int64_t available = ringBuffer.waitFor(next_read);
 
 				while (next_read <= available) {
-					HardwareBuffer& slot = ringBuffer.getBySequence(next_read);
+					HardcoreVideoFrame& slot = ringBuffer.getBySequence(next_read);
 
 					if (slot.active_size > 0) {
-						outFile.write(reinterpret_cast<const char*>(slot.storage.data()), slot.active_size);
+						outFile.write(
+							reinterpret_cast<const char*>(slot.getContentSlice().data()), 
+							slot.active_size
+						);
 					}
 
 					next_read++;
@@ -127,8 +127,8 @@ int main() {
 
 			if (status == UsbTransferStatus::Completed && !payload.empty()) {
 				int64_t seq = ringBuffer.claim();
-				HardwareBuffer& slot = ringBuffer.getBySequence(seq);
-				slot.write_payload(payload);
+				HardcoreVideoFrame& slot = ringBuffer.getBySequence(seq);
+				slot.insertContent(payload);
 				ringBuffer.publish(seq);
             }
             return status != UsbTransferStatus::Disconnected; 
@@ -151,7 +151,7 @@ int main() {
         driver.stop();
 
 		int64_t seq = ringBuffer.claim();
-		HardwareBuffer& slot = ringBuffer.getBySequence(seq);
+		HardcoreVideoFrame& slot = ringBuffer.getBySequence(seq);
 		slot.clear();
 		ringBuffer.publish(seq);
 
