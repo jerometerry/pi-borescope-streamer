@@ -91,7 +91,7 @@ namespace disruptor {
 
     public:
         void preAllocate(const int64_t slotSize) {
-            for (int64_t i = 0; i < Capacity; i++) {
+            for (size_t i = 0; i < Capacity; i++) {
                 auto slot = getBySequence(i);
                 slot.preAllocate(slotSize);
             }
