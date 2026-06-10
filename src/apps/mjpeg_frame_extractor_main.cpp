@@ -4,18 +4,17 @@
  * @details Corrected for extreme out-of-bounds target index deadlocks.
  */
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <fstream>
 #include <iostream>
-#include <string>
-#include <vector>
 #include <span>
-#include <format>
-#include <print>
+#include <stop_token>
+#include <string>
 #include <thread>
-#include <atomic>
+#include <vector>
 #include "constants.hpp"
 #include "frame.hpp"
 #include "frame_disruptor.hpp"
@@ -53,11 +52,10 @@ int main(int argc, const char* argv[]) {
         std::atomic<bool> file_feeding_active{true};
         std::atomic<bool> frameFound{false};
 
-
         std::jthread extractorConsumer([&ringBuffer, &file_feeding_active, &frameFound, targetFrameIndex](const std::stop_token& st) {
             int64_t next_read = 0;
 
-            while ((file_feeding_active.load(std::memory_order_acquire) || ringBuffer.getHighestPublished() >= next_read) && !st.stop_requested()) {
+            while (!st.stop_requested()) {
                 int64_t available = ringBuffer.getHighestPublished();
 
                 if (next_read <= available) {
@@ -72,14 +70,17 @@ int main(int argc, const char* argv[]) {
                                 
                                 std::println(std::cout, "[Success] Extracted target frame {} ({} bytes)", targetFrameIndex, slot.active_size);
                                 frameFound.store(true, std::memory_order_release);
+                                return;
                             }
-                            file_feeding_active.store(false, std::memory_order_release);
-                            return;
                         }
                         next_read++;
                     }
                     ringBuffer.markConsumed(next_read - 1);
                 } else {
+                    if (!file_feeding_active.load(std::memory_order_acquire)) {
+                        break;
+                    }
+
                     #if defined(__x86_64__) || defined(_M_X64)
                         asm volatile("pause" ::: "memory");
                     #else
