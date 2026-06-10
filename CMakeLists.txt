@@ -163,6 +163,9 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 add_library(borescope_core STATIC
     src/classes/buffer.cpp
     src/classes/buffer_pool.cpp
+    src/classes/buffered_mjpeg_server.cpp
+    src/classes/buffered_mjpeg_stream.cpp
+    src/classes/buffered_zero_allocation_response_builder.cpp
     src/classes/mjpeg_frame_extractor.cpp
     src/classes/mjpeg_frame_queue.cpp
     src/classes/mjpeg_frame_ring_buffer.cpp
@@ -290,6 +293,8 @@ if(BUILD_TESTING)
     add_executable(run_project_tests 
         tests/test_buffer.cpp
         tests/test_buffer_pool.cpp
+        tests/test_buffered_mjpeg_server.cpp
+        tests/test_buffered_mjpeg_stream.cpp
         tests/test_disruptor.cpp
         tests/test_mjpeg_frame_queue.cpp
         tests/test_mjpeg_frame_ring_buffer.cpp
