@@ -101,7 +101,7 @@ void swap(IntrusivePtr<T>& lhs, IntrusivePtr<T>& rhs) noexcept {
 }
 
 template <typename T, typename U>
-requires requires(T* t, U* u) { t == u; } // Verifies types are legally comparable
+requires requires(T* t, U* u) { t == u; }
 bool operator==(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept { 
     return lhs.get() == rhs.get(); 
 }

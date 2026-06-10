@@ -20,9 +20,9 @@ public:
      * @brief Configuration parameters for initializing the memory pool.
      */
     struct BufferPoolArgs {
-        size_t maxPoolSize;        ///< The maximum allowed size before falling back to heap allocation.
-        size_t initialPoolSize;    ///< The number of buffers to eagerly allocate at startup.
-        size_t bufferReserveSize;  ///< The default capacity (in bytes) of each buffer's data vector.
+        size_t maxPoolSize;
+        size_t initialPoolSize;
+        size_t bufferReserveSize;
     };
 
     explicit BufferPool(const BufferPoolArgs& args);

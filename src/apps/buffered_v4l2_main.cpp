@@ -33,7 +33,6 @@ void signalHandler(int signal) {
 }
 
 int main(int argc, const char* argv[]) {
-    // Disable stdout buffering so logs immediately appear in systemd journalctl
     std::cout << std::unitbuf;
 
     std::signal(SIGINT, signalHandler);

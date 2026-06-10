@@ -321,7 +321,6 @@ TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
     std::vector<uint8_t> const emptyPacket(100, 0x00);
     GetStream().send(emptyPacket);
 
-    // Verify nothing valid made it through the pipeline
     verifyNoValidFramesPublished();
 }
 

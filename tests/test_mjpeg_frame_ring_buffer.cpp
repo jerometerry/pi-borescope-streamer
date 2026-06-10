@@ -134,7 +134,6 @@ TEST_F(MjpegFrameRingBufferTest, ThreadSafety_ConcurrentProducersAndConsumers) {
             pushCount.fetch_add(1, std::memory_order_relaxed);
             
             if (i % 10 == 0) {
-                // Ensure producers don't starve consumers
                 std::this_thread::yield();
             }
         }

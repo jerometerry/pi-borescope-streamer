@@ -74,43 +74,29 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
 
     constexpr std::string_view mjpegHeader = "--mjpegstream\r\nContent-Type: image/jpeg\r\n";
 
-    // Get span<uinit_8> that covers the 128 byte reserved memory inside the buffer
     auto padding = buffer->getMutablePaddingSlice();
 
-    // Initialize the entire padding memory with all zeros
     std::ranges::fill(padding, 0);
 
-    // Convert the span into a raw pointer
     char* ptr = reinterpret_cast<char*>(padding.data());
 
-    // Keep a separate cursor for remembering our position
     char* cursor = ptr;
     std::memcpy(cursor, mjpegHeader.data(), mjpegHeader.size());
-    // move the pointer forward by the number of bytes in the header
     cursor += mjpegHeader.size();
 
-    // Insert 128 bytes of content, initialized to all 0xFF
     buffer->insertContent(std::vector<uint8_t>(128, 0xFF));
 
-
-    // build a replica of the buffer in separate memory, for comparison
-
-    // Populate the header with the same string
     std::vector<uint8_t> headerData(128, 0);
     cursor = reinterpret_cast<char*>(headerData.data());
     std::memcpy(cursor, mjpegHeader.data(), mjpegHeader.size());
-    // just to reiterate that you need to keep track of your position
     cursor += mjpegHeader.size();
 
-    // Initialize content with the same 128 bytes of 0xFF as we did for the Buffer
     std::vector<uint8_t> contentData(128, 0xFF);
 
-    // For the expected data by concatenating the 128 byte padding with the 128 byte content
     std::vector<uint8_t> expectedData;
     expectedData.insert(expectedData.end(), headerData.begin(), headerData.end());
     expectedData.insert(expectedData.end(), contentData.begin(), contentData.end());
 
-    // Get the read only span of the Buffer's underlying std::vector, which includes the 128 byte reserved prefix
     auto actualData = frame->all();
 
     EXPECT_THAT(
@@ -118,11 +104,6 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
         ::testing::ElementsAreArray(expectedData.begin(), expectedData.end())
     ) << "BufferPtr memory management error";
 }
-
-// -------------------------------------------------------------------
-// FRAME REFERENCE COUNTING & LIFECYCLE TESTS
-// Demonstrates safe zero-copy broadcasting across multiple simulated clients
-// -------------------------------------------------------------------
 
 TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
     BufferPool::BufferPoolArgs args {
@@ -137,25 +118,15 @@ TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
         EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1) << "Buffer not removed from pool";
 
         {
-            // Simulate Viewer 1 connecting and holding a copy of the frame
             BufferPtr viewer1Frame = masterFrame; 
-            
-            // Simulate Viewer 2 connecting and holding a copy
             BufferPtr viewer2Frame = masterFrame; 
-            
-            // Master frame is overwritten with a new frame from the camera
+
             masterFrame = bufferPool->borrow();
             EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 2) << "Second buffer not acquired";
-
-            // At this point, the original buffer is solely kept alive by viewer1 and viewer2
-        } // viewer1Frame and viewer2Frame go out of scope here. 
-          // The atomic ref count hits 0, and the callback fires.
-
-        // Verify the original buffer was returned to the pool automatically
+        }
         EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1) << "Buffer not automatically recycled after all references dropped";
-    } // masterFrame goes out of scope here
+    }
 
-    // All frames are dead. Pool should be fully restored.
     EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree) << "Pool leak detected";
 }
 
@@ -170,25 +141,15 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
     BufferPtr original = bufferPool->borrow();
     Buffer* underlyingPtr = original.get();
 
-    // Move the frame. This should transfer ownership without touching the atomic counter
     BufferPtr movedFrame = std::move(original);
-
-    // The original frame should now be completely empty (operator bool() == false)
 
     bool is_valid = static_cast<bool>(original); // NOLINT(bugprone-use-after-move)
     EXPECT_FALSE(is_valid) << "Moved-from frame still holds a valid state";
 
-    // The new frame should point to the exact same memory
     EXPECT_EQ(movedFrame.get(), underlyingPtr) << "Underlying buffer pointer shifted during move";
-    
-    // The pool size should remain unchanged (no unexpected returns or allocations)
+
     EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1);
 }
-
-// -------------------------------------------------------------------
-// BUFFER MEMORY BOUNDARY & SLICING TESTS
-// Proves the 128-byte padding reservation is heavily guarded
-// -------------------------------------------------------------------
 
 TEST(BufferPoolTest, PaddingAndContentSliceBoundaries) {
     BufferPool::BufferPoolArgs args {
@@ -199,15 +160,12 @@ TEST(BufferPoolTest, PaddingAndContentSliceBoundaries) {
     BufferPtr frame = bufferPool->borrow();
     auto* buffer = frame.get();
 
-    // Insert mock hardware data
     std::vector<uint8_t> mockData = { 0xAA, 0xBB, 0xCC, 0xDD };
     buffer->insertContent(mockData);
 
-    // Verify sizes
     EXPECT_EQ(buffer->contentSize(), mockData.size()) << "Content size calculation is incorrect";
     EXPECT_EQ(buffer->totalSize(), BufferPoolConfig::BUFFER_PADDING + mockData.size()) << "Total size does not account for reserved prefix";
 
-    // Verify slice bounds
     auto contentSlice = buffer->getContentSlice();
     EXPECT_EQ(contentSlice.size(), mockData.size());
     EXPECT_EQ(contentSlice[0], 0xAA);
@@ -225,17 +183,14 @@ TEST(BufferPoolTest, BufferTrimMaintainsPadding) {
     BufferPtr frame = bufferPool->borrow();
     auto* buffer = frame.get();
 
-    // Data representing a messy stream: [Garbage] [FF D8 ... FF D9] [Garbage]
     std::vector<uint8_t> streamData = { 0x00, 0x01, 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9, 0x02, 0x03 };
     buffer->insertContent(streamData);
 
-    // Simulate MjpegStream::outputFrame finding the SOI at index 2 and EOI at index 8
     size_t soiOffset = 2;
     size_t eoiOffset = 8;
 
     buffer->trim(soiOffset, eoiOffset);
 
-    // Expected remaining content: { 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9 }
     std::vector<uint8_t> expectedContent = { 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9 };
     auto resultSlice = buffer->getContentSlice();
 
@@ -245,7 +200,6 @@ TEST(BufferPoolTest, BufferTrimMaintainsPadding) {
         ::testing::ElementsAreArray(expectedContent)
     ) << "Trim algorithm corrupted the internal payload";
 
-    // Verify the padding still exists and wasn't destroyed by the vector erase
     EXPECT_EQ(
         buffer->getPaddingSlice().size(), 
         BufferPoolConfig::BUFFER_PADDING
@@ -263,25 +217,19 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
     {
         BufferPtr frame = bufferPool->borrow();
         underlyingPtr = frame.get();
-        
-        // Insert data using the captured pointer
+
         std::vector<uint8_t> content = {0x01, 0x02, 0x03};
         underlyingPtr->insertContent(content);
         EXPECT_FALSE(underlyingPtr->empty());
-    } // BufferPtr dies, buffer is cleared and returned to pool
+    }
 
-    // Re-acquire to get the exact same buffer back
     BufferPtr reusedFrame = bufferPool->borrow();
     EXPECT_EQ(reusedFrame.get(), underlyingPtr) << "Pool did not return the recycled buffer";
-    
-    // Verify clear() actually wiped the user data but kept the prefix allocation
+
     EXPECT_TRUE(reusedFrame.get()->empty()) << "Recycled buffer was not cleanly wiped";
     EXPECT_EQ(reusedFrame.get()->totalSize(), BufferPoolConfig::BUFFER_PADDING) << "Recycled buffer lost its prefix reservation";
 }
 
-// -------------------------------------------------------------------
-// EXCEPTION & SAFETY TESTS
-// -------------------------------------------------------------------
 
 TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
     BufferPool::BufferPoolArgs args {
@@ -294,12 +242,10 @@ TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
     std::vector<uint8_t> content = { 0x01, 0x02, 0x03, 0x04 };
     buffer->insertContent(content);
 
-    // Attempting to trim past the end of the content
     EXPECT_THROW({
         buffer->trim(1, 10);
     }, std::out_of_range) << "Failed to throw on end boundary violation";
 
-    // Attempting to start the trim after the end boundary (logical impossibility)
     EXPECT_THROW({
         buffer->trim(3, 2);
     }, std::out_of_range) << "Failed to throw on inverted boundary violation";
@@ -312,8 +258,6 @@ TEST(BufferPoolTest, FrontOnEmptyBufferThrowsException) {
     auto bufferPool = BufferPool::create(args);
     BufferPtr frame = bufferPool->borrow();
 
-    // The buffer is technically not "empty" vector-wise (it holds 128 bytes of prefix), 
-    // but content-wise it is empty. front() should safely reject access.
     EXPECT_THROW({
         const auto* buffer = frame.get();
         buffer->front();

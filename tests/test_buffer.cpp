@@ -11,30 +11,18 @@
 #include "intrusive_ptr.hpp"
 
 namespace {
+    struct DestructionTracker final : public BufferRecycler {
+        int destroyedCount = 0;
 
-// Helper struct to track destruction when simulating a custom pool callback.
-// Implements the BufferRecycler interface to intercept the intrusive pointer release.
-struct DestructionTracker final : public BufferRecycler {
-    int destroyedCount = 0;
+        void recycle(Buffer* b) override {
+            destroyedCount++;
+            // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
+            delete b; 
+        }
+    };
+}
 
-    void recycle(Buffer* b) override {
-        destroyedCount++;
-        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
-        delete b; 
-    }
-};
-
-} // anonymous namespace
-
-// -------------------------------------------------------------------
-// INTRUSIVE POINTER LIFECYCLE TESTS
-// -------------------------------------------------------------------
-
-TEST(IntrusivePtrTest, StandaloneLifecycleNoLeak) {
-    // Verifies that a Buffer created outside of a pool correctly defaults 
-    // to std::default_delete when the intrusive pointer hits 0.
-    // If this fails, AddressSanitizer/Valgrind will flag a memory leak.
-    
+TEST(IntrusivePtrTest, StandaloneLifecycleNoLeak) {    
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     BufferPtr ptr(new Buffer(128));
     EXPECT_TRUE(static_cast<bool>(ptr));
@@ -43,26 +31,21 @@ TEST(IntrusivePtrTest, StandaloneLifecycleNoLeak) {
 TEST(IntrusivePtrTest, CopySemanticsDeferDestruction) {
     DestructionTracker tracker;
     {
-        // Pass the tracker to the constructor to wire up the recycler interface
-        // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
         BufferPtr master(new Buffer(128, &tracker));
 
         {
-            // Copy construct - increments ref count
             // NOLINTBEGIN(performance-unnecessary-copy-initialization)
             [[maybe_unused]] BufferPtr copy1 = master;
             [[maybe_unused]] BufferPtr copy2 = master;
             // NOLINTEND(performance-unnecessary-copy-initialization)
-            
-            // Copy assign - increments ref count
+
             BufferPtr copy3;
             copy3 = master;
 
             EXPECT_EQ(tracker.destroyedCount, 0) << "Buffer destroyed prematurely while copies exist";
-        } // copy1, copy2, copy3 go out of scope, ref count drops but doesn't hit 0
-        
+        }
         EXPECT_EQ(tracker.destroyedCount, 0) << "Buffer destroyed prematurely while master exists";
-    } // master goes out of scope, ref count hits 0
+    }
     
     EXPECT_EQ(tracker.destroyedCount, 1) << "Buffer callback not fired exactly once";
 }
@@ -85,7 +68,6 @@ TEST(IntrusivePtrTest, MoveAssignmentTransfersOwnership) {
     EXPECT_EQ(ptr2.get(), rawPointer) << "Underlying pointer address changed during move assignment";
     EXPECT_EQ(tracker.destroyedCount, 0) << "Destruction triggered during move";
 
-    // Reassigning ptr2 to a new buffer should trigger destruction of the old one
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     ptr2 = BufferPtr(new Buffer(128));
 
@@ -98,8 +80,6 @@ TEST(IntrusivePtrTest, SelfAssignmentIsSafe) {
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     BufferPtr ptr(new Buffer(128, &tracker));
 
-    // Use a reference to trick the compiler's static analysis 
-    // and avoid compiler-specific #pragma directives.
     BufferPtr& ptrRef = ptr;
     ptr = ptrRef;
 
@@ -113,7 +93,6 @@ TEST(IntrusivePtrTest, ResetDropsReference) {
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     BufferPtr ptr(new Buffer(128, &tracker));
 
-    // Explicitly dropping the reference
     ptr = nullptr; 
 
     EXPECT_FALSE(static_cast<bool>(ptr));
@@ -135,32 +114,24 @@ TEST(IntrusivePtrTest, SwapExchangesOwnership) {
     EXPECT_EQ(p2.get(), raw1) << "Pointer 2 did not receive Pointer 1's data";
 }
 
-// -------------------------------------------------------------------
-// RAW BUFFER MEMORY & REF COUNTING TESTS
-// -------------------------------------------------------------------
-
 TEST(BufferMemoryTest, RawRetainReleaseLogic) {
-    // We instantiate manually without IntrusivePtr to directly test the atomic boundaries
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     auto* b = new Buffer(128);
-    
-    // Explicitly retain (simulating ptr copies)
-    b->retain(); // Ref count = 1
-    b->retain(); // Ref count = 2
-    b->retain(); // Ref count = 3
+
+    b->retain();
+    b->retain();
+    b->retain();
 
     EXPECT_FALSE(b->release()) << "Release returned true but ref count should be 2";
     EXPECT_FALSE(b->release()) << "Release returned true but ref count should be 1";
     EXPECT_TRUE(b->release()) << "Release returned false but ref count should have hit 0";
 
-    // Since we didn't use IntrusivePtr to wrap this, we must manually delete 
-    // to fulfill what intrusive_ptr_release would normally do.
     // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     delete b;
 }
 
 TEST(BufferMemoryTest, ReserveExpandsTotalCapacity) {
-    Buffer b(128); // Initialized with 128 bytes of padding
+    Buffer b(128);
     
     size_t initialCapacity = b.totalCapacity();
     size_t newRequiredContentSpace = initialCapacity + 1024;

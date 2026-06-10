@@ -150,7 +150,6 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
 
     ASSERT_GE(connect(sock, reinterpret_cast<struct sockaddr*>(&serv_addr), sizeof(serv_addr)), 0);
 
-    // FIX 1: Send "Connection: keep-alive" instead of "close"
     std::string request = "GET /stream HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n";
     send(sock, request.c_str(), request.length(), 0);
 
@@ -160,7 +159,6 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
     
     auto startTime = std::chrono::steady_clock::now();
 
-    // 1. Wait for HTTP Headers (Confirming the viewer is registered)
     while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(2)) {
         int bytesRead = read(sock, buffer, sizeof(buffer));
         
@@ -171,24 +169,20 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
                 break;
             }
         }
-        
-        // CRITICAL: Do NOT break if bytesRead <= 0. We must wait out the timer!
+
         std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
     }
 
     ASSERT_TRUE(headersReceived) << "Server did not respond with stream headers.";
 
-    // 2. NOW inject the frame
     std::vector<uint8_t> mockVideoFrame = {0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9};
     injectMockVideoFrame(mockVideoFrame);
 
     std::string payloadString(mockVideoFrame.begin(), mockVideoFrame.end());
     bool payloadReceived = false;
 
-    // FIX 2: Reset the clock so the payload gets a full 2 seconds to arrive
     startTime = std::chrono::steady_clock::now();
 
-    // 3. Wait for the frame payload
     while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(2)) {
         int bytesRead = read(sock, buffer, sizeof(buffer));
         

@@ -73,14 +73,11 @@ public:
         mu_.unlock();
     }
 
-    // Explicitly delete copy and assignment operators.
-    // Lock guards strictly govern hardware mutexes and cannot be duplicated or moved.
     MutexLock(const MutexLock&) = delete;
     MutexLock& operator=(const MutexLock&) = delete;
     MutexLock(MutexLock&&) = delete;
     MutexLock& operator=(MutexLock&&) = delete;
 
 private:
-    // NOLINT suppresses the warning because non-assignability is the deliberate architectural goal.
     Mutex& mu_; // NOLINT(cppcoreguidelines-avoid-const-or-ref-data-members)
 };

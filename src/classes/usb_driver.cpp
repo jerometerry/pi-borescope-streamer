@@ -80,7 +80,6 @@ void UsbDriver::loop(const UsbDeviceInfo& target) {
 				camera_->getContext(), 
 				&activeTimeValue
 			);
-			// Ignore LIBUSB_ERROR_INTERRUPTED during shutdown signals
 			if (error != LIBUSB_SUCCESS && error != LIBUSB_ERROR_INTERRUPTED) {
 				std::cerr << std::format("libusb_handle_events failed. Error: {}\n", error);
 				break;

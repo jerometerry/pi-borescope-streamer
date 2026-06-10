@@ -40,7 +40,7 @@ static void BM_Disruptor_BatchThroughput(benchmark::State& state) {
     }
 
     int64_t seq = pipeline.claim();
-    pipeline.getBySequence(seq).id = -1; // The Poison Pill
+    pipeline.getBySequence(seq).id = -1;
     pipeline.publish(seq);
 
     state.SetItemsProcessed(state.iterations() * items_to_process);
