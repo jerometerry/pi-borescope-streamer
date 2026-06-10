@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <print>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -125,11 +126,11 @@ int main() {
 						: 0.0;
 
 					if (delta_dropped > 0) {
-						std::printf("[METRICS] Ingestion: %.2f FPS | WARNING: Dropped %llu frames (%.1f%% drop rate) due to disk saturation\n", 
-									fps, delta_dropped, drop_rate);
+						std::print("[METRICS] Ingestion: {:.2f} FPS | WARNING: Dropped {} frames ({:.1f}% drop rate) due to disk saturation\n", 
+								fps, delta_dropped, drop_rate);
 					} else if (delta_received > 0) {
-						std::printf("[METRICS] Ingestion: %.2f FPS | Health: 100%% | Total Processed: %llu\n", 
-									fps, current_received);
+						std::print("[METRICS] Ingestion: {:.2f} FPS | Health: 100% | Total Processed: {}\n", 
+								fps, current_received);
 					}
 				}
 

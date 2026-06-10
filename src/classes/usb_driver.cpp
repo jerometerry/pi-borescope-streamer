@@ -4,10 +4,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <format>
 #include <functional>
 #include <iostream>
 #include <memory>
-#include <string>
+#include <print>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -25,7 +26,7 @@ UsbDriver::~UsbDriver() {
 }
 
 void UsbDriver::start(const UsbDeviceInfo& target) {
-	workerThread_ = std::thread(&UsbDriver::loop, this, target);
+	workerThread_ = std::jthread(&UsbDriver::loop, this, target);
 }
 
 void UsbDriver::stop() {
@@ -35,103 +36,103 @@ void UsbDriver::stop() {
 }
 
 void UsbDriver::loop(const UsbDeviceInfo& target) {
-	try {
-		camera_ = std::make_unique<UsbCamera>(target);
+	camera_ = std::make_unique<UsbCamera>(target);
 
-		bool isDmaAllocated = true;
-		uint8_t* dmaBuffer = reinterpret_cast<uint8_t*>(libusb_dev_mem_alloc(
-			camera_->getRawHandle(), 
-			UsbConfig::DMA_BUFFER_SIZE
-		));
+	uint8_t* rawDmaBuffer = reinterpret_cast<uint8_t*>(libusb_dev_mem_alloc(
+		camera_->getRawHandle(), 
+		 UsbConfig::DMA_BUFFER_SIZE
+	));
+	bool isDmaAllocated = (rawDmaBuffer != nullptr);
 
-		if (!dmaBuffer) {
-			std::cout << "[DRIVER INFO] DMA allocation failed or unsupported. Falling back to vector.\n";
-			isDmaAllocated = false;
-			transferMemory_.resize(UsbConfig::DMA_BUFFER_SIZE);
-			dmaBuffer = transferMemory_.data();
+	if (!isDmaAllocated) {
+		std::println(std::cout, "[DRIVER INFO] DMA allocation failed. Falling back to fixed heap.");
+		fallbackMemory_ = std::make_unique<uint8_t[]>(UsbConfig::DMA_BUFFER_SIZE);
+		rawDmaBuffer = fallbackMemory_.get();
+	}
+
+	auto dmaGuard = std::unique_ptr<uint8_t, std::function<void(uint8_t*)>>{
+		rawDmaBuffer,
+		[this, isDmaAllocated](uint8_t* ptr) {
+			if (isDmaAllocated && ptr && camera_) {
+				libusb_dev_mem_free(
+					camera_->getRawHandle(), 
+					ptr, 
+					UsbConfig::DMA_BUFFER_SIZE
+				);
+			} else {
+				fallbackMemory_.reset();
+			}
 		}
+	};
+
+	auto transferPoolGuard = std::unique_ptr<
+								std::vector<libusb_transfer*>, 
+								std::function<void(std::vector<libusb_transfer*>*)>>{
+		&transferPool_,
+		[this](std::vector<libusb_transfer*>* pool) {
+			for (auto* transfer : *pool) {
+				libusb_cancel_transfer(transfer);
+			}
+
+			struct timeval shutdownTimeValue = {0, UsbConfig::SHUTDOWN_WAIT_TIMEOUT}; 
+			while (activeTransfers_.load(std::memory_order_acquire) > 0 && camera_) {
+				libusb_handle_events_timeout(camera_->getContext(), &shutdownTimeValue);
+			}
+
+			for (auto* transfer : *pool) {
+				libusb_free_transfer(transfer);
+			}
+			pool->clear();
+		}
+	};
+
+	try {
+		transferPool_.reserve(UsbConfig::BULK_TRANSFER_COUNT);
 
 		for (size_t i = 0; i < UsbConfig::BULK_TRANSFER_COUNT; ++i) {
 			libusb_transfer* transfer = libusb_alloc_transfer(0);
+			if (!transfer) [[unlikely]] {
+				throw std::runtime_error("Failed to allocate libusb transfer structure.");
+			}
+
 			libusb_fill_bulk_transfer(
 				transfer,
 				camera_->getRawHandle(),
 				1 | LIBUSB_ENDPOINT_IN,
-				dmaBuffer + (i * UsbConfig::BULK_TRANSFER_SIZE),
+				dmaGuard.get() + (i * UsbConfig::BULK_TRANSFER_SIZE),
 				UsbConfig::BULK_TRANSFER_SIZE,
-				transferCallback,
+                transferCallback,
 				this,
 				UsbConfig::USB_TIMEOUT
 			);
-			
+
 			int submitResult = libusb_submit_transfer(transfer);
 			if (submitResult == LIBUSB_SUCCESS) {
 				activeTransfers_.fetch_add(1, std::memory_order_relaxed);
 				transferPool_.push_back(transfer);
 			} else {
-				std::cerr << std::format("[DRIVER ERROR] Failed to submit transfer: {}\n", submitResult);
 				libusb_free_transfer(transfer);
+				throw std::runtime_error(std::format("Failed to submit initial transfer: {}", submitResult));
 			}
 		}
 
 		struct timeval activeTimeValue = {0, Units::ONE_HUNDRED_MILLISECONDS};
 		while (running_->load(std::memory_order_relaxed)) {
-			int error = libusb_handle_events_timeout(
-				camera_->getContext(), 
-				&activeTimeValue
-			);
+			int error = libusb_handle_events_timeout(camera_->getContext(), &activeTimeValue);
 			if (error != LIBUSB_SUCCESS && error != LIBUSB_ERROR_INTERRUPTED) {
-				std::cerr << std::format("libusb_handle_events failed. Error: {}\n", error);
+				std::println(std::cerr, "libusb_handle_events failed. Error: {}", error);
 				break;
 			}
 		}
 
-		for (auto* transfer : transferPool_) {
-			libusb_cancel_transfer(transfer);
-		}
-
-		struct timeval shutdownTimeValue = {0, UsbConfig::SHUTDOWN_WAIT_TIMEOUT}; 
-		while (activeTransfers_.load(std::memory_order_acquire) > 0) {
-			libusb_handle_events_timeout(
-				camera_->getContext(), 
-				&shutdownTimeValue
-			);
-		}
-
 		for (int i = 0; i < 5; ++i) {
-			struct timeval finalFlush = {0, 1000}; // 1 millisecond
+			struct timeval finalFlush = {0, 1000}; 
 			libusb_handle_events_timeout(camera_->getContext(), &finalFlush);
 		}
 
-		for (auto* transfer : transferPool_) {
-			libusb_free_transfer(transfer);
-		}
-		transferPool_.clear();
-
-		if (isDmaAllocated && dmaBuffer) {
-			int freeResult = libusb_dev_mem_free(
-				camera_->getRawHandle(), 
-				dmaBuffer, 
-				UsbConfig::DMA_BUFFER_SIZE
-			);
-			if (freeResult != LIBUSB_SUCCESS) {
-				std::cerr << std::format("[DRIVER ERROR] Failed to free DMA: {} \n", freeResult);
-			}
-		} else {
-			transferMemory_.clear();
-			transferMemory_.shrink_to_fit(); // Force memory release immediately
-		}
-
-		camera_.reset();
-
 	} catch (const std::exception& e) {
-		std::cerr << "[DRIVER ERROR] Terminated via standard exception: " << e.what() << '\n';
-		if (running_) {
-			running_->store(false, std::memory_order_release);
-		}
-	} catch (...) {
-		std::cerr << "[DRIVER ERROR] Terminated via completely unhandled exception pattern!\n";
-		if (running_) {
+		std::println(std::cerr, "[DRIVER ERROR] Exception caught: {}", e.what());
+		if (running_) { 
 			running_->store(false, std::memory_order_release);
 		}
 	}
@@ -139,9 +140,12 @@ void UsbDriver::loop(const UsbDeviceInfo& target) {
 
 void LIBUSB_CALL UsbDriver::transferCallback(struct libusb_transfer* transfer) {
 	auto* driver = static_cast<UsbDriver*>(transfer->user_data);
-	if (!driver) return;
+	if (!driver) {
+		[[unlikely]] return;
+	} 
 
-	const size_t remainingTransfers = driver->activeTransfers_.fetch_sub(1, std::memory_order_acq_rel) - 1;
+	const size_t remainingTransfers = 
+		driver->activeTransfers_.fetch_sub(1, std::memory_order_acq_rel) - 1;
 
 	if (transfer->status == LIBUSB_TRANSFER_CANCELLED) {
 		if (remainingTransfers == 0) {
@@ -167,7 +171,6 @@ void LIBUSB_CALL UsbDriver::transferCallback(struct libusb_transfer* transfer) {
 		driver->running_->store(false, std::memory_order_release);
 	} else if (driver->running_->load(std::memory_order_relaxed)) {
 		driver->activeTransfers_.fetch_add(1, std::memory_order_relaxed);
-		
 		if (libusb_submit_transfer(transfer) != LIBUSB_SUCCESS) {
 			driver->activeTransfers_.fetch_sub(1, std::memory_order_release);
 		}

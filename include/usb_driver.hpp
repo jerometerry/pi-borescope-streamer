@@ -49,7 +49,8 @@ private:
     std::atomic<bool>* running_;
     std::atomic<int> activeTransfers_{0};
     std::unique_ptr<UsbCamera> camera_;
-    std::thread workerThread_;
+    std::unique_ptr<unsigned char[]> fallbackMemory_;
+    std::jthread workerThread_;
     std::vector<libusb_transfer*> transferPool_;
     std::vector<uint8_t> transferMemory_;
 
