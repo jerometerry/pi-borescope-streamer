@@ -5,15 +5,12 @@
 #include <cstdlib>
 #include <exception>
 #include <fstream>
-#include <functional>
 #include <iostream>
-#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
-#include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "hardcore_video_frame.hpp"
@@ -64,7 +61,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
 
     FrameDisruptor ringBuffer;
     for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-        ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }
 
     std::jthread consumer([&ringBuffer, &producer_running]() {
@@ -114,7 +111,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
 
     FrameDisruptor ringBuffer;
     for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-        ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }
 
     std::jthread consumer([&ringBuffer, &producer_running]() {

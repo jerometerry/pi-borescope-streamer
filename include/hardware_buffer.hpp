@@ -8,7 +8,7 @@ struct HardwareBuffer {
 	std::vector<uint8_t> storage;
 	size_t active_size{0};
 
-	void pre_allocate(size_t size) {
+	void preAllocate(size_t size) {
 		storage.resize(size);
 		active_size = 0;
 	}

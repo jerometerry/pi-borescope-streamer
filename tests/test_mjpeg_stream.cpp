@@ -2,17 +2,13 @@
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cstdint>
-#include <functional>
-#include <memory>
+#include <iostream>
 #include <span>
 #include <string>
-#include <utility>
 #include <vector>
-#include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "hardcore_video_frame.hpp"
-#include "intrusive_ptr.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
@@ -31,7 +27,7 @@ public:
         for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
             disruptor_
                 .getBySequence(i)
-                .pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+                .preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         }
     }    
 
@@ -474,7 +470,7 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
 TEST_F(MjpegStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
     FrameDisruptor ringBuffer;
     for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-        ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }
     MjpegStream silentDecoder(ringBuffer);
     std::vector<uint8_t> packet(100, 0x00);

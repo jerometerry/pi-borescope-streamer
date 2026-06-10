@@ -6,8 +6,6 @@
 #include <iostream>
 #include <span>
 #include <string>
-#include "buffer.hpp"
-#include "buffer_ptr.hpp"
 #include "hardcore_video_frame.hpp"
 #include "v4l2.hpp"
 #include "v4l2_publisher.hpp"

@@ -10,18 +10,14 @@
 #include <chrono>
 #include <compare>
 #include <cstdint>
-#include <memory>
 #include <span>
 #include <string>
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "hardcore_video_frame.hpp"
-#include "intrusive_ptr.hpp"
 #include "mjpeg_server.hpp"
-#include "mjpeg_frame_queue.hpp"
 
 namespace {
     constexpr int TEST_PORT = 18080; 
@@ -44,7 +40,7 @@ public:
         server_(TEST_PORT, running_, disruptor_)
     {
         for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-            disruptor_.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+            disruptor_.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         }
     }   
 

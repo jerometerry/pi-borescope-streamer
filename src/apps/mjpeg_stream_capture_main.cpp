@@ -26,7 +26,6 @@
 #include <vector>
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "disruptor.hpp"
 #include "hardcore_video_frame.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
@@ -91,7 +90,7 @@ int main() {
 
 		FrameDisruptor ringBuffer;
 		for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-			ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+			ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 		}
 
 		std::jthread diskWriter([&ringBuffer](const std::stop_token& st) {

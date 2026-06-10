@@ -1,0 +1,19 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+    printf("Tracing memory allocations in mjpeg_server...\n");
+    printf("Capturing user-space stack traces. Let it run for 10 seconds, then hit Ctrl-C.\n");
+}
+
+uprobe:libc:malloc,
+uprobe:libc:calloc,
+uprobe:libc:realloc
+/comm == "mjpeg_server"/ {
+    // Record the user-space stack trace and increment its count
+    @alloc_stacks[ustack] = count();
+}
+
+END {
+    printf("\n--- Allocation Stack Traces (Counted) ---\n");
+    // bpftrace automatically prints the contents of maps like @alloc_stacks on exit
+}

@@ -3,24 +3,14 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdlib> 
-#include <functional>
 #include <iostream>
 #include <span>
 #include <string>
-#include <memory>
 #include <thread>
 #include <vector>
-#include "buffer_ptr.hpp"
-#include "constants.hpp"
-#include "disruptor.hpp"
 #include "hardcore_video_frame.hpp"
-#include "hardware_buffer.hpp"
-#include "buffer.hpp"
-#include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "intrusive_ptr.hpp"
-#include "mjpeg_frame_queue.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_device_info.hpp"
 #include "usb_device_finder.hpp"
@@ -74,7 +64,7 @@ int main(int argc, const char* argv[]) {
 
     FrameDisruptor ringBuffer;
     for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-        ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }
 
     MjpegStream stream(ringBuffer);

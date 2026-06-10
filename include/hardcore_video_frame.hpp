@@ -17,7 +17,7 @@ struct alignas(64) HardcoreVideoFrame {
         storage.resize(PADDING_SIZE);
     }
 
-    void pre_allocate(size_t frame_reserve_capacity) {
+    void preAllocate(size_t frame_reserve_capacity) {
         storage.resize(PADDING_SIZE + frame_reserve_capacity);
         active_size = 0;
     }
