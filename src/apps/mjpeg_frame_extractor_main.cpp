@@ -8,15 +8,20 @@
 #include <cstdlib>
 #include <exception>
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
 #include <format>
 #include <print>
+#include "buffer.hpp"
 #include "buffer_pool.hpp"
+#include "buffer_ptr.hpp"
 #include "buffered_mjpeg_stream.hpp"
 #include "constants.hpp"
+#include "intrusive_ptr.hpp"
 
 int main(int argc, const char* argv[]) {
     std::cout << std::unitbuf;
@@ -47,7 +52,7 @@ int main(int argc, const char* argv[]) {
         int64_t validFrames = 0;
         bool frameFound = false;
 
-        auto onFrameReady = [&validFrames, targetFrameNumber, &frameFound](BufferPtr ptr) {
+        auto onFrameReady = [&validFrames, targetFrameNumber, &frameFound](const BufferPtr& ptr) {
             if (ptr && ptr->contentSize() > 0) {
                 if (++validFrames == targetFrameNumber) {
                     std::string filename = std::format("frame_{:04d}.jpg", validFrames);
