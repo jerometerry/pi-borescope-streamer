@@ -13,9 +13,9 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
 #include "usb_device_finder.hpp"
@@ -58,7 +58,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
     bool processedAny = false;
 
     while (server->nextReadSequence_ <= available) {
-        HardcoreVideoFrame& currentFrame = server->disruptor_->getBySequence(server->nextReadSequence_);
+        Frame& currentFrame = server->disruptor_->getBySequence(server->nextReadSequence_);
 
         const uint32_t currentFrameId = static_cast<uint32_t>(server->nextReadSequence_);
 

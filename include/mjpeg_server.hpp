@@ -4,7 +4,7 @@
 #include <functional>
 #include <thread>
 #include <vector>
-#include "buffer_ptr.hpp"
+#include "frame_disruptor.hpp"
 
 // IWYU pragma: begin_exports
 struct us_listen_socket_t;

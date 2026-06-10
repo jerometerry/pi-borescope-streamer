@@ -4,10 +4,8 @@
 #include <functional>
 #include <span>
 #include <vector>
-#include "buffer_ptr.hpp"
-#include "constants.hpp"
-#include "disruptor.hpp"
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "usb_payload_header.hpp"
 
 /**
@@ -83,9 +81,9 @@ private:
     /**
      * @brief Get the Active Frame Slot object
      * 
-     * @return HardcoreVideoFrame& 
+     * @return Frame& 
      */
-    HardcoreVideoFrame& getActiveFrameSlot();
+    Frame& getActiveFrameSlot();
 
     /**
      * @brief Snip out the exact picture and send it off.

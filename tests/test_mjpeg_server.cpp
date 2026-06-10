@@ -15,8 +15,8 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "buffer_ptr.hpp"
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "mjpeg_server.hpp"
 
 namespace {
@@ -59,7 +59,7 @@ protected:
 
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
         int64_t seq = disruptor_.claim();
-        HardcoreVideoFrame& slot = disruptor_.getBySequence(seq);
+        Frame& slot = disruptor_.getBySequence(seq);
 
         slot.clear();
         slot.insertContent(data);

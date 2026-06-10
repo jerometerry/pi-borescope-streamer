@@ -4,9 +4,9 @@
 #include <span>
 #include <string>
 #include <vector>
-#include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
@@ -90,7 +90,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
             size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
             size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
 
-            HardcoreVideoFrame& slot = getActiveFrameSlot();
+            Frame& slot = getActiveFrameSlot();
 
             std::span<const uint8_t> toInsert(
                 inputBuffer_.data() + payloadStart, 
@@ -118,7 +118,7 @@ void MjpegStream::outputFrame() {
         return;
     }
 
-    HardcoreVideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);
+    Frame& slot = disruptor_->getBySequence(currentClaimSequence_);
     
     if (slot.contentSize() == 0) {
         disruptor_->publish(currentClaimSequence_);
@@ -160,10 +160,10 @@ void MjpegStream::outputFrame() {
     frameActive_ = false;
 }
 
-HardcoreVideoFrame& MjpegStream::getActiveFrameSlot() {
+Frame& MjpegStream::getActiveFrameSlot() {
     if (!frameActive_) {
         currentClaimSequence_ = disruptor_->claim();
-        HardcoreVideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);
+        Frame& slot = disruptor_->getBySequence(currentClaimSequence_);
         slot.clear();
         frameActive_ = true;
         return slot;

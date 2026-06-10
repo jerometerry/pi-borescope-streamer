@@ -8,9 +8,9 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "hardcore_video_frame.hpp"
-#include "buffer_ptr.hpp"
 #include "constants.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_device_info.hpp"
 #include "usb_device_finder.hpp"
@@ -94,7 +94,7 @@ int main(int argc, const char* argv[]) {
         int64_t available = ringBuffer.waitFor(next_read);
 
         while (next_read <= available) {
-            HardcoreVideoFrame& slot = ringBuffer.getBySequence(next_read);
+            Frame& slot = ringBuffer.getBySequence(next_read);
 
             if (slot.active_size > 0) {
                 if (currentFrameId != lastBroadcastedFrameId) {
@@ -114,7 +114,7 @@ int main(int argc, const char* argv[]) {
     driver.stop();
 
     int64_t seq = ringBuffer.claim();
-    HardcoreVideoFrame& slot = ringBuffer.getBySequence(seq);
+    Frame& slot = ringBuffer.getBySequence(seq);
     slot.clear();
     ringBuffer.publish(seq);
     

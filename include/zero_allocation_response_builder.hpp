@@ -1,6 +1,6 @@
 #pragma once
 #include <string_view>
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
 
 /**
  * @brief Utility for formatting raw JPEG buffers into HTTP chunked responses.
@@ -18,5 +18,5 @@ namespace ZeroAllocationResponseBuilder {
      * @return A single contiguous string_view encompassing both the newly written HTTP headers 
      * and the image payload.
      */
-    std::string_view build(HardcoreVideoFrame& frame);
+    std::string_view build(Frame& frame);
 }

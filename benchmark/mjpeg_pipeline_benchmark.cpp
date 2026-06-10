@@ -11,9 +11,9 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "mjpeg_stream.hpp"
 #include "zero_allocation_response_builder.hpp"
 
@@ -71,7 +71,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
             int64_t available = ringBuffer.waitFor(next_read);
 
             while (next_read <= available) {
-                HardcoreVideoFrame& slot = ringBuffer.getBySequence(next_read);
+                Frame& slot = ringBuffer.getBySequence(next_read);
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);
@@ -120,7 +120,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
             int64_t available = ringBuffer.waitFor(next_read);
 
             while (next_read <= available) {
-                HardcoreVideoFrame& slot = ringBuffer.getBySequence(next_read);
+                Frame& slot = ringBuffer.getBySequence(next_read);
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);

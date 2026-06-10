@@ -7,13 +7,13 @@
 #include <vector>
 #include <stdexcept>
 
-struct alignas(64) HardcoreVideoFrame {
+struct alignas(64) Frame {
     static constexpr size_t PADDING_SIZE = 128;
 
     std::vector<uint8_t> storage;
     size_t active_size{0};
 
-    HardcoreVideoFrame() {
+    Frame() {
         storage.resize(PADDING_SIZE);
     }
 

@@ -24,9 +24,9 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
@@ -101,7 +101,7 @@ int main() {
 				int64_t available = ringBuffer.waitFor(next_read);
 
 				while (next_read <= available) {
-					HardcoreVideoFrame& slot = ringBuffer.getBySequence(next_read);
+					Frame& slot = ringBuffer.getBySequence(next_read);
 
 					if (slot.active_size > 0) {
 						outFile.write(
@@ -126,7 +126,7 @@ int main() {
 
 			if (status == UsbTransferStatus::Completed && !payload.empty()) {
 				int64_t seq = ringBuffer.claim();
-				HardcoreVideoFrame& slot = ringBuffer.getBySequence(seq);
+				Frame& slot = ringBuffer.getBySequence(seq);
 				slot.insertContent(payload);
 				ringBuffer.publish(seq);
             }
@@ -150,7 +150,7 @@ int main() {
         driver.stop();
 
 		int64_t seq = ringBuffer.claim();
-		HardcoreVideoFrame& slot = ringBuffer.getBySequence(seq);
+		Frame& slot = ringBuffer.getBySequence(seq);
 		slot.clear();
 		ringBuffer.publish(seq);
 

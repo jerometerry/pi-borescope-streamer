@@ -3,11 +3,11 @@
 #include <span>
 #include <string>
 #include <vector>
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
 #include "zero_allocation_response_builder.hpp"
 
 TEST(ZeroAllocationResponseBuilderTest, Build) {
-    HardcoreVideoFrame frame;
+    Frame frame;
     std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
     frame.insertContent(payload);
     auto response = ZeroAllocationResponseBuilder::build(frame);

@@ -3,7 +3,7 @@
 #include <thread>
 #include "disruptor.hpp"
 
-struct Event {
+struct alignas(64) Event {
     int64_t id;
 };
 
@@ -17,8 +17,7 @@ static void BM_Disruptor_BatchThroughput(benchmark::State& state) {
             int64_t available = pipeline.waitFor(next_read);
 
             while (next_read <= available) {
-                const Event& event = pipeline.getBySequence(next_read);
-                
+                Event& event = pipeline.getBySequence(next_read);
                 benchmark::DoNotOptimize(event.id);
 
                 if (event.id == -1) {

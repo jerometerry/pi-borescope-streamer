@@ -6,9 +6,9 @@
 #include <span>
 #include <string>
 #include <vector>
-#include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
@@ -46,7 +46,7 @@ protected:
         int64_t available = disruptor_.getHighestPublished();
         
         while (next_read_seq_ <= available) {
-            HardcoreVideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
+            Frame& slot = disruptor_.getBySequence(next_read_seq_);
             
             if (slot.contentSize() > 0) {
                 auto slice = slot.getContentSlice();
@@ -67,7 +67,7 @@ protected:
     void verifyNoValidFramesPublished() {
         int64_t available = disruptor_.getHighestPublished();
         while (next_read_seq_ <= available) {
-            HardcoreVideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
+            Frame& slot = disruptor_.getBySequence(next_read_seq_);
             EXPECT_EQ(slot.contentSize(), 0) 
                 << "Found unexpected valid frame at sequence " << next_read_seq_;
             

@@ -22,9 +22,9 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "hardcore_video_frame.hpp"
+#include "frame.hpp"
+#include "frame_disruptor.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"
