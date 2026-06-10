@@ -119,7 +119,7 @@ int main(int argc, const char* argv[]) {
         
         FrameDisruptor ringBuffer;
 		for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-			ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+			ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 		}
 
         MjpegStream stream(ringBuffer);

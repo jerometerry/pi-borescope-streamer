@@ -7,7 +7,7 @@
 #include "zero_allocation_response_builder.hpp"
 
 std::string_view ZeroAllocationResponseBuilder::build(HardcoreVideoFrame& frame) {
-    size_t size = frame.active_size;
+    size_t size = frame.contentSize();
 
     // buffer has 128 bytes reserved for zero-byte allocations
     // startPtr is offset 128 bytes from the start of the allocated buffer

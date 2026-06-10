@@ -25,12 +25,12 @@ namespace disruptor {
     struct alignas(cache_line_size) Sequence {
         std::atomic<int64_t> value{-1};
 
-        [[nodiscard]] int64_t wait_until_greater_or_equal(int64_t target) const noexcept {
+        [[nodiscard]] int64_t waitUntilGreaterOrEqual(int64_t target) const noexcept {
             int64_t current = value.load(std::memory_order_acquire);
             
             // Hybrid Spin-Wait Strategy: Low-latency spinning first
-            uint32_t spin_count = 0;
-            while (current < target && spin_count < 2000) {
+            uint32_t spinCount = 0;
+            while (current < target && spinCount < 2000) {
                 #if defined(__x86_64__) || defined (_M_X64)
                     #if defined(_MSC_VER)
                         _mm_pause();
@@ -43,7 +43,7 @@ namespace disruptor {
                     std::this_thread::yield();
                 #endif
                 current = value.load(std::memory_order_relaxed);
-                spin_count++;
+                spinCount++;
             }
 
             // Fallback to OS-assisted sleep if the producer/consumer is heavily delayed
@@ -55,8 +55,8 @@ namespace disruptor {
             return current;
         }
 
-        void publish(int64_t new_value) noexcept {
-            value.store(new_value, std::memory_order_release);
+        void publish(int64_t newValue) noexcept {
+            value.store(newValue, std::memory_order_release);
             value.notify_all(); // Wakes up OS thread if it fell asleep
         }
     };
@@ -79,44 +79,44 @@ namespace disruptor {
     };
 
     template <typename T, size_t Capacity>
-    class SPSCDisruptor {
+    class Disruptor {
     private:
         RingBuffer<T, Capacity> buffer_;
-        Sequence claim_sequence_;
-        Sequence published_sequence_;
-        Sequence consumer_sequence_;
+        Sequence claimSequence_;
+        Sequence publishedSequence_;
+        Sequence consumerSequence_;
 
     public:
         [[nodiscard]] int64_t claim() noexcept {
-            int64_t next_sequence = claim_sequence_.value.load(std::memory_order_relaxed) + 1;
-            int64_t wrap_point = next_sequence - buffer_.capacity();
+            int64_t nextSequence = claimSequence_.value.load(std::memory_order_relaxed) + 1;
+            int64_t wrapPoint = nextSequence - buffer_.capacity();
 
-            while (consumer_sequence_.value.load(std::memory_order_acquire) < wrap_point) {
+            while (consumerSequence_.value.load(std::memory_order_acquire) < wrapPoint) {
                 std::this_thread::yield(); 
             }
 
-            claim_sequence_.value.store(next_sequence, std::memory_order_release);
-            return next_sequence;
+            claimSequence_.value.store(nextSequence, std::memory_order_release);
+            return nextSequence;
         }
 
-        [[nodiscard]] T& get_by_sequence(int64_t sequence) noexcept {
+        [[nodiscard]] T& getBySequence(int64_t sequence) noexcept {
             return buffer_[sequence];
         }
 
         void publish(int64_t sequence) noexcept {
-            published_sequence_.publish(sequence);
+            publishedSequence_.publish(sequence);
         }
 
-        [[nodiscard]] int64_t wait_for(int64_t next_sequence) const noexcept {
-            return published_sequence_.wait_until_greater_or_equal(next_sequence);
+        [[nodiscard]] int64_t waitFor(int64_t nextSequence) const noexcept {
+            return publishedSequence_.waitUntilGreaterOrEqual(nextSequence);
         }
 
-        void mark_consumed(int64_t sequence) noexcept {
-            consumer_sequence_.value.store(sequence, std::memory_order_release);
+        void markConsumed(int64_t sequence) noexcept {
+            consumerSequence_.value.store(sequence, std::memory_order_release);
         }
 
-         [[nodiscard]] int64_t get_highest_published() const noexcept {
-            return published_sequence_.value.load(std::memory_order_acquire);
+         [[nodiscard]] int64_t getHighestPublished() const noexcept {
+            return publishedSequence_.value.load(std::memory_order_acquire);
         }
     };
 }

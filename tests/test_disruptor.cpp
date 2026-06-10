@@ -15,46 +15,46 @@ struct Event {
 
 // 1. Test basic FIFO order
 TEST(DisruptorCorrectness, MaintainsFifoOrder) {
-    SPSCDisruptor<Event, 4> pipeline;
+    Disruptor<Event, 4> pipeline;
 
     for (int64_t i = 0; i < 3; ++i) {
         int64_t seq = pipeline.claim();
-        pipeline.get_by_sequence(seq).id = i;
+        pipeline.getBySequence(seq).id = i;
         pipeline.publish(seq);
     }
 
     for (int64_t i = 0; i < 3; ++i) {
-        int64_t available = pipeline.wait_for(i);
+        int64_t available = pipeline.waitFor(i);
         EXPECT_GE(available, i);
-        EXPECT_EQ(pipeline.get_by_sequence(i).id, i);
-        pipeline.mark_consumed(i);
+        EXPECT_EQ(pipeline.getBySequence(i).id, i);
+        pipeline.markConsumed(i);
     }
 }
 
 // 2. Test boundary wraparound
 TEST(DisruptorCorrectness, HandlesBufferWraparound) {
     // Capacity 4 means indices 0, 1, 2, 3
-    SPSCDisruptor<Event, 4> pipeline;
+    Disruptor<Event, 4> pipeline;
 
     // Push 6 items to force a wrap
     for (int64_t i = 0; i < 6; ++i) {
         [[maybe_unused]] int64_t seq = pipeline.claim();
-        pipeline.get_by_sequence(seq).id = i;
+        pipeline.getBySequence(seq).id = i;
         pipeline.publish(seq);
         
         // Consume immediately to keep the producer moving
-        int64_t available = pipeline.wait_for(seq);
+        int64_t available = pipeline.waitFor(seq);
         EXPECT_GE(available, seq);
-        pipeline.mark_consumed(seq);
+        pipeline.markConsumed(seq);
     }
     
     // Verify the last published value is still correct despite the wrap
-    EXPECT_EQ(pipeline.get_by_sequence(5).id, 5);
+    EXPECT_EQ(pipeline.getBySequence(5).id, 5);
 }
 
 // 3. Test Backpressure (The Producer should block if consumer stops)
 TEST(DisruptorCorrectness, ProducerBlocksWhenFull) {
-    SPSCDisruptor<Event, 4> pipeline;
+    Disruptor<Event, 4> pipeline;
 
     // Fill the buffer to capacity (4 slots)
     for (int i = 0; i < 4; ++i) {
@@ -77,7 +77,7 @@ TEST(DisruptorCorrectness, ProducerBlocksWhenFull) {
     EXPECT_FALSE(claimed.load());
 
     // Release one slot so the producer can finish
-    pipeline.mark_consumed(0);
+    pipeline.markConsumed(0);
     
     // Wait briefly for the thread to unblock
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -90,7 +90,7 @@ TEST(DisruptorTest, ConcurrentStressTestProcessesAllEventsWithoutDataLoss) {
     // Gauss's formula: Sum of 0 to N-1
     constexpr int64_t EXPECTED_EVENT_ID_SUM = (TOTAL_EVENTS * (TOTAL_EVENTS - 1)) / 2;
     
-    disruptor::SPSCDisruptor<Event, 65536> pipeline; 
+    disruptor::Disruptor<Event, 65536> pipeline; 
     std::atomic<int64_t> actual_id_sum{0};
 
     // Consumer Thread
@@ -99,15 +99,15 @@ TEST(DisruptorTest, ConcurrentStressTestProcessesAllEventsWithoutDataLoss) {
         int64_t local_sum = 0;
         
         while (next_read < TOTAL_EVENTS) {
-            int64_t available = pipeline.wait_for(next_read);
+            int64_t available = pipeline.waitFor(next_read);
             
             while (next_read <= available && next_read < TOTAL_EVENTS) {
-                Event& event = pipeline.get_by_sequence(next_read);
+                Event& event = pipeline.getBySequence(next_read);
                 local_sum += event.id;
                 next_read++;
             }
             
-            pipeline.mark_consumed(next_read - 1);
+            pipeline.markConsumed(next_read - 1);
         }
         
         // Export the result back to the main thread
@@ -118,7 +118,7 @@ TEST(DisruptorTest, ConcurrentStressTestProcessesAllEventsWithoutDataLoss) {
     for (int64_t i = 0; i < TOTAL_EVENTS; ++i) {
         int64_t seq = pipeline.claim();
         
-        Event& event = pipeline.get_by_sequence(seq);
+        Event& event = pipeline.getBySequence(seq);
         event.id = i;
         event.price = 100.0 + (i % 10);
         

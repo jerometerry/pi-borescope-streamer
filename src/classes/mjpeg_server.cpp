@@ -56,18 +56,18 @@ void MjpegServer::onTimer(us_timer_t *t) {
         return;
     }
 
-    int64_t available = server->disruptor_->get_highest_published();
+    int64_t available = server->disruptor_->getHighestPublished();
     if (available < server->nextReadSequence_) {
         return;
     }
     bool processedAny = false;
 
     while (server->nextReadSequence_ <= available) {
-        HardcoreVideoFrame& currentFrame = server->disruptor_->get_by_sequence(server->nextReadSequence_);
+        HardcoreVideoFrame& currentFrame = server->disruptor_->getBySequence(server->nextReadSequence_);
 
         const uint32_t currentFrameId = static_cast<uint32_t>(server->nextReadSequence_);
 
-        if (currentFrame.active_size > 0) {
+        if (currentFrame.contentSize() > 0) {
             for (size_t i = 0; i < server->activeViewers_.size(); ) {
                 auto& viewer = server->activeViewers_[i];
                 auto* res = viewer.res;
@@ -137,7 +137,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
     }
 
     if (processedAny) {
-        server->disruptor_->mark_consumed(server->nextReadSequence_ -1);
+        server->disruptor_->markConsumed(server->nextReadSequence_ -1);
     }
 
     std::erase_if(server->activeViewers_, [](const auto& viewer) {

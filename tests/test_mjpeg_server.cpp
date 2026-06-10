@@ -45,7 +45,7 @@ public:
         server_(TEST_PORT, running_, disruptor_)
     {
         for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-            disruptor_.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+            disruptor_.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         }
     }   
 
@@ -64,15 +64,15 @@ protected:
 
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
         int64_t seq = disruptor_.claim();
-        HardcoreVideoFrame& slot = disruptor_.get_by_sequence(seq);
-        slot.append_payload(data);
+        HardcoreVideoFrame& slot = disruptor_.getBySequence(seq);
+        slot.insertContent(data);
         disruptor_.publish(seq);
     }
 
     void injectMockVideoFrame(const BufferPtr& frame) {
         int64_t seq = disruptor_.claim();
-        HardcoreVideoFrame& slot = disruptor_.get_by_sequence(seq);
-        slot.append_payload(frame->getContentSlice());
+        HardcoreVideoFrame& slot = disruptor_.getBySequence(seq);
+        slot.insertContent(frame->getContentSlice());
         disruptor_.publish(seq);
     }
 

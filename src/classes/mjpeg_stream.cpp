@@ -82,7 +82,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         );
 
         if (frameActive_ && 
-            disruptor_->get_by_sequence(currentClaimSequence_).active_size> 0 && 
+            disruptor_->getBySequence(currentClaimSequence_).contentSize() > 0 && 
             payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
             outputFrame();
         }
@@ -102,7 +102,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
                 inputBuffer_.data() + payloadStart, 
                 payloadSize
             );
-            slot.append_payload(toInsert);
+            slot.insertContent(toInsert);
         }
 
         i += totalPacketSize;
@@ -124,13 +124,13 @@ void MjpegStream::outputFrame() {
         return;
     }
 
-    HardcoreVideoFrame& slot = disruptor_->get_by_sequence(currentClaimSequence_);
-    if (slot.active_size == 0) {
+    HardcoreVideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);
+    if (slot.contentSize() == 0) {
         frameActive_ = false;
         return;
     }
 
-    std::span<const uint8_t> buffer(slot.storage.data(), slot.active_size);
+    std::span<const uint8_t> buffer(slot.storage.data(), slot.contentSize());
     size_t soiOffset = std::string::npos;
     size_t eoiOffset = std::string::npos;
 
@@ -166,11 +166,11 @@ void MjpegStream::outputFrame() {
 HardcoreVideoFrame& MjpegStream::getActiveFrameSlot() {
     if (!frameActive_) {
         currentClaimSequence_ = disruptor_->claim();
-        HardcoreVideoFrame& slot = disruptor_->get_by_sequence(currentClaimSequence_);
+        HardcoreVideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);
         slot.clear();
         frameActive_ = true;
         return slot;
     }
-    return disruptor_->get_by_sequence(currentClaimSequence_);
+    return disruptor_->getBySequence(currentClaimSequence_);
 }
     

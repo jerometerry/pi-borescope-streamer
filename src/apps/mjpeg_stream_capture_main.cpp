@@ -93,9 +93,9 @@ int main() {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-		disruptor::SPSCDisruptor<HardwareBuffer, 65536> ringBuffer;
+		disruptor::Disruptor<HardwareBuffer, 65536> ringBuffer;
 		for (int64_t i = 0; i < 65536; i++) {
-			ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+			ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 		}
 
 		std::jthread diskWriter([&ringBuffer](const std::stop_token& st) {
@@ -103,10 +103,10 @@ int main() {
             int64_t next_read = 0;
             
             while (!st.stop_requested()) {
-				int64_t available = ringBuffer.wait_for(next_read);
+				int64_t available = ringBuffer.waitFor(next_read);
 
 				while (next_read <= available) {
-					HardwareBuffer& slot = ringBuffer.get_by_sequence(next_read);
+					HardwareBuffer& slot = ringBuffer.getBySequence(next_read);
 
 					if (slot.active_size > 0) {
 						outFile.write(reinterpret_cast<const char*>(slot.storage.data()), slot.active_size);
@@ -114,9 +114,9 @@ int main() {
 
 					next_read++;
 				}
-				ringBuffer.mark_consumed(next_read - 1);
+				ringBuffer.markConsumed(next_read - 1);
 			}
-			ringBuffer.mark_consumed(next_read -1);
+			ringBuffer.markConsumed(next_read -1);
         });
 
 		auto transfer = [&](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
@@ -128,7 +128,7 @@ int main() {
 
 			if (status == UsbTransferStatus::Completed && !payload.empty()) {
 				int64_t seq = ringBuffer.claim();
-				HardwareBuffer& slot = ringBuffer.get_by_sequence(seq);
+				HardwareBuffer& slot = ringBuffer.getBySequence(seq);
 				slot.write_payload(payload);
 				ringBuffer.publish(seq);
             }
@@ -151,7 +151,7 @@ int main() {
 
         driver.stop();
 		int64_t seq = ringBuffer.claim();
-		ringBuffer.get_by_sequence(seq) = nullptr;
+		ringBuffer.getBySequence(seq) = nullptr;
 		ringBuffer.publish(seq);
 
 		return EXIT_SUCCESS;
