@@ -24,11 +24,7 @@ public:
         : disruptor_(), 
           stream_(disruptor_)
     {
-        for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-            disruptor_
-                .getBySequence(i)
-                .preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        }
+        disruptor_.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }    
 
 protected:
@@ -468,9 +464,7 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
 
 TEST_F(MjpegStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
     FrameDisruptor ringBuffer;
-    for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-        ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-    }
+    ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     MjpegStream silentDecoder(ringBuffer);
     std::vector<uint8_t> packet(100, 0x00);
     

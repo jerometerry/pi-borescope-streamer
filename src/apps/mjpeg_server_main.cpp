@@ -112,9 +112,7 @@ int main(int argc, const char* argv[]) {
                   << " Address " << static_cast<int>(camera.address) << "...\n";
         
         FrameDisruptor ringBuffer;
-		for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-			ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-		}
+        ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
         MjpegStream stream(ringBuffer);
 

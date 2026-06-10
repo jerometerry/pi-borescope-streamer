@@ -60,9 +60,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
     std::atomic<bool> producer_running{true};
 
     FrameDisruptor ringBuffer;
-    for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-        ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-    }
+    ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
     std::jthread consumer([&ringBuffer, &producer_running]() {
         int64_t next_read = 0;
@@ -110,9 +108,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
     std::atomic<bool> producer_running{true};
 
     FrameDisruptor ringBuffer;
-    for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-        ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-    }
+    ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
     std::jthread consumer([&ringBuffer, &producer_running]() {
         int64_t next_read = 0;

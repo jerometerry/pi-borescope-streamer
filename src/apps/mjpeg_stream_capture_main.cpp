@@ -33,6 +33,13 @@
 
 namespace {
     static std::atomic<bool> running{true};
+
+    struct alignas(disruptor::cache_line_size) PipelineMetrics {
+        std::atomic<uint64_t> totalFramesReceived{0};
+        std::atomic<uint64_t> totalFramesDropped{0};
+    };
+    
+    static PipelineMetrics metrics;
 }
 
 void signalHandler(int /*signum*/) {
@@ -80,7 +87,6 @@ int main() {
 
     try {
         UsbDeviceInfo camera;
-        
         if (!selectCamera(camera)) {
             return EXIT_FAILURE;
         }
@@ -88,55 +94,101 @@ int main() {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-		FrameDisruptor ringBuffer;
-		for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-			ringBuffer.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-		}
+        FrameDisruptor ringBuffer;
+		ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+
+		std::jthread metricsMonitor([](const std::stop_token& st) {
+			uint64_t last_received = 0;
+			uint64_t last_dropped = 0;
+			auto last_time = std::chrono::steady_clock::now();
+
+			std::cout << "[Metrics] Monitoring engine activated.\n";
+
+			while (!st.stop_requested() && running.load(std::memory_order_relaxed)) {
+				std::this_thread::sleep_for(std::chrono::seconds(1));
+
+				uint64_t current_received = metrics.totalFramesReceived.load(std::memory_order_relaxed);
+				uint64_t current_dropped = metrics.totalFramesDropped.load(std::memory_order_relaxed);
+				auto current_time = std::chrono::steady_clock::now();
+
+				std::chrono::duration<double> elapsed = current_time - last_time;
+				double seconds = elapsed.count();
+
+				if (seconds > 0.0) {
+					uint64_t delta_received = current_received - last_received;
+					uint64_t delta_dropped = current_dropped - last_dropped;
+					uint64_t total_attempted = delta_received + delta_dropped;
+
+					double fps = delta_received / seconds;
+					double drop_rate = (total_attempted > 0) 
+						? (static_cast<double>(delta_dropped) / total_attempted) * 100.0 
+						: 0.0;
+
+					if (delta_dropped > 0) {
+						std::printf("[METRICS] Ingestion: %.2f FPS | WARNING: Dropped %llu frames (%.1f%% drop rate) due to disk saturation\n", 
+									fps, delta_dropped, drop_rate);
+					} else if (delta_received > 0) {
+						std::printf("[METRICS] Ingestion: %.2f FPS | Health: 100%% | Total Processed: %llu\n", 
+									fps, current_received);
+					}
+				}
+
+				last_received = current_received;
+				last_dropped = current_dropped;
+				last_time = current_time;
+			}
+			std::cout << "[Metrics] Monitoring engine stopped.\n";
+		});
 
 		std::jthread diskWriter([&ringBuffer](const std::stop_token& st) {
-            std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
-            int64_t next_read = 0;
-            
-            while (!st.stop_requested()) {
+			std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
+			int64_t next_read = 0;
+
+			while (running.load(std::memory_order_relaxed) || ringBuffer.getHighestPublished() >= next_read) {
 				int64_t available = ringBuffer.waitFor(next_read);
 
-				while (next_read <= available) {
-					Frame& slot = ringBuffer.getBySequence(next_read);
+				if (next_read <= available) {
+					while (next_read <= available) {
+						Frame& slot = ringBuffer.getBySequence(next_read);
 
-					if (slot.active_size > 0) {
-						outFile.write(
-							reinterpret_cast<const char*>(slot.getContentSlice().data()), 
-							slot.active_size
-						);
+						if (slot.active_size > 0) {
+							outFile.write(
+								reinterpret_cast<const char*>(slot.getContentSlice().data()), 
+								slot.active_size
+							);
+						}
+						next_read++;
 					}
-
-					next_read++;
+					ringBuffer.markConsumed(next_read - 1);
 				}
-				ringBuffer.markConsumed(next_read - 1);
+
+				if (st.stop_requested()) {
+					break;
+				}
 			}
-			ringBuffer.markConsumed(next_read -1);
-        });
+		});
 
 		auto transfer = [&](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
-			static int call_count = 0;
-    		if (call_count++ % 100 == 0) { 
-				std::cerr << "[DEBUG] Transfer callback fired. Status: " 
-						  << (int)status << " Size: " << payload.size() << "\n";
-			}
-
 			if (status == UsbTransferStatus::Completed && !payload.empty()) {
-				int64_t seq = ringBuffer.claim();
-				Frame& slot = ringBuffer.getBySequence(seq);
-				slot.insertContent(payload);
-				ringBuffer.publish(seq);
-            }
-            return status != UsbTransferStatus::Disconnected; 
-        };
+				auto seq_opt = ringBuffer.tryClaim();
+				
+				if (seq_opt.has_value()) {
+					int64_t seq = *seq_opt;
+					Frame& slot = ringBuffer.getBySequence(seq);
+					slot.insertContent(payload);
+					ringBuffer.publish(seq);
+
+					metrics.totalFramesReceived.fetch_add(1, std::memory_order_relaxed);
+				} else {
+					metrics.totalFramesDropped.fetch_add(1, std::memory_order_relaxed);
+				}
+			}
+			return status != UsbTransferStatus::Disconnected; 
+		};
+
 
         UsbDriver driver(transfer, &running);
-
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
-
         driver.start(camera);
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
@@ -149,12 +201,11 @@ int main() {
 
         driver.stop();
 
-		int64_t seq = ringBuffer.claim();
-		Frame& slot = ringBuffer.getBySequence(seq);
-		slot.clear();
-		ringBuffer.publish(seq);
+        int64_t seq = ringBuffer.claim();
+        ringBuffer.getBySequence(seq).active_size = 0; 
+        ringBuffer.publish(seq);
 
-		return EXIT_SUCCESS;
+        return EXIT_SUCCESS;
 
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception: " << e.what() << "\n";

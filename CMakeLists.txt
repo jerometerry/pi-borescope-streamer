@@ -385,6 +385,16 @@ target_link_libraries(disruptor.bench
         project_warnings
 )
 
+add_executable(disruptor_concurrency.bench benchmark/disruptor_concurrency_benchmark.cpp)
+
+target_link_libraries(disruptor_concurrency.bench
+    PRIVATE 
+        Borescope::Core
+        benchmark::benchmark_main
+        Threads::Threads
+        project_warnings
+)
+
 add_executable(mjpeg_pipeline.bench benchmark/mjpeg_pipeline_benchmark.cpp)
 
 target_link_libraries(mjpeg_pipeline.bench 

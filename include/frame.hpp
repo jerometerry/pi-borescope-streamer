@@ -6,15 +6,16 @@
 #include <span>
 #include <vector>
 #include <stdexcept>
+#include "disruptor.hpp"
 
-struct alignas(64) Frame {
+struct alignas(disruptor::cache_line_size) Frame {
     static constexpr size_t PADDING_SIZE = 128;
 
     std::vector<uint8_t> storage;
     size_t active_size{0};
 
     Frame() {
-        storage.resize(PADDING_SIZE);
+        storage.resize(paddingSize());
     }
 
     void preAllocate(size_t frame_reserve_capacity) {
@@ -31,7 +32,7 @@ struct alignas(64) Frame {
     }
 
     void insertContent(std::span<const uint8_t> content) {
-        size_t write_offset = PADDING_SIZE + active_size;
+        size_t write_offset = paddingSize() + active_size;
 
         if (write_offset + content.size() > storage.size()) {
             storage.resize(write_offset + content.size());
@@ -50,29 +51,37 @@ struct alignas(64) Frame {
 
         if (startOffset > 0) {
             std::memmove(
-                storage.data() + PADDING_SIZE, 
-                storage.data() + PADDING_SIZE + startOffset, 
+                storage.data() + paddingSize(), 
+                storage.data() + paddingSize() + startOffset, 
                 new_length
             );
         }
         active_size = new_length;
     }
 
-    size_t contentSize() const noexcept { return active_size; }
-    size_t paddingSize() const noexcept { return PADDING_SIZE; }
-    size_t totalSize() const noexcept { return PADDING_SIZE + active_size; }
+    static size_t paddingSize() noexcept { 
+        return PADDING_SIZE; 
+    }
+
+    size_t contentSize() const noexcept { 
+        return active_size; 
+    }
+
+    size_t totalSize() const noexcept { 
+        return paddingSize() + active_size; 
+}
     
     uint8_t front() const {
         if (empty()) throw std::out_of_range("Buffer is empty");
-        return storage[PADDING_SIZE];
+        return storage[paddingSize()];
     }
 
     std::span<const uint8_t> getContentSlice() const noexcept {
-        return { storage.data() + PADDING_SIZE, active_size };
+        return { storage.data() + paddingSize(), active_size };
     }
 
     std::span<uint8_t> getMutableContentSlice() noexcept {
-        return { storage.data() + PADDING_SIZE, active_size };
+        return { storage.data() + paddingSize(), active_size };
     }
 
     std::vector<uint8_t>& data() noexcept {

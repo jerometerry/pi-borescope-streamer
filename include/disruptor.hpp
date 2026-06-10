@@ -12,6 +12,7 @@
 #include <concepts>
 #include <cstdint>
 #include <new>
+#include <optional>
 #include <thread>
 
 namespace disruptor {
@@ -81,21 +82,56 @@ namespace disruptor {
     template <typename T, size_t Capacity>
     class Disruptor {
     private:
-        RingBuffer<T, Capacity> buffer_;
-        Sequence claimSequence_;
-        Sequence publishedSequence_;
-        Sequence consumerSequence_;
+        alignas(cache_line_size) RingBuffer<T, Capacity> buffer_;
+        alignas(cache_line_size) Sequence publishedSequence_;
+        alignas(cache_line_size) Sequence consumerSequence_;
+
+        alignas(cache_line_size) int64_t producerSequence_{-1};
+        alignas(cache_line_size) int64_t cachedConsumerSequence_{-1};
 
     public:
+        void preAllocate(const int64_t slotSize) {
+            for (int64_t i = 0; i < Capacity; i++) {
+                auto slot = getBySequence(i);
+                slot.preAllocate(slotSize);
+            }
+        }
+
         [[nodiscard]] int64_t claim() noexcept {
-            int64_t nextSequence = claimSequence_.value.load(std::memory_order_relaxed) + 1;
+            int64_t nextSequence = producerSequence_ + 1;
             int64_t wrapPoint = nextSequence - buffer_.capacity();
 
-            while (consumerSequence_.value.load(std::memory_order_acquire) < wrapPoint) {
-                std::this_thread::yield(); 
+            if (cachedConsumerSequence_ < wrapPoint) {
+                while ((cachedConsumerSequence_ = consumerSequence_.value.load(std::memory_order_acquire)) < wrapPoint) {
+                    #if defined(__x86_64__) || defined (_M_X64)
+                        #if defined(_MSC_VER)
+                            _mm_pause();
+                        #else
+                            asm volatile("pause" ::: "memory");
+                        #endif
+                    #else
+                        std::this_thread::yield(); 
+                    #endif
+                }
             }
 
-            claimSequence_.value.store(nextSequence, std::memory_order_release);
+            producerSequence_ = nextSequence;
+            return nextSequence;
+        }
+
+        [[nodiscard]] std::optional<int64_t> tryClaim() noexcept {
+            int64_t nextSequence = producerSequence_ + 1;
+            int64_t wrapPoint = nextSequence - buffer_.capacity();
+
+            if (cachedConsumerSequence_ < wrapPoint) {
+                cachedConsumerSequence_ = consumerSequence_.value.load(std::memory_order_relaxed);
+
+                if (cachedConsumerSequence_ < wrapPoint) {
+                    return std::nullopt;
+                }
+            }
+
+            producerSequence_ = nextSequence;
             return nextSequence;
         }
 
@@ -115,7 +151,7 @@ namespace disruptor {
             consumerSequence_.value.store(sequence, std::memory_order_release);
         }
 
-         [[nodiscard]] int64_t getHighestPublished() const noexcept {
+        [[nodiscard]] int64_t getHighestPublished() const noexcept {
             return publishedSequence_.value.load(std::memory_order_acquire);
         }
     };

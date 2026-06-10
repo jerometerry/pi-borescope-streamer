@@ -39,9 +39,7 @@ public:
         disruptor_(), 
         server_(TEST_PORT, running_, disruptor_)
     {
-        for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
-            disruptor_.getBySequence(i).preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        }
+        disruptor_.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }   
 
 protected:

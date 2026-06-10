@@ -3,7 +3,7 @@
 #include <thread>
 #include "disruptor.hpp"
 
-struct alignas(64) Event {
+struct alignas(disruptor::cache_line_size) Event {
     int64_t id;
 };
 
