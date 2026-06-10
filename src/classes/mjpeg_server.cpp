@@ -1,6 +1,7 @@
 #include <App.h>
 #include <HttpResponse.h>
 #include <Loop.h>
+#include <exception>
 #include <libusockets.h>
 #include <algorithm>
 #include <atomic>
@@ -9,6 +10,7 @@
 #include <iostream>
 #include <functional>
 #include <future>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -54,7 +56,10 @@ void MjpegServer::onTimer(us_timer_t *t) {
         return;
     }
 
-    int64_t available = server->disruptor_->wait_for(server->nextReadSequence_);
+    int64_t available = server->disruptor_->get_highest_published();
+    if (available < server->nextReadSequence_) {
+        return;
+    }
     bool processedAny = false;
 
     while (server->nextReadSequence_ <= available) {
@@ -195,7 +200,7 @@ void MjpegServer::start() {
         app.any("/*", [](auto *res, auto *) {
             res->writeStatus("404 Not Found")->end();
         });
-        app.listen(port_, [this](us_listen_socket_t *socket) {
+        app.listen(port_, [this, &loopPromise](us_listen_socket_t *socket) {
             if (socket) {
                 listenSocket_ = socket;
                 std::cerr << "[Network Core] Asynchronous uWebSockets engine listening on port " << port_ << '\n';
@@ -214,12 +219,18 @@ void MjpegServer::start() {
                     WebServerConfig::TIMER_INTERVAL_MS, 
                     WebServerConfig::TIMER_INTERVAL_MS
                 );
+
+                loopPromise.set_value();
             } else {
                 std::cerr << "[Network Core Error] Failed to bind to port " << port_ << '\n';
+                try {
+                    throw std::runtime_error("Port binding failed");
+                } catch(...) {
+                    loopPromise.set_exception(std::current_exception());
+                }
             }
         });
 
-        loopPromise.set_value(); 
         app.run();
     });
 

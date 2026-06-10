@@ -114,5 +114,9 @@ namespace disruptor {
         void mark_consumed(int64_t sequence) noexcept {
             consumer_sequence_.value.store(sequence, std::memory_order_release);
         }
+
+         [[nodiscard]] int64_t get_highest_published() const noexcept {
+            return published_sequence_.value.load(std::memory_order_acquire);
+        }
     };
 }

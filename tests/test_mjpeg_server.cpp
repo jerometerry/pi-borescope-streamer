@@ -51,6 +51,9 @@ public:
 
 protected:
     void SetUp() override {
+        int64_t seq = disruptor_.claim();
+        disruptor_.publish(seq);
+
         server_.start();
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
