@@ -26,7 +26,6 @@
 #include <thread>
 #include <vector>
 #include "buffer.hpp"
-#include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "disruptor.hpp"
@@ -150,8 +149,10 @@ int main() {
         std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
 
         driver.stop();
+
 		int64_t seq = ringBuffer.claim();
-		ringBuffer.getBySequence(seq) = nullptr;
+		HardwareBuffer& slot = ringBuffer.getBySequence(seq);
+		slot.clear();
 		ringBuffer.publish(seq);
 
 		return EXIT_SUCCESS;

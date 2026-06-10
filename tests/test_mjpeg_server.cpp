@@ -17,7 +17,6 @@
 #include <vector>
 #include "constants.hpp"
 #include "buffer.hpp"
-#include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "hardcore_video_frame.hpp"
 #include "intrusive_ptr.hpp"
@@ -65,14 +64,10 @@ protected:
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
         int64_t seq = disruptor_.claim();
         HardcoreVideoFrame& slot = disruptor_.getBySequence(seq);
-        slot.insertContent(data);
-        disruptor_.publish(seq);
-    }
 
-    void injectMockVideoFrame(const BufferPtr& frame) {
-        int64_t seq = disruptor_.claim();
-        HardcoreVideoFrame& slot = disruptor_.getBySequence(seq);
-        slot.insertContent(frame->getContentSlice());
+        slot.clear();
+        slot.insertContent(data);
+        
         disruptor_.publish(seq);
     }
 
@@ -118,76 +113,101 @@ protected:
     }
 };
 
-// TEST_F(MjpegServerTest, Returns404ForUnknownRoutes) {
-//     std::string response = fetchFromLocalhost("/invalid-route");
-//     std::string lowerResponse = toLowerString(response);
+TEST_F(MjpegServerTest, Returns404ForUnknownRoutes) {
+    std::string response = fetchFromLocalhost("/invalid-route");
+    std::string lowerResponse = toLowerString(response);
     
-//     EXPECT_FALSE(response.empty());
-//     EXPECT_NE(lowerResponse.find("404 not found"), std::string::npos);
-// }
+    EXPECT_FALSE(response.empty());
+    EXPECT_NE(lowerResponse.find("404 not found"), std::string::npos);
+}
 
-// TEST_F(MjpegServerTest, ReturnsFaviconNotFoundWithCacheHeaders) {
-//     std::string response = fetchFromLocalhost("/favicon.ico");
-//     std::string lowerResponse = toLowerString(response);
+TEST_F(MjpegServerTest, ReturnsFaviconNotFoundWithCacheHeaders) {
+    std::string response = fetchFromLocalhost("/favicon.ico");
+    std::string lowerResponse = toLowerString(response);
     
-//     EXPECT_FALSE(response.empty());
-//     EXPECT_NE(lowerResponse.find("404 not found"), std::string::npos);
-//     EXPECT_NE(lowerResponse.find("max-age=31536000"), std::string::npos); 
-// }
+    EXPECT_FALSE(response.empty());
+    EXPECT_NE(lowerResponse.find("404 not found"), std::string::npos);
+    EXPECT_NE(lowerResponse.find("max-age=31536000"), std::string::npos); 
+}
 
-// TEST_F(MjpegServerTest, ServesWebDashboard) {
-//     std::string response = fetchFromLocalhost("/");
-//     std::string lowerResponse = toLowerString(response);
+TEST_F(MjpegServerTest, ServesWebDashboard) {
+    std::string response = fetchFromLocalhost("/");
+    std::string lowerResponse = toLowerString(response);
 
-//     EXPECT_NE(lowerResponse.find("200 ok"), std::string::npos);
-//     EXPECT_NE(lowerResponse.find("content-type: text/html"), std::string::npos);
-// }
+    EXPECT_NE(lowerResponse.find("200 ok"), std::string::npos);
+    EXPECT_NE(lowerResponse.find("content-type: text/html"), std::string::npos);
+}
 
-// TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
-//     int sock = socket(AF_INET, SOCK_STREAM, 0);
-//     ASSERT_GE(sock, 0);
+TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_GE(sock, 0);
 
-//     struct timeval timeout{};
-//     timeout.tv_sec = 2; 
-//     timeout.tv_usec = 0;
-//     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    struct timeval timeout{};
+    timeout.tv_sec = 2; 
+    timeout.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
-//     struct sockaddr_in serv_addr{};
-//     serv_addr.sin_family = AF_INET;
-//     serv_addr.sin_port = htons(TEST_PORT);
-//     inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+    struct sockaddr_in serv_addr{};
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(TEST_PORT);
+    inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 
-//     ASSERT_GE(connect(sock, reinterpret_cast<struct sockaddr*>(&serv_addr), sizeof(serv_addr)), 0);
+    ASSERT_GE(connect(sock, reinterpret_cast<struct sockaddr*>(&serv_addr), sizeof(serv_addr)), 0);
 
-//     std::string request = "GET /stream HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
-//     send(sock, request.c_str(), request.length(), 0);
+    // FIX 1: Send "Connection: keep-alive" instead of "close"
+    std::string request = "GET /stream HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n";
+    send(sock, request.c_str(), request.length(), 0);
 
-//     std::vector<uint8_t> mockVideoFrame = {0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9};
-//     injectMockVideoFrame(mockVideoFrame);
-
-//     std::string chunkResponse;
-//     std::string payloadString(mockVideoFrame.begin(), mockVideoFrame.end());
-//     char buffer[4096];
+    std::string chunkResponse;
+    char buffer[4096];
+    bool headersReceived = false;
     
-//     auto startTime = std::chrono::steady_clock::now();
+    auto startTime = std::chrono::steady_clock::now();
 
-//     while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(2)) {
-//         int bytesRead = read(sock, buffer, sizeof(buffer));
-//         if (bytesRead > 0) {
-//             chunkResponse.append(buffer, bytesRead);
-//         }
+    // 1. Wait for HTTP Headers (Confirming the viewer is registered)
+    while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(2)) {
+        int bytesRead = read(sock, buffer, sizeof(buffer));
+        
+        if (bytesRead > 0) {
+            chunkResponse.append(buffer, bytesRead);
+            if (toLowerString(chunkResponse).find("multipart/x-mixed-replace") != std::string::npos) {
+                headersReceived = true;
+                break;
+            }
+        }
+        
+        // CRITICAL: Do NOT break if bytesRead <= 0. We must wait out the timer!
+        std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
+    }
 
-//         if (chunkResponse.find(payloadString) != std::string::npos) {
-//             break;
-//         }
+    ASSERT_TRUE(headersReceived) << "Server did not respond with stream headers.";
 
-//         std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
-//     }
+    // 2. NOW inject the frame
+    std::vector<uint8_t> mockVideoFrame = {0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9};
+    injectMockVideoFrame(mockVideoFrame);
 
-//     std::string lowerResponse = toLowerString(chunkResponse);
-//     EXPECT_NE(lowerResponse.find("--mjpegstream"), std::string::npos);
-//     EXPECT_NE(lowerResponse.find("content-type: image/jpeg"), std::string::npos);
-//     EXPECT_NE(chunkResponse.find(payloadString), std::string::npos) << "Stream chunk payload corrupted or incomplete.";
+    std::string payloadString(mockVideoFrame.begin(), mockVideoFrame.end());
+    bool payloadReceived = false;
 
-//     close(sock);
-// }
+    // FIX 2: Reset the clock so the payload gets a full 2 seconds to arrive
+    startTime = std::chrono::steady_clock::now();
+
+    // 3. Wait for the frame payload
+    while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(2)) {
+        int bytesRead = read(sock, buffer, sizeof(buffer));
+        
+        if (bytesRead > 0) {
+            chunkResponse.append(buffer, bytesRead);
+            if (chunkResponse.find(payloadString) != std::string::npos) {
+                payloadReceived = true;
+                break;
+            }
+        }
+        
+        std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
+    }
+
+    EXPECT_TRUE(payloadReceived) << "Stream chunk payload corrupted or incomplete.";
+
+    close(sock);
+}

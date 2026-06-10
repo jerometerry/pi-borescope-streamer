@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 #include "buffer.hpp"
-#include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "hardcore_video_frame.hpp"
@@ -18,15 +17,8 @@
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
 
-class MockHandlers {
-public:
-    MOCK_METHOD(void, output, (BufferPtr frame));
-};
-
 class MjpegStreamTest : public ::testing::Test {
 private:
-    MockHandlers handler_;
-
     FrameDisruptor disruptor_;
     MjpegStream stream_;
     int64_t next_read_seq_{0};
@@ -39,45 +31,53 @@ public:
         for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
             disruptor_
                 .getBySequence(i)
-                .pre_allocate(
-                    Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES
-                );
+                .pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         }
     }    
 
 protected:
-    void SetUp() override {
-    }
-
     static UsbPacketHeader* getPacketHeader(std::span<uint8_t> buffer) {
         return reinterpret_cast<UsbPacketHeader*>(buffer.data());
     }
 
     static UsbPayloadHeader* getPayloadHeader(std::span<uint8_t> buffer) {
-        return reinterpret_cast<UsbPayloadHeader*>(
-            buffer.data() + USB_PACKET_HEADER_SIZE
-        );
+        return reinterpret_cast<UsbPayloadHeader*>(buffer.data() + USB_PACKET_HEADER_SIZE);
     }
 
-    MockHandlers& GetOutputHandler() { return handler_; }
     MjpegStream& GetStream() { return stream_; }
 
     bool verifyNextPublishedFramed(std::vector<uint8_t>& out_frame_data) {
         int64_t available = disruptor_.getHighestPublished();
-        if (available < next_read_seq_) {
-            std::cerr << "verify failed. Available: " << available 
-                      << " next_read_seq_: " << next_read_seq_ << "\n";
-            return false;
+        
+        while (next_read_seq_ <= available) {
+            HardcoreVideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
+            
+            if (slot.contentSize() > 0) {
+                auto slice = slot.getContentSlice();
+                out_frame_data.assign(slice.begin(), slice.end());
+                next_read_seq_++;
+                disruptor_.markConsumed(next_read_seq_ - 1);
+                return true;
+            }
+
+            next_read_seq_++;
+            disruptor_.markConsumed(next_read_seq_ - 1);
         }
 
-        HardcoreVideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
-        auto slice = slot.getContentSlice();
+        std::cerr << "Verify failed. No valid frames available up to seq: " << available << "\n";
+        return false;
+    }
 
-        out_frame_data.assign(slice.begin(), slice.end());
-
-        next_read_seq_++;
-        disruptor_.markConsumed(next_read_seq_ - 1);
-        return true;
+    void verifyNoValidFramesPublished() {
+        int64_t available = disruptor_.getHighestPublished();
+        while (next_read_seq_ <= available) {
+            HardcoreVideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
+            EXPECT_EQ(slot.contentSize(), 0) 
+                << "Found unexpected valid frame at sequence " << next_read_seq_;
+            
+            next_read_seq_++;
+            disruptor_.markConsumed(next_read_seq_ - 1);
+        }
     }
 };
 
@@ -316,8 +316,6 @@ TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
 }
 
 TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
-    EXPECT_CALL(GetOutputHandler(), output(::testing::_)).Times(0);
-
     std::vector<uint8_t> const shortPacket = {
         UsbProtocol::USB_FRAME_HEADER_A, 
         UsbProtocol::USB_FRAME_HEADER_B
@@ -326,6 +324,9 @@ TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
 
     std::vector<uint8_t> const emptyPacket(100, 0x00);
     GetStream().send(emptyPacket);
+
+    // Verify nothing valid made it through the pipeline
+    verifyNoValidFramesPublished();
 }
 
 TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
@@ -387,38 +388,35 @@ TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
 
 TEST_F(MjpegStreamTest, IgnoresInvalidCameraId) {
     std::vector<uint8_t> packet(20, 0x00);
-
     auto* packetHeader = getPacketHeader(packet);
-
     packetHeader->setHeader(UsbProtocol::USB_FRAME_HEADER);
     packetHeader->setCameraId(99);
     packetHeader->setLength(15);
 
     GetStream().send(packet);
+    verifyNoValidFramesPublished();
 }
 
 TEST_F(MjpegStreamTest, IgnoresPayloadExceedingBufferSize) {
     std::vector<uint8_t> packet(10, 0x00); 
-
     auto* packetHeader = getPacketHeader(packet);
-
     packetHeader->setHeader(UsbProtocol::USB_FRAME_HEADER);
     packetHeader->setCameraId(UsbProtocol::VIDEO_CAMERA_ID);
     packetHeader->setLength(50); 
 
     GetStream().send(packet);
+    verifyNoValidFramesPublished();
 }
 
 TEST_F(MjpegStreamTest, IgnoresTruncatedMetadata) {
     std::vector<uint8_t> packet(10, 0x00); 
-
     auto* packetHeader = getPacketHeader(packet);
-
     packetHeader->setHeader(UsbProtocol::USB_FRAME_HEADER);
     packetHeader->setCameraId(UsbProtocol::VIDEO_CAMERA_ID);
     packetHeader->setLength(5); 
 
     GetStream().send(packet);
+    verifyNoValidFramesPublished();
 }
 
 TEST_F(MjpegStreamTest, IgnoresUnsupportedCameraConfiguration) {
@@ -473,13 +471,14 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     GetStream().send(packet2);
 }
 
-TEST_F(MjpegStreamTest, HandlesNullCallbacksSafely) {
+TEST_F(MjpegStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
     FrameDisruptor ringBuffer;
     for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
         ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }
     MjpegStream silentDecoder(ringBuffer);
     std::vector<uint8_t> packet(100, 0x00);
+    
     ASSERT_NO_THROW(silentDecoder.send(packet));
 }
 

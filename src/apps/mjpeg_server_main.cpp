@@ -29,8 +29,6 @@
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "disruptor.hpp"
-#include "hardware_buffer.hpp"
-#include "mjpeg_frame_queue.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"

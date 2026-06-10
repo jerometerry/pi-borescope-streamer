@@ -179,7 +179,8 @@ void MjpegServer::start() {
             std::cerr << "Viewer connected to stream\n";
 
             res->writeStatus("200 OK")
-                ->writeHeader("Connection", "close")
+                // Investigating test issues. 
+                //->writeHeader("Connection", "close")
                 ->writeHeader("Cache-Control", "no-cache, private")
                 ->writeHeader("Pragma", "no-cache")
                 ->writeHeader("Content-Type", "multipart/x-mixed-replace; boundary=mjpegstream");

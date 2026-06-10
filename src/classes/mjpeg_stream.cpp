@@ -8,7 +8,6 @@
 #include <utility>
 #include <vector>
 #include "buffer.hpp"
-#include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "hardcore_video_frame.hpp"
@@ -125,27 +124,30 @@ void MjpegStream::outputFrame() {
     }
 
     HardcoreVideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);
+    
     if (slot.contentSize() == 0) {
+        disruptor_->publish(currentClaimSequence_);
         frameActive_ = false;
         return;
     }
 
-    std::span<const uint8_t> buffer(slot.storage.data(), slot.contentSize());
     size_t soiOffset = std::string::npos;
     size_t eoiOffset = std::string::npos;
 
     // Scan forward for Start of Image (FF D8)
-    size_t maxSoiPosition = std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, buffer.size());
+    size_t maxSoiPosition = std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, slot.contentSize());
     for (size_t j = 0; j + 1 < maxSoiPosition; ++j) {
-        if (buffer[j] == UsbProtocol::BOUNDARY_MARKER && buffer[j+1] == UsbProtocol::START_MARKER) {
+        if (slot.storage[slot.paddingSize() + j] == UsbProtocol::BOUNDARY_MARKER && 
+            slot.storage[slot.paddingSize() + j + 1] == UsbProtocol::START_MARKER) {
             soiOffset = j;
             break;
         }
     }
 
     // Scan backwards for End of Image (FF D9)
-    for (size_t j = buffer.size(); j >= 2; --j) {
-        if (buffer[j - 2] == UsbProtocol::BOUNDARY_MARKER && buffer[j - 1] == UsbProtocol::END_MARKER) {
+    for (size_t j = slot.contentSize(); j >= 2; --j) {
+        if (slot.storage[slot.paddingSize() + j - 2] == UsbProtocol::BOUNDARY_MARKER && 
+            slot.storage[slot.paddingSize() + j - 1] == UsbProtocol::END_MARKER) {
             eoiOffset = j;
             break;
         }
@@ -154,12 +156,12 @@ void MjpegStream::outputFrame() {
     if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
         size_t startTrim = soiOffset;
         size_t endTrim = eoiOffset;
-
         slot.trim(startTrim, endTrim);
-
-        disruptor_->publish(currentClaimSequence_);
+    } else {
+        slot.clear(); 
     }
 
+    disruptor_->publish(currentClaimSequence_);
     frameActive_ = false;
 }
 

@@ -14,11 +14,10 @@
 #include <thread>
 #include <vector>
 #include "buffer.hpp"
-#include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
+#include "hardcore_video_frame.hpp"
 #include "mjpeg_stream.hpp"
-#include "mjpeg_frame_queue.hpp"
 #include "zero_allocation_response_builder.hpp"
 
 namespace {
@@ -70,31 +69,37 @@ static std::vector<std::span<const uint8_t>> splitPages(
 static void BM_Pipeline_Throughput(benchmark::State& state) {
     static auto data = readBinaryFile(fileName_);
     static auto pages = splitPages(data);
-
-    BufferPool::BufferPoolArgs args{
-        2048,
-        2048,
-        128
-    };
-    auto pool = BufferPool::create(args);
-    MjpegFrameQueue queue;
+    
     std::atomic<bool> producer_running{true};
 
-    std::jthread consumer([&queue, &producer_running]() {
+    FrameDisruptor ringBuffer;
+    for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+        ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+    }
+
+    std::jthread consumer([&ringBuffer, &producer_running]() {
+        int64_t next_read = 0;
+
         while (producer_running.load(std::memory_order_relaxed)) {
-            uint32_t frameId{0};
-            auto frame = queue.pop(frameId);
-            if (frame) {
-                auto* buffer = frame.get();
-                ZeroAllocationResponseBuilder::build(buffer);
-                benchmark::DoNotOptimize(frame);
+
+            int64_t available = ringBuffer.waitFor(next_read);
+
+            while (next_read <= available) {
+                HardcoreVideoFrame& slot = ringBuffer.getBySequence(next_read);
+
+                if (slot.contentSize() > 0) {
+                    ZeroAllocationResponseBuilder::build(slot);
+                    benchmark::DoNotOptimize(slot);
+                }
+
+                next_read++;
             }
+            ringBuffer.markConsumed(next_read - 1);
         }
+        ringBuffer.markConsumed(next_read - 1);
     });
 
-    MjpegStream stream(pool, [&queue](const BufferPtr& frame) {
-        queue.push(frame);
-    });
+    MjpegStream stream(ringBuffer);
 
     size_t pageIndex = 0;
     for (auto _ : state) {
@@ -112,31 +117,36 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
 static void BM_Pipeline_DiskBound(benchmark::State& state) {
     std::ifstream file(fileName_, std::ios::binary);
     if (!file.is_open()) state.SkipWithError("Could not open file.");
-
-    BufferPool::BufferPoolArgs args{
-        2048,
-        2048,
-        128
-    };
-    auto pool = BufferPool::create(args);
-    MjpegFrameQueue queue;
+    
     std::atomic<bool> producer_running{true};
 
-    std::jthread consumer([&queue, &producer_running]() {
+    FrameDisruptor ringBuffer;
+    for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+        ringBuffer.getBySequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+    }
+
+    std::jthread consumer([&ringBuffer, &producer_running]() {
+        int64_t next_read = 0;
+
         while (producer_running.load(std::memory_order_relaxed)) {
-            uint32_t frameId{0};
-            auto frame = queue.pop(frameId);
-            if (frame) {
-                auto* buffer = frame.get();
-                ZeroAllocationResponseBuilder::build(buffer);
-                benchmark::DoNotOptimize(frame);
+
+            int64_t available = ringBuffer.waitFor(next_read);
+
+            while (next_read <= available) {
+                HardcoreVideoFrame& slot = ringBuffer.getBySequence(next_read);
+
+                if (slot.contentSize() > 0) {
+                    ZeroAllocationResponseBuilder::build(slot);
+                    benchmark::DoNotOptimize(slot);
+                }
+
+                next_read++;
             }
+            ringBuffer.markConsumed(next_read - 1);
         }
     });
 
-    MjpegStream stream(pool, [&queue](const BufferPtr& frame) {
-        queue.push(frame);
-    });
+    MjpegStream stream(ringBuffer);
 
     std::vector<uint8_t> chunk(4096);
     for (auto _ : state) {
