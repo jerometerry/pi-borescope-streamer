@@ -166,7 +166,6 @@ add_library(borescope_core STATIC
     src/classes/buffered_mjpeg_server.cpp
     src/classes/buffered_mjpeg_stream.cpp
     src/classes/buffered_zero_allocation_response_builder.cpp
-    src/classes/mjpeg_frame_extractor.cpp
     src/classes/mjpeg_frame_queue.cpp
     src/classes/mjpeg_frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp
@@ -222,7 +221,6 @@ add_executable(buffered_mjpeg_stream_capture
 target_link_libraries(buffered_mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
 
 add_executable(mjpeg_frame_extractor
-    src/classes/mjpeg_frame_extractor.cpp
     src/apps/mjpeg_frame_extractor_main.cpp
 )
 target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
