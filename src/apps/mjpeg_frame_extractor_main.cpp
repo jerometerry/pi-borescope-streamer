@@ -19,7 +19,6 @@
 #include "buffer_ptr.hpp"
 #include "buffered_mjpeg_stream.hpp"
 #include "constants.hpp"
-#include "intrusive_ptr.hpp"
 
 int main(int argc, const char* argv[]) {
     std::cout << std::unitbuf;
@@ -77,7 +76,7 @@ int main(int argc, const char* argv[]) {
         BufferedMjpegStream stream(pool, onFrameReady);
         std::ifstream file(inputPath, std::ios::binary);
         if (!file.is_open()) {
-            std::cerr << "Error opening file!" << std::endl;
+            std::cerr << "Error opening file!\n";
             return EXIT_FAILURE;
         }
 
