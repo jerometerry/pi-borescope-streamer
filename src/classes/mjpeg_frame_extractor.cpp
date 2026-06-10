@@ -137,5 +137,5 @@ void MjpegFrameExtractor::extractFrames(const std::vector<uint8_t>& data) {
         i += packetSize;
     }
 
-    std::cout << "\nExtraction complete. Saved " << frameCount << " pristine frames.\n";
+    std::cout << "\nExtraction complete. Saved " << frameCount << " frames.\n";
 }

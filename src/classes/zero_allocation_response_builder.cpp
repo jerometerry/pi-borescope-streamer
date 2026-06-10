@@ -5,16 +5,20 @@
 #include "buffer.hpp"
 #include "zero_allocation_response_builder.hpp"
 
-std::string_view ZeroAllocationResponseBuilder::build(Buffer* frame) {
-    size_t size = frame->contentSize();
+std::string_view ZeroAllocationResponseBuilder::build(HardcoreVideoFrame& frame) {
+    size_t size = frame.active_size;
 
     // buffer has 128 bytes reserved for zero-byte allocations
     // startPtr is offset 128 bytes from the start of the allocated buffer
 
-    auto padding = frame->getMutablePaddingSlice().data();
-    char* paddingStartPtr = reinterpret_cast<char*>(padding);
-    char* paddingEndPtr = paddingStartPtr + frame->paddingSize();
-    char* startPtr = paddingEndPtr;
+    //auto padding = frame->getMutablePaddingSlice().data();
+    //char* paddingStartPtr = reinterpret_cast<char*>(padding);
+    //char* paddingEndPtr = paddingStartPtr + frame->paddingSize();
+    //char* startPtr = paddingEndPtr;
+
+    // TODO
+    char* paddingStartPtr = reinterpret_cast<char*>(frame.storage.data());
+    char* startPtr = paddingStartPtr;
     char* cursor = startPtr;
     
     constexpr char newLines[4] = {'\r', '\n', '\r', '\n'};

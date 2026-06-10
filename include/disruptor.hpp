@@ -1,3 +1,11 @@
+#pragma once
+
+#if defined(__x86_64__) || defined (_M_X64)
+#if defined(_MSC_VER)
+#include <immintrin.h>
+#endif
+#endif
+
 #include <atomic>
 #include <array>
 #include <bit>
@@ -23,14 +31,17 @@ namespace disruptor {
             // Hybrid Spin-Wait Strategy: Low-latency spinning first
             uint32_t spin_count = 0;
             while (current < target && spin_count < 2000) {
-                std::atomic_ some_fence_or_hint = [](){
-                    #if defined(__x86_64__) || defined(_M_X64)
-                    asm volatile("pause" ::: "memory");
-                    #elif defined(__aarch64__) || defined(_M_ARM64)
-                    asm volatile("yield" ::: "memory");
+                #if defined(__x86_64__) || defined (_M_X64)
+                    #if defined(_MSC_VER)
+                        _mm_pause();
+                    #else
+                        asm volatile("pause" ::: ""memory");
                     #endif
-                };
-                some_fence_or_hint();
+                #elif defined(__aarch64__) || defined(_M_ARM64)
+                    asm volatile("yield" ::: "memory");
+                #else
+                    std::this_thread::yield();
+                #endif
                 current = value.load(std::memory_order_relaxed);
                 spin_count++;
             }
@@ -59,7 +70,7 @@ namespace disruptor {
 
     public:
         [[nodiscard]] T& operator[](int64_t sequence) noexcept {
-            return data_[sequence & mask]; 
+            return data_[sequence & mask]; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         }
         
         [[nodiscard]] static constexpr size_t capacity() noexcept {

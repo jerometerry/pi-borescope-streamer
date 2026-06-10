@@ -11,18 +11,14 @@
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
+#include "hardcore_video_frame.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
 
-MjpegStream::MjpegStream(
-    std::shared_ptr<BufferPool> bufferPool, 
-    std::function<void(BufferPtr)> onFrameReady)
-    : bufferPool_(std::move(bufferPool)), 
-      onFrameReady_(std::move(onFrameReady)) {
-        inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
-        activeFrame_ = bufferPool_->borrow();
+MjpegStream::MjpegStream(FrameDisruptor& disruptor): disruptor_(&disruptor) {
+    inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {
@@ -84,7 +80,9 @@ void MjpegStream::send(std::span<const uint8_t> data) {
              USB_PAYLOAD_HEADER_SIZE
         );
 
-        if (activeFrame_ && !activeFrame_->empty() && payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
+        if (frameActive_ && 
+            disruptor_->get_by_sequence(current_claim_sqe_).active_size> 0 && 
+            payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
             outputFrame();
         }
         
@@ -93,18 +91,17 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         if (!payloadHeader.hasGravitySensor() && 
             payloadHeader.getOtherFlags() == 0 && 
             payloadHeader.getCameraNumber() < 2) {
+
             size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
             size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
 
-            if (!activeFrame_) {
-                activeFrame_ = bufferPool_->borrow();
-            }
+            HardcoreVideoFrame& slot = getActiveFrameSlot();
 
             std::span<const uint8_t> toInsert(
                 inputBuffer_.data() + payloadStart, 
                 payloadSize
             );
-            activeFrame_->insertContent(toInsert);
+            slot.append_payload(toInsert);
         }
 
         i += totalPacketSize;
@@ -122,11 +119,17 @@ void MjpegStream::send(std::span<const uint8_t> data) {
 }
 
 void MjpegStream::outputFrame() {
-    if (!activeFrame_ || activeFrame_->empty()) {
+    if (!frameActive_) {
         return;
     }
 
-    auto buffer = activeFrame_->getContentSlice();
+    HardcoreVideoFrame& slot = disruptor_->get_by_sequence(current_claim_sqe_);
+    if (slot.active_size == 0) {
+        frameActive_ = false;
+        return;
+    }
+
+    std::span<const uint8_t> buffer(slot.storage.data(), slot.active_size);
     size_t soiOffset = std::string::npos;
     size_t eoiOffset = std::string::npos;
 
@@ -151,12 +154,23 @@ void MjpegStream::outputFrame() {
         size_t startTrim = soiOffset;
         size_t endTrim = eoiOffset;
 
-        activeFrame_->trim(startTrim, endTrim);
+        slot.trim(startTrim, endTrim);
 
-        if (onFrameReady_) {
-            onFrameReady_(std::move(activeFrame_));
-        }
+
+        disruptor_->publish(current_claim_sqe_);
     }
 
-    activeFrame_ = bufferPool_->borrow();
+    frameActive_ = false;
 }
+
+HardcoreVideoFrame& MjpegStream::getActiveFrameSlot() {
+    if (!frameActive_) {
+        current_claim_sqe_ = disruptor_->claim();
+        HardcoreVideoFrame& slot = disruptor_->get_by_sequence(current_claim_sqe_);
+        slot.clear();
+        frameActive_ = true;
+        return slot;
+    }
+    return disruptor_->get_by_sequence(current_claim_sqe_);
+}
+    

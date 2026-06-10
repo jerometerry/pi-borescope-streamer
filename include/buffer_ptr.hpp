@@ -1,5 +1,7 @@
 #pragma once
 #include "buffer.hpp"
+#include "disruptor.hpp"
+#include "hardcore_video_frame.hpp"
 #include "intrusive_ptr.hpp"
 
 /**
@@ -15,3 +17,7 @@
  * BufferRecycler, returning the underlying memory to the pool for the next hardware interrupt.
  */
 using BufferPtr = IntrusivePtr<Buffer>;
+
+inline constexpr int64_t FRAME_DISRUPTOR_CAPACITY = 65536;
+
+using FrameDisruptor = disruptor::SPSCDisruptor<HardcoreVideoFrame, FRAME_DISRUPTOR_CAPACITY>;

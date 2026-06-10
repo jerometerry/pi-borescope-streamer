@@ -30,13 +30,11 @@ private:
 
 protected:
     void SetUp() override {
-        bufferPool_ = BufferPool::create();
-        stream_ = std::make_unique<MjpegStream>(
-            bufferPool_,
-            [this](BufferPtr frame) { 
-                handler_.output(std::move(frame)); 
-            }
-        );
+        FrameDisruptor ringBuffer;
+        for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+            ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        }
+        stream_ = std::make_unique<MjpegStream>(ringBuffer);
     }
 
     static UsbPacketHeader* getPacketHeader(std::span<uint8_t> buffer) {
@@ -448,8 +446,11 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
 }
 
 TEST_F(MjpegStreamTest, HandlesNullCallbacksSafely) {
-    std::shared_ptr<BufferPool> pool = BufferPool::create();
-    MjpegStream silentDecoder(pool, nullptr);
+    FrameDisruptor ringBuffer;
+    for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+        ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+    }
+    MjpegStream silentDecoder(ringBuffer);
     std::vector<uint8_t> packet(100, 0x00);
     ASSERT_NO_THROW(silentDecoder.send(packet));
 }

@@ -4,11 +4,11 @@
 #include <functional>
 #include <span>
 #include <vector>
-#include "constants.hpp"
 #include "buffer_ptr.hpp"
+#include "constants.hpp"
+#include "disruptor.hpp"
+#include "hardcore_video_frame.hpp"
 #include "usb_payload_header.hpp"
-
-class BufferPool;
 
 /**
  * @brief The translator that extracts and reassembles clean MJPEG video pictures from the hardware stream.
@@ -31,10 +31,7 @@ public:
      * @param onFrameReady The function we call to hand off a finished, clean JPEG picture. 
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
      */
-    explicit MjpegStream(
-        std::shared_ptr<BufferPool> bufferPool,
-        std::function<void(BufferPtr)> onFrameReady
-    );
+    explicit MjpegStream(FrameDisruptor& disruptor);
 
     ~MjpegStream() = default;
 
@@ -48,7 +45,9 @@ public:
     void send(std::span<const uint8_t> data);
 
 private:
-    std::shared_ptr<BufferPool> bufferPool_;
+    FrameDisruptor* disruptor_;
+    int64_t current_claim_sqe_{-1};
+    bool frameActive_{false};
 
     /**
      * @brief The waiting room for raw bytes that haven't been sorted yet.
@@ -56,9 +55,11 @@ private:
     std::vector<uint8_t> inputBuffer_;
 
     /**
-     * @brief The workbench where we are currently stitching the chunks into a picture.
+     * @brief A bookmark tracking how far we've read into the stream buffer.
+     * @details Prevents us from having to constantly shift memory around or re-read 
+     * data we've already processed, keeping the decoder lightning fast.
      */
-    BufferPtr activeFrame_;
+    size_t readOffset_{0};
 
     /**
      * @brief The memory of what the current picture is supposed to look like.
@@ -69,21 +70,16 @@ private:
     UsbPayloadHeader payloadHeader_{};
 
     /**
-     * @brief A bookmark tracking how far we've read into the stream buffer.
-     * @details Prevents us from having to constantly shift memory around or re-read 
-     * data we've already processed, keeping the decoder lightning fast.
+     * @brief Get the Active Frame Slot object
+     * 
+     * @return HardcoreVideoFrame& 
      */
-    size_t readOffset_{0};
-    
-    /**
-     * @brief Where to send finished video pictures.
-     */
-    std::function<void(BufferPtr)> onFrameReady_;
+    HardcoreVideoFrame& getActiveFrameSlot();
 
     /**
      * @brief Snip out the exact picture and send it off.
      * @details Standard JPEG files have strict start (`FF D8`) and end (`FF D9`) markers. 
-     * This function scans the workbench, cuts out the perfect JPEG file, and fires it 
+     * This function scans the workbench, cuts out the JPEG file, and fires it 
      * into the `frameSink`.
      */
     void outputFrame();

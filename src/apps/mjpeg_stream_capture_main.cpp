@@ -30,6 +30,7 @@
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "disruptor.hpp"
+#include "hardware_buffer.hpp"
 #include "intrusive_ptr.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
@@ -92,9 +93,10 @@ int main() {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-        auto pool = BufferPool::create();
-
-		disruptor::SPSCDisruptor<BufferPtr, 65536> ringBuffer;
+		disruptor::SPSCDisruptor<HardwareBuffer, 65536> ringBuffer;
+		for (int64_t i = 0; i < 65536; i++) {
+			ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+		}
 
 		std::jthread diskWriter([&ringBuffer](const std::stop_token& st) {
             std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
@@ -104,30 +106,17 @@ int main() {
 				int64_t available = ringBuffer.wait_for(next_read);
 
 				while (next_read <= available) {
-					BufferPtr buf = ringBuffer.get_by_sequence(next_read);
+					HardwareBuffer& slot = ringBuffer.get_by_sequence(next_read);
 
-					if (!buf) {
-						std::cerr << "[Consumer] Poison Pill received. Shutting down.\n";
-						outFile.close();
-						return;
+					if (slot.active_size > 0) {
+						outFile.write(reinterpret_cast<const char*>(slot.storage.data()), slot.active_size);
 					}
 
-					auto content = buf->getMutableContentSlice();
-					size_t contentSize = buf->contentSize();
-					static int consumer_debug_count = 0;
-					if (++consumer_debug_count % 100 == 0) {
-						std::cerr << "[Consumer] Writing " 
-								  << contentSize 
-								  << " bytes (Packet " 
-								  << consumer_debug_count 
-								  << ")\n";
-					}
-
-					outFile.write(reinterpret_cast<const char*>(content.data()), contentSize);
 					next_read++;
 				}
 				ringBuffer.mark_consumed(next_read - 1);
 			}
+			ringBuffer.mark_consumed(next_read -1);
         });
 
 		auto transfer = [&](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
@@ -138,22 +127,11 @@ int main() {
 			}
 
 			if (status == UsbTransferStatus::Completed && !payload.empty()) {
-                // 1. Acquire from pool
-                auto buf = pool->borrow();
-				if (!buf) {
-					std::cerr << "buf is null. skipping processing of this payload";
-					return true;
-				}
-
-				buf->insertContent(payload);
-                
-                // 3. Publish to Disruptor
-                int64_t seq = ringBuffer.claim();
-                ringBuffer.get_by_sequence(seq) = buf; 
-                ringBuffer.publish(seq);
-            } else {
-				std::cerr << "USB payload was not complete, or is empty. Skipping.";
-			}
+				int64_t seq = ringBuffer.claim();
+				HardwareBuffer& slot = ringBuffer.get_by_sequence(seq);
+				slot.write_payload(payload);
+				ringBuffer.publish(seq);
+            }
             return status != UsbTransferStatus::Disconnected; 
         };
 

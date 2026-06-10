@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "constants.hpp"
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
@@ -41,14 +42,15 @@ private:
 protected:
     void SetUp() override {
         bufferPool_ = BufferPool::create();
-        frameBuffer_ = std::make_shared<MjpegFrameQueue>();
+        FrameDisruptor ringBuffer;
+        for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+            ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+        }
 
         server_ = std::make_unique<MjpegServer>(
             TEST_PORT, 
             running_, 
-            [this](uint32_t& id) {
-                return frameBuffer_->pop(id); 
-            }
+            ringBuffer
         );
         
         server_->start();

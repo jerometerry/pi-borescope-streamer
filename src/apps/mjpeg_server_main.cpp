@@ -28,6 +28,8 @@
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
+#include "disruptor.hpp"
+#include "hardware_buffer.hpp"
 #include "mjpeg_frame_queue.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_stream.hpp"
@@ -115,14 +117,12 @@ int main(int argc, const char* argv[]) {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
         
-        auto pool = BufferPool::create();
+        FrameDisruptor ringBuffer;
+		for (int64_t i = 0; i < FRAME_DISRUPTOR_CAPACITY; i++) {
+			ringBuffer.get_by_sequence(i).pre_allocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
+		}
 
-        // MjpegFrameQueue HAS to be initialized after buffer pool!
-        // Otherwise it will go out of scope before incoming mjpeg stream completes.
-        MjpegFrameQueue queue;
-        MjpegStream stream(pool, [&queue](const BufferPtr& frame) {
-            queue.push(frame);
-        });
+        MjpegStream stream(ringBuffer);
 
         auto transfer = [&stream](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
             if (status == UsbTransferStatus::Completed) {
@@ -135,10 +135,7 @@ int main(int argc, const char* argv[]) {
         };
         UsbDriver driver(transfer, &running);
 
-        auto source = [&queue](uint32_t& id) {
-            return queue.pop(id);
-        };
-        MjpegServer server(port, running, source);
+        MjpegServer server(port, running, ringBuffer);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 

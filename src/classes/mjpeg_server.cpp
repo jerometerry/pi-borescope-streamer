@@ -14,15 +14,18 @@
 #include <utility>
 #include <vector>
 #include "buffer.hpp"
+#include "buffer_ptr.hpp"
 #include "constants.hpp"
+#include "hardcore_video_frame.hpp"
+#include "hardware_buffer.hpp"
 #include "index_html.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_server.hpp"
 #include "usb_device_finder.hpp"
 #include "zero_allocation_response_builder.hpp"
 
-MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameSource frameSource)
-    : port_(port), running_(running), frameSource_(std::move(frameSource)) {}
+MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameDisruptor& disruptor)
+    : port_(port), running_(running), disruptor_(&disruptor) {}
 
 MjpegServer::~MjpegServer() {
     if (networkThread_.joinable()) {
@@ -52,73 +55,79 @@ void MjpegServer::onTimer(us_timer_t *t) {
     }
 
     uint32_t currentFrameId = 0;
-    auto currentFrame = server->frameSource_(currentFrameId);
+    int64_t next_read = 0;
+    int64_t available = server->disruptor_->wait_for(next_read);
 
-    if (currentFrame && !currentFrame->empty() && currentFrameId != server->lastBroadcastedFrameId_) {
-        server->lastBroadcastedFrameId_ = currentFrameId;
+    while (next_read <= available) {
+        HardcoreVideoFrame& currentFrame = server->disruptor_->get_by_sequence(next_read);
 
-        for (size_t i = 0; i < server->activeViewers_.size(); ) {
-            auto& viewer = server->activeViewers_[i];
-            auto* res = viewer.res;
+        if (currentFrame.active_size > 0) {
+            for (size_t i = 0; i < server->activeViewers_.size(); ) {
+                auto& viewer = server->activeViewers_[i];
+                auto* res = viewer.res;
 
-            if (viewer.isClosed) {
-                server->activeViewers_.erase(server->activeViewers_.begin() + i);
-                continue;
-            }
-
-            if (res->getWriteOffset() > WebServerConfig::MAX_OUTGOING_CLIENT_BUFFER_SIZE) {
-                std::cerr << "[Network Core] Evicting lagging viewer on /stream.\n";
-                res->end();
-                server->activeViewers_.erase(server->activeViewers_.begin() + i);
-                continue;
-            }
-
-            if (viewer.lastSentFrameId < currentFrameId) {
-                size_t backpressure = res->getWriteOffset();
-
-                if (backpressure == 0) {
-                    if (viewer.isLagging) {
-                        uint32_t droppedFrames = currentFrameId - viewer.lagStartFrameId;
-                        std::cerr << "[Network Telemetry] Viewer recovered. TCP pipe cleared. " 
-                                  << droppedFrames << " frames were deliberately dropped to maintain real-time latency.\n";
-                        viewer.isLagging = false;
-                    }
-
-                    CorkState state {
-                        res,
-                        ZeroAllocationResponseBuilder::build(currentFrame.get()),
-                        false
-                    };
-
-                    state.res->cork([&state]() {
-                        state.ok = state.res->write(state.payload);
-                    });
-
-                    if (!state.ok) {
-                        std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "
-                                << "uWebSockets just executed a user-space malloc to queue this frame.\n";
-                    }
-
-                    size_t postWriteBackpressure = res->getWriteOffset();
-                    if (postWriteBackpressure > 0) {
-                        std::cerr << "[Network Telemetry] HEAP ALLOCATION DETECTED! res->write() caused " 
-                                  << postWriteBackpressure << " bytes to be queued on the heap for viewer frame " 
-                                  << currentFrameId << "\n";
-                    }
-                } else {
-                    if (!viewer.isLagging) {
-                        std::cerr << "[Network Telemetry] Warning: TCP stall detected! OS buffer backed up with " 
-                                  << backpressure << " bytes. Dropping frames...\n";
-                        viewer.isLagging = true;
-                        viewer.lagStartFrameId = currentFrameId;
-                    }
+                if (viewer.isClosed) {
+                    server->activeViewers_.erase(server->activeViewers_.begin() + i);
+                    continue;
                 }
 
-                viewer.lastSentFrameId = currentFrameId;
+                if (res->getWriteOffset() > WebServerConfig::MAX_OUTGOING_CLIENT_BUFFER_SIZE) {
+                    std::cerr << "[Network Core] Evicting lagging viewer on /stream.\n";
+                    res->end();
+                    server->activeViewers_.erase(server->activeViewers_.begin() + i);
+                    continue;
+                }
+
+                if (viewer.lastSentFrameId < currentFrameId) {
+                    size_t backpressure = res->getWriteOffset();
+
+                    if (backpressure == 0) {
+                        if (viewer.isLagging) {
+                            uint32_t droppedFrames = currentFrameId - viewer.lagStartFrameId;
+                            std::cerr << "[Network Telemetry] Viewer recovered. TCP pipe cleared. " 
+                                    << droppedFrames << " frames were deliberately dropped to maintain real-time latency.\n";
+                            viewer.isLagging = false;
+                        }
+
+                        CorkState state {
+                            res,
+                            ZeroAllocationResponseBuilder::build(currentFrame),
+                            false
+                        };
+
+                        state.res->cork([&state]() {
+                            state.ok = state.res->write(state.payload);
+                        });
+
+                        if (!state.ok) {
+                            std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "
+                                    << "uWebSockets just executed a user-space malloc to queue this frame.\n";
+                        }
+
+                        size_t postWriteBackpressure = res->getWriteOffset();
+                        if (postWriteBackpressure > 0) {
+                            std::cerr << "[Network Telemetry] HEAP ALLOCATION DETECTED! res->write() caused " 
+                                    << postWriteBackpressure << " bytes to be queued on the heap for viewer frame " 
+                                    << currentFrameId << "\n";
+                        }
+                    } else {
+                        if (!viewer.isLagging) {
+                            std::cerr << "[Network Telemetry] Warning: TCP stall detected! OS buffer backed up with " 
+                                    << backpressure << " bytes. Dropping frames...\n";
+                            viewer.isLagging = true;
+                            viewer.lagStartFrameId = currentFrameId;
+                        }
+                    }
+
+                    viewer.lastSentFrameId = currentFrameId;
+                }
+                ++i;
             }
-            ++i;
         }
+
+        next_read++;
     }
+    server->disruptor_->mark_consumed(next_read - 1);
 }
 
 void MjpegServer::start() {
