@@ -23,7 +23,6 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "frame.hpp"
 #include "frame_disruptor.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_stream.hpp"

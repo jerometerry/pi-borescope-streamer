@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <print>
 #include <span>
 #include <stop_token>
@@ -26,6 +27,7 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
+#include "disruptor.hpp"
 #include "frame.hpp"
 #include "frame_disruptor.hpp"
 #include "usb_device_finder.hpp"
