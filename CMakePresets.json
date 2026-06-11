@@ -19,7 +19,43 @@
 			"generator": "Ninja",
 			"cacheVariables": {
 				"CMAKE_BUILD_TYPE": "RelWithDebInfo",
-				"CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON"
+				"CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
+				"BUILD_TESTING": "OFF",
+				"BUILD_BENCHMARKS": "OFF"
+			}
+		},
+		{
+			"name": "analysis",
+			"inherits": "debug",
+			"displayName": "Static Analysis Profile",
+			"description": "Debug build with Clang-Tidy, Cppcheck, IWYU, and Doxygen enabled",
+			"binaryDir": "${sourceDir}/out/build/${presetName}",
+			"cacheVariables": {
+				"ENABLE_CLANG_TIDY": "ON",
+				"ENABLE_IWYU": "ON",
+				"ENABLE_CPPCHECK": "ON",
+				"BUILD_DOC": "ON"
+			}
+		},
+		{
+			"name": "test",
+			"inherits": "debug",
+			"displayName": "Testing Profile",
+			"description": "Debug build with test suite and code coverage enabled",
+			"binaryDir": "${sourceDir}/out/build/${presetName}",
+			"cacheVariables": {
+				"BUILD_TESTING": "ON",
+				"ENABLE_COVERAGE": "ON"
+			}
+		},
+		{
+			"name": "benchmark",
+			"inherits": "release",
+			"displayName": "Benchmark Profile",
+			"description": "Release build with benchmark executables enabled",
+			"binaryDir": "${sourceDir}/out/build/${presetName}",
+			"cacheVariables": {
+				"BUILD_BENCHMARKS": "ON"
 			}
 		}
 	],
@@ -33,18 +69,30 @@
 			"configurePreset": "release"
 		},
 		{
-			"name": "docs-debug",
-			"displayName": "Build Docs (Debug)",
-			"description": "Generates Doxygen documentation using the debug build tree",
-			"configurePreset": "debug",
+			"name": "analysis",
+			"configurePreset": "analysis"
+		},
+		{
+			"name": "cppcheck",
+			"displayName": "Run Cppcheck",
+			"description": "Executes the standalone Cppcheck target",
+			"configurePreset": "analysis",
+			"targets": ["run_cppcheck"]
+		},
+		{
+			"name": "docs",
+			"displayName": "Build Documentation",
+			"description": "Generates Doxygen documentation",
+			"configurePreset": "analysis",
 			"targets": ["docs"]
 		},
 		{
-			"name": "docs-release",
-			"displayName": "Build Docs (Release)",
-			"description": "Generates Doxygen documentation using the release build tree",
-			"configurePreset": "release",
-			"targets": ["docs"]
+			"name": "test",
+			"configurePreset": "test"
+		},
+		{
+			"name": "benchmark",
+			"configurePreset": "benchmark"
 		},
 		{
 			"name": "clean-debug",

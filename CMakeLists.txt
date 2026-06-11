@@ -5,12 +5,24 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# --- Build Configuration Options ---
+option(ENABLE_CLANG_TIDY "Enable clang-tidy analysis during build" OFF)
+option(ENABLE_IWYU "Enable include-what-you-use analysis during build" OFF)
+option(ENABLE_CPPCHECK "Create a target for cppcheck" OFF)
+option(BUILD_DOC "Build documentation" OFF)
+option(BUILD_TESTING "Build the test suite" OFF)
+option(BUILD_BENCHMARKS "Build benchmark executables" OFF)
+option(ENABLE_COVERAGE "Enable code coverage tracking" OFF)
+
 include(FetchContent)
 
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
 
+# --- HTML to Header Conversion ---
 set(HTML_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/index.html")
 set(GENERATED_HPP "${CMAKE_CURRENT_BINARY_DIR}/generated/index_html.hpp")
 
@@ -24,82 +36,76 @@ add_custom_command(
     COMMENT "Converting ${HTML_FILE} to C++ header format"
 )
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
-
-find_program(CLANG_TIDY_EXE NAMES "clang-tidy" 
-    PATHS "/opt/homebrew/opt/llvm/bin" 
-          "/usr/bin" 
-          "/usr/local/bin"
-)
-if(CLANG_TIDY_EXE)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}" 
-        "-checks=-*,performance-*,concurrency-*,bugprone-*,modernize-*,cppcoreguidelines-*,-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-avoid-c-arrays,-modernize-avoid-c-arrays,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-non-const-global-variables,-bugprone-throwing-static-initialization,-modernize-use-designated-initializers,-modernize-use-integer-sign-comparison,-modernize-use-auto,-modernize-use-ranges,-bugprone-narrowing-conversions,-cppcoreguidelines-narrowing-conversions,-modernize-avoid-c-style-cast,-cppcoreguidelines-pro-type-const-cast,-modernize-use-nodiscard,-modernize-use-equals-default,-cppcoreguidelines-special-member-functions,-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access"
-        "-warnings-as-errors=*"
+# --- Static Analysis (Opt-In) ---
+if(ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES "clang-tidy" 
+        PATHS "/opt/homebrew/opt/llvm/bin" "/usr/bin" "/usr/local/bin"
     )
-else()
-    message(FATAL_ERROR "clang-tidy not found!")
-endif()
-
-find_program(CPPCHECK_EXE NAMES "cppcheck" 
-    PATHS "/opt/homebrew/bin" 
-          "/usr/bin" 
-          "/usr/local/bin"
-)
-if(CPPCHECK_EXE)
-    add_custom_target(run_cppcheck
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build"
-
-        COMMAND sh -c "\"${CPPCHECK_EXE}\" --project=\"${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json\" --cppcheck-build-dir=\"${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build\" -i\"${CMAKE_CURRENT_BINARY_DIR}/_deps\" --suppress=*:*googletest* --suppress=*:*gmock* --xml --enable=all --inconclusive --inline-suppr --check-level=exhaustive --suppress=missingIncludeSystem --suppress=unmatchedSuppression 2> \"${CMAKE_CURRENT_BINARY_DIR}/cppcheck_report.xml\""
-        
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        COMMENT "Running single-pass whole-program Cppcheck analysis (excluding dependencies)"
-        VERBATIM
-    )
-else()
-    message(FATAL_ERROR "cppcheck not found!")
-endif()
-
-find_program(IWYU_EXE NAMES "include-what-you-use" iwyu
-    PATHS "/opt/homebrew/bin" 
-          "/usr/bin" 
-          "/usr/local/bin"
-)
-if(IWYU_EXE)
-    set(IWYU_ARGS "${IWYU_EXE}")
-
-    set(LOCAL_MAP "${CMAKE_CURRENT_SOURCE_DIR}/project.imp")
-    if(EXISTS "${LOCAL_MAP}")
-        list(APPEND IWYU_ARGS "-Xiwyu" "--mapping_file=${LOCAL_MAP}")
-    endif()
-
-    if(NOT APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        find_file(GCC_MAP_FILE 
-            NAMES stdcxx.imp
-            PATHS "/usr/share/include-what-you-use" 
-                  "/usr/local/share/include-what-you-use"
-                  "/usr/share/llvm/include-what-you-use"
+    if(CLANG_TIDY_EXE)
+        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}" 
+            "-checks=-*,performance-*,concurrency-*,bugprone-*,modernize-*,cppcoreguidelines-*,-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-avoid-c-arrays,-modernize-avoid-c-arrays,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-non-const-global-variables,-bugprone-throwing-static-initialization,-modernize-use-designated-initializers,-modernize-use-integer-sign-comparison,-modernize-use-auto,-modernize-use-ranges,-bugprone-narrowing-conversions,-cppcoreguidelines-narrowing-conversions,-modernize-avoid-c-style-cast,-cppcoreguidelines-pro-type-const-cast,-modernize-use-nodiscard,-modernize-use-equals-default,-cppcoreguidelines-special-member-functions,-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access"
+            "-warnings-as-errors=*"
         )
-        if(GCC_MAP_FILE)
+    else()
+        message(WARNING "clang-tidy enabled but not found!")
+    endif()
+endif()
+
+if(ENABLE_CPPCHECK)
+    find_program(CPPCHECK_EXE NAMES "cppcheck" 
+        PATHS "/opt/homebrew/bin" "/usr/bin" "/usr/local/bin"
+    )
+    if(CPPCHECK_EXE)
+        add_custom_target(run_cppcheck
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build"
+            COMMAND sh -c "\"${CPPCHECK_EXE}\" --project=\"${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json\" --cppcheck-build-dir=\"${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build\" -i\"${CMAKE_CURRENT_BINARY_DIR}/_deps\" --suppress=*:*googletest* --suppress=*:*gmock* --xml --enable=all --inconclusive --inline-suppr --check-level=exhaustive --suppress=missingIncludeSystem --suppress=unmatchedSuppression 2> \"${CMAKE_CURRENT_BINARY_DIR}/cppcheck_report.xml\""
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            COMMENT "Running single-pass whole-program Cppcheck analysis"
+            VERBATIM
+        )
+    else()
+        message(WARNING "cppcheck enabled but not found!")
+    endif()
+endif()
+
+if(ENABLE_IWYU)
+    find_program(IWYU_EXE NAMES "include-what-you-use" iwyu
+        PATHS "/opt/homebrew/bin" "/usr/bin" "/usr/local/bin"
+    )
+    if(IWYU_EXE)
+        set(IWYU_ARGS "${IWYU_EXE}")
+        set(LOCAL_MAP "${CMAKE_CURRENT_SOURCE_DIR}/project.imp")
+        if(EXISTS "${LOCAL_MAP}")
+            list(APPEND IWYU_ARGS "-Xiwyu" "--mapping_file=${LOCAL_MAP}")
+        endif()
+
+        if(NOT APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+            find_file(GCC_MAP_FILE 
+                NAMES stdcxx.imp
+                PATHS "/usr/share/include-what-you-use" 
+                      "/usr/local/share/include-what-you-use"
+                      "/usr/share/llvm/include-what-you-use"
+            )
+            if(GCC_MAP_FILE)
+                list(APPEND IWYU_ARGS 
+                    "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}"
+                    "-Xiwyu" "--no_default_mappings"
+                )
+            endif()
             list(APPEND IWYU_ARGS 
-                "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}"
-                "-Xiwyu" "--no_default_mappings"
+                "-Xiwyu" "--no_fwd_decls"
+                "-Xiwyu" "--no_comments"
+                "-Qunused-arguments"
             )
         endif()
-        list(APPEND IWYU_ARGS 
-            "-Xiwyu" "--no_fwd_decls"
-            "-Xiwyu" "--no_comments"
-            "-Qunused-arguments"
-        )
+        set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_ARGS}")
+    else()
+        message(WARNING "include-what-you-use enabled but not found!")
     endif()
-
-    set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "${IWYU_ARGS}")
-else()
-    message(FATAL_ERROR "include-what-you-use not found!")
 endif()
 
+# --- Warning & Compiler Flags ---
 add_library(project_warnings INTERFACE)
-
 target_compile_options(project_warnings INTERFACE -Wall -Wextra)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
@@ -122,6 +128,7 @@ if(NOT APPLE)
     endif()
 endif()
 
+# --- Dependencies: uWebSockets & uSockets ---
 FetchContent_Declare(
     uWebSockets
     GIT_REPOSITORY https://github.com/uNetworking/uWebSockets.git
@@ -157,9 +164,9 @@ if(APPLE)
 elseif(UNIX AND NOT APPLE)
     target_compile_definitions(usockets PRIVATE WITH_EPOLL=1)
 endif()
-
 target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 
+# --- Core Library ---
 add_library(borescope_core STATIC
     src/classes/buffer.cpp
     src/classes/buffer_pool.cpp
@@ -192,44 +199,39 @@ target_link_libraries(borescope_core
         uNetworking
     PRIVATE 
         project_warnings
-        GTest::gtest
 )
 
-add_executable(mjpeg_server
-    src/apps/mjpeg_server_main.cpp
-)
+if(ENABLE_COVERAGE)
+    target_compile_options(borescope_core PUBLIC --coverage)
+    target_link_options(borescope_core PUBLIC --coverage)
+endif()
+
+# --- Executables ---
+add_executable(mjpeg_server src/apps/mjpeg_server_main.cpp)
 target_link_libraries(mjpeg_server PRIVATE Borescope::Core project_warnings)
 
-add_executable(buffered_mjpeg_server
-    src/apps/buffered_mjpeg_server_main.cpp
-)
+add_executable(buffered_mjpeg_server src/apps/buffered_mjpeg_server_main.cpp)
 target_link_libraries(buffered_mjpeg_server PRIVATE Borescope::Core project_warnings)
 
-add_executable(attached_usb_devices
-    src/apps/attached_usb_devices.cpp
-)
+add_executable(attached_usb_devices src/apps/attached_usb_devices.cpp)
 target_link_libraries(attached_usb_devices PRIVATE Borescope::Core project_warnings)
 
-add_executable(mjpeg_stream_capture
-    src/apps/mjpeg_stream_capture_main.cpp
-)
+add_executable(mjpeg_stream_capture src/apps/mjpeg_stream_capture_main.cpp)
 target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
 
-add_executable(buffered_mjpeg_stream_capture
-    src/apps/buffered_mjpeg_stream_capture_main.cpp
-)
+add_executable(buffered_mjpeg_stream_capture src/apps/buffered_mjpeg_stream_capture_main.cpp)
 target_link_libraries(buffered_mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
 
-add_executable(mjpeg_frame_extractor
-    src/apps/mjpeg_frame_extractor_main.cpp
-)
+add_executable(mjpeg_frame_extractor src/apps/mjpeg_frame_extractor_main.cpp)
 target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
 
+# --- Linux-Specific Targets ---
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_sources(borescope_core PRIVATE 
         src/classes/buffered_v4l2_publisher.cpp
         src/classes/v4l2_publisher.cpp
     )
+    
     add_executable(v4l2-borescope-daemon
         src/classes/v4l2.cpp
         src/classes/buffered_v4l2_publisher.cpp
@@ -237,16 +239,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         src/apps/v4l2_main.cpp
     )
     target_link_libraries(v4l2-borescope-daemon
-        PRIVATE 
-            borescope_core
-            project_warnings
-            ${LIBUSB_LIBRARIES}
+        PRIVATE borescope_core project_warnings ${LIBUSB_LIBRARIES}
     )
 
-    target_sources(borescope_core PRIVATE 
-        src/classes/buffered_v4l2_publisher.cpp
-        src/classes/v4l2_publisher.cpp
-    )
     add_executable(buffered-v4l2-borescope-daemon
         src/classes/v4l2.cpp
         src/classes/buffered_v4l2_publisher.cpp
@@ -254,18 +249,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         src/apps/buffered_v4l2_main.cpp
     )
     target_link_libraries(buffered-v4l2-borescope-daemon
-        PRIVATE 
-            borescope_core
-            project_warnings
-            ${LIBUSB_LIBRARIES}
+        PRIVATE borescope_core project_warnings ${LIBUSB_LIBRARIES}
     )
-    
     message(STATUS "Linux detected: Building v4l2-borescope-daemon target.")
 else()
     message(STATUS "macOS detected: Skipping v4l2-borescope-daemon target.")
 endif()
 
-option(BUILD_DOC "Build documentation" ON)
+# --- Documentation (Opt-In) ---
 if(BUILD_DOC)
     find_package(Doxygen)
     if(DOXYGEN_FOUND)
@@ -292,18 +283,15 @@ if(BUILD_DOC)
     endif()
 endif()
 
-option(BUILD_TESTING "Build the test suite" ON)
+# --- Tests (Opt-In) ---
 if(BUILD_TESTING)
     enable_testing()
-
-    include(FetchContent)
     FetchContent_Declare(
         googletest
         URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.tar.gz
         DOWNLOAD_EXTRACT_TIMESTAMP true
         SYSTEM
     )
-
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
 
@@ -318,7 +306,7 @@ if(BUILD_TESTING)
     target_compile_options(gmock PRIVATE -w)
     target_compile_options(gmock_main PRIVATE -w)
 
-    target_link_libraries(borescope_core INTERFACE gtest)
+    target_link_libraries(borescope_core PRIVATE GTest::gtest)
 
     add_executable(run_project_tests 
         tests/test_buffer.cpp
@@ -349,56 +337,35 @@ if(BUILD_TESTING)
     gtest_discover_tests(run_project_tests)
 endif()
 
-option(ENABLE_COVERAGE "Enable code coverage tracking" OFF)
-if(ENABLE_COVERAGE)
-    target_compile_options(borescope_core PUBLIC --coverage)
-    target_link_options(borescope_core PUBLIC --coverage)
+# --- Benchmarks (Opt-In) ---
+if(BUILD_BENCHMARKS)
+    FetchContent_Declare(
+      googlebenchmark
+      URL https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz
+      DOWNLOAD_EXTRACT_TIMESTAMP true
+      SYSTEM
+    )
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googlebenchmark)
+
+    set_target_properties(benchmark benchmark_main PROPERTIES
+        CXX_CLANG_TIDY ""
+        CXX_INCLUDE_WHAT_YOU_USE ""
+        CXX_CPPCHECK ""
+    )
+
+    add_executable(disruptor.bench benchmark/disruptor_benchmark.cpp)
+    target_link_libraries(disruptor.bench
+        PRIVATE Borescope::Core benchmark::benchmark_main Threads::Threads project_warnings
+    )
+
+    add_executable(disruptor_concurrency.bench benchmark/disruptor_concurrency_benchmark.cpp)
+    target_link_libraries(disruptor_concurrency.bench
+        PRIVATE Borescope::Core benchmark::benchmark_main Threads::Threads project_warnings
+    )
+
+    add_executable(mjpeg_pipeline.bench benchmark/mjpeg_pipeline_benchmark.cpp)
+    target_link_libraries(mjpeg_pipeline.bench 
+        PRIVATE Borescope::Core benchmark::benchmark_main Threads::Threads project_warnings
+    )
 endif()
-
-# 1. Automatically fetch Google Benchmark
-include(FetchContent)
-FetchContent_Declare(
-  googlebenchmark
-  URL https://github.com/google/benchmark/archive/refs/tags/v1.9.5.tar.gz
-  DOWNLOAD_EXTRACT_TIMESTAMP true
-  SYSTEM
-)
-
-set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googlebenchmark)
-
-set_target_properties(benchmark benchmark_main PROPERTIES
-    CXX_CLANG_TIDY ""
-    CXX_INCLUDE_WHAT_YOU_USE ""
-    CXX_CPPCHECK ""
-)
-
-add_executable(disruptor.bench benchmark/disruptor_benchmark.cpp)
-
-target_link_libraries(disruptor.bench
-    PRIVATE 
-        Borescope::Core
-        benchmark::benchmark_main
-        Threads::Threads
-        project_warnings
-)
-
-add_executable(disruptor_concurrency.bench benchmark/disruptor_concurrency_benchmark.cpp)
-
-target_link_libraries(disruptor_concurrency.bench
-    PRIVATE 
-        Borescope::Core
-        benchmark::benchmark_main
-        Threads::Threads
-        project_warnings
-)
-
-add_executable(mjpeg_pipeline.bench benchmark/mjpeg_pipeline_benchmark.cpp)
-
-target_link_libraries(mjpeg_pipeline.bench 
-    PRIVATE 
-        Borescope::Core
-        benchmark::benchmark_main
-        Threads::Threads
-        project_warnings
-)
