@@ -289,96 +289,87 @@ static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr, const 
 	return retval;
 }
 
-static void supercam_read_bulk_callback(struct urb *urb) {
-  struct usb_supercam *dev = urb->context;
-  struct supercam_buffer *vbuf;
-  u8 *page_base;
-  size_t offset = 0;
-  unsigned long flags;
+static void supercam_read_bulk_callback(struct urb *urb)
+{
+	struct usb_supercam *dev = urb->context;
+	struct supercam_buffer *vbuf;
+	u8 *page_base;
+	size_t offset = 0;
+	unsigned long flags;
+	int retval; /* FIXED: Declared local tracking register */
 
-  if (urb->status) {
-    if (urb->status == -ENOENT || urb->status == -ECONNRESET ||
-        urb->status == -ESHUTDOWN)
-      return;
-    goto resubmit;
-  }
+	if (urb->status) {
+		if (urb->status == -ENOENT || urb->status == -ECONNRESET || urb->status == -ESHUTDOWN)
+			return;
+		goto resubmit;
+	}
 
-  page_base = (u8 *)urb->transfer_buffer;
+	page_base = (u8 *)urb->transfer_buffer;
 
-  /* Step linearly through exactly four 944-byte physical packets per 4KB page
-   * boundary */
-  while (offset + NATIVE_PACKET_SIZE <= urb->actual_length) {
-    u8 *pkt_ptr = page_base + offset;
-    const struct usb_packet_header *pkt =
-        (const struct usb_packet_header *)pkt_ptr;
-    uint16_t magic = le16_to_cpu(pkt->leHeader);
+	while (offset + NATIVE_PACKET_SIZE <= urb->actual_length) {
+		u8 *pkt_ptr = page_base + offset;
+		const struct usb_packet_header *pkt = (const struct usb_packet_header *)pkt_ptr;
+		uint16_t magic = le16_to_cpu(pkt->leHeader);
 
-    /* Bypasses trailing 320-byte padding gaps and filters out ghost headers */
-    if (magic != PROTO_FRAME_HEADER_MAGIC) {
-      offset += 1; /* Slide bit window forward to synchronize markers */
-      continue;
-    }
+		if (magic != PROTO_FRAME_HEADER_MAGIC) {
+			offset += 1;
+			continue;
+		}
 
-    /* Isolate video feed channel (Camera 11) and safely drop telemetry data
-     * blocks */
-    if (pkt->leCameraId == PROTO_VIDEO_CAMERA_ID) {
-      const struct usb_payload_header *pay =
-          (const struct usb_payload_header *)(pkt_ptr +
-                                              sizeof(struct usb_packet_header));
-      u8 frame_id = pay->leFrameId;
-      u8 *jpeg_pixels = pkt_ptr + TOTAL_USB_HEADER_SIZE;
-      size_t pure_jpeg_len =
-          le16_to_cpu(pkt->leLength) - sizeof(struct usb_payload_header);
+		if (pkt->leCameraId == PROTO_VIDEO_CAMERA_ID) {
+			const struct usb_payload_header *pay = (const struct usb_payload_header *)(pkt_ptr + sizeof(struct usb_packet_header));
+			u8 frame_id = pay->leFrameId;
+			u8 *jpeg_pixels = pkt_ptr + TOTAL_USB_HEADER_SIZE;
+			size_t pure_jpeg_len = le16_to_cpu(pkt->leLength) - sizeof(struct usb_payload_header);
 
-      /*
-       * FIXED HARDWARE EVENT HANDLER:
-       * Triggers frame dispatch instantly the exact moment the frameId
-       * increments.
-       */
-      if (dev->has_seen_first_frame &&
-          frame_id != dev->last_processed_frame_id) {
-        if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
-          dev->frame_counter++;
-          spin_lock_irqsave(&dev->q_lock, flags);
-          if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
-            vbuf =
-                list_first_entry(&dev->rdy_queue, struct supercam_buffer, list);
-            list_del(&vbuf->list);
-            void* vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
-            if (vaddr) {
-              memcpy(vaddr, dev->current_frame, dev->current_frame_len);
-              vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0,
-                                    dev->current_frame_len);
-              vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
-              vbuf->vb.sequence = dev->sequence++;
-              vbuf->vb.field = V4L2_FIELD_NONE;
-              vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
-            } else {
-              vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-            }
-          }
-          spin_unlock_irqrestore(&dev->q_lock, flags);
-        }
-        dev->current_frame_len = 0;
-        //Reset output buffer pointer
-      }
-      dev->last_processed_frame_id = frame_id;
-      dev->has_seen_first_frame = true; /* Safely append the packet's 932 bytes
-                                           of pure JPEG pixel payload data */
-      if (dev->current_frame_len + pure_jpeg_len <= MAX_FRAME_SIZE) {
-        memcpy(dev->current_frame + dev->current_frame_len, jpeg_pixels,
-               pure_jpeg_len);
-        dev->current_frame_len += pure_jpeg_len;
-      }
-    } /* Step past the fully evaluated 944-byte hardware packet structure
-         boundary */
-    offset += NATIVE_PACKET_SIZE;
-  }
+			if (dev->has_seen_first_frame && frame_id != dev->last_processed_frame_id) {
+				if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
+					dev->frame_counter++;
+
+					spin_lock_irqsave(&dev->q_lock, flags);
+					if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
+						vbuf = list_first_entry(&dev->rdy_queue, struct supercam_buffer, list);
+						list_del(&vbuf->list);
+
+						void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
+						if (vaddr) {
+							memcpy(vaddr, dev->current_frame, dev->current_frame_len);
+							vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0, dev->current_frame_len);
+							vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
+							vbuf->vb.sequence = dev->sequence++;
+							vbuf->vb.field = V4L2_FIELD_NONE;
+							vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
+						} else {
+							vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
+						}
+					}
+					spin_unlock_irqrestore(&dev->q_lock, flags);
+				}
+				dev->current_frame_len = 0;
+			}
+
+			dev->last_processed_frame_id = frame_id;
+			dev->has_seen_first_frame = true;
+
+			if (dev->current_frame_len + pure_jpeg_len <= MAX_FRAME_SIZE) {
+				memcpy(dev->current_frame + dev->current_frame_len, jpeg_pixels, pure_jpeg_len);
+				dev->current_frame_len += pure_jpeg_len;
+			}
+		}
+
+		offset += NATIVE_PACKET_SIZE;
+	}
+
 resubmit:
-  if (dev->streaming) {
-    retval = usb_submit_urb(urb, GFP_ATOMIC);
-  }
+	if (dev->streaming) {
+		retval = usb_submit_urb(urb, GFP_ATOMIC);
+		/* FIXED: Intercept submit failures to protect the host controller pipeline */
+		if (retval && retval != -EPIPE) {
+			dev_err(&dev->interface->dev, "Asynchronous URB resubmission failed with error %d\n", retval);
+		}
+	}
 }
+
 static void supercam_kill_urbs(struct usb_supercam *dev) {
   int i;
   dev->streaming = false;
@@ -395,6 +386,7 @@ static void supercam_kill_urbs(struct usb_supercam *dev) {
     }
   }
 }
+
 static int supercam_probe(struct usb_interface *interface,
                           const struct usb_device_id *id) {
   struct usb_device *udev = interface_to_usbdev(interface);
@@ -523,6 +515,7 @@ error:
   }
   return retval;
 }
+
 static void supercam_disconnect(struct usb_interface *interface) {
   struct usb_supercam *dev = usb_get_intfdata(interface);
   usb_set_intfdata(interface, NULL);
@@ -537,6 +530,7 @@ static void supercam_disconnect(struct usb_interface *interface) {
     kfree(dev);
   }
 }
+
 static struct usb_driver supercam_driver = {
     .name = "supercamera",
     .id_table = supercam_table,
