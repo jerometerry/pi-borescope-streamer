@@ -15,8 +15,8 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production DMA-Compliant Linux 6.18+ V4L2 Driver for Geek szitman supercamera");
-MODULE_VERSION("1.9");
+MODULE_DESCRIPTION("Production 640x480 uStreamer Driver for Geek szitman supercamera");
+MODULE_VERSION("2.0");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -109,7 +109,7 @@ static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
 	
 	*nplanes = 1;
-	sizes[0] = MAX_FRAME_SIZE; /* Fixed: Correct index 0 array element syntax */
+	sizes[0] = MAX_FRAME_SIZE; 
 	return 0;
 }
 
@@ -193,10 +193,14 @@ static int supercam_vidioc_querycap(struct file *file, void *priv, struct v4l2_c
 	return 0;
 }
 
+/* 
+ * FIXED NATIVE RESOLUTION DEFINITIONS:
+ * Correctly restricts aspect boundaries down to 640x480 to match hardware outputs
+ */
 static int supercam_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
-	f->fmt.pix.width        = 1280;
-	f->fmt.pix.height       = 720;
+	f->fmt.pix.width        = 640;
+	f->fmt.pix.height       = 480;
 	f->fmt.pix.pixelformat  = V4L2_PIX_FMT_MJPEG;
 	f->fmt.pix.field        = V4L2_FIELD_NONE;
 	f->fmt.pix.bytesperline = 0;
@@ -348,7 +352,6 @@ static void supercam_read_bulk_callback(struct urb *urb) {
         }
       }
       break;
-
     case STATE_STREAM_VIDEO:
       if (dev->current_frame_len < MAX_FRAME_SIZE) {
         dev->current_frame[dev->current_frame_len++] = b;
@@ -422,16 +425,11 @@ static int supercam_probe(struct usb_interface *interface,
   int i, retval, actual_len;
   if (interface->cur_altsetting->desc.bInterfaceNumber != 1) {
     return -ENODEV;
-  } /** CRITICAL FIXED DMA ROUTING ENDPOINT:* Point mask allocation
-       configuration straight to the parent platform physical device controller
-       tree* (udev->bus->controller) instead of interface container context.
-       This resolves error -5 (EIO).*/
+  }
   retval = dma_set_mask_and_coherent(udev->bus->controller, DMA_BIT_MASK(32));
   if (retval) {
-    dev_err(
-        &interface->dev,
-        "Hardware physical platform core DMA mask initialization failed (%d)\n",
-        retval);
+    dev_err(&interface->dev, "Platform core DMA mask init failed (%d)\n",
+            retval);
     return retval;
   }
   dev_info(&interface->dev,
@@ -464,8 +462,7 @@ static int supercam_probe(struct usb_interface *interface,
   q->mem_ops = &vb2_dma_contig_memops;
   q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
   q->min_queued_buffers = 2;
-  q->lock = &dev->v4l2_lock; /* Map the vb2 queue allocations straight to the
-                                physical controller dev */
+  q->lock = &dev->v4l2_lock;
   q->dev = udev->bus->controller;
   retval = vb2_queue_init(q);
   if (retval) {
@@ -525,7 +522,8 @@ static int supercam_probe(struct usb_interface *interface,
   retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
   if (retval)
     goto error_sequence;
-  dev_info(&interface->dev, "Production V4L2 device deployed successfully.\n");
+  dev_info(&interface->dev,
+           "Production 640x480 V4L2 device deployed successfully.\n");
   dev->streaming = true;
   for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
     retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
