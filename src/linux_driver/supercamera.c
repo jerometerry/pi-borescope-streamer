@@ -344,7 +344,7 @@ static void supercam_read_bulk_callback(struct urb *urb) {
             vbuf =
                 list_first_entry(&dev->rdy_queue, struct supercam_buffer, list);
             list_del(&vbuf->list);
-            void vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
+            void* vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
             if (vaddr) {
               memcpy(vaddr, dev->current_frame, dev->current_frame_len);
               vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0,
