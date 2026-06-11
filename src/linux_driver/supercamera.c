@@ -6,12 +6,14 @@
 #include <linux/usb.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
+#include <media/v4l2-fh.h>
 #include <media/v4l2-ioctl.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Linux Kernel Driver for Geek szitman supercamera (com.useeplus.protocol)");
-MODULE_VERSION("1.1");
+MODULE_DESCRIPTION(
+    "Linux Kernel Driver for Geek szitman supercamera (com.useeplus.protocol)");
+MODULE_VERSION("1.2");
 
 #define USB_TIMEOUT_MS 1000
 #define BULK_TRANSFER_COUNT 4
@@ -30,13 +32,8 @@ MODULE_VERSION("1.1");
 static const u8 initialization_tokens[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
 static const u8 start_stream_tokens[] = {0xBB, 0xAA, 0x05, 0x00, 0x00};
 
-static const struct usb_device_id supercam_table[] =
-{
-    {USB_DEVICE(0x0329, 0x2022)}, 
-	{USB_DEVICE(0x2ce3, 0x3828)}, 
-	{}
-};
-
+static const struct usb_device_id supercam_table[] = {
+    {USB_DEVICE(0x0329, 0x2022)}, {USB_DEVICE(0x2ce3, 0x3828)}, {}};
 MODULE_DEVICE_TABLE(usb, supercam_table);
 
 struct __packed usb_packet_header {
@@ -52,7 +49,8 @@ struct __packed usb_payload_header {
   __le32 leGravitySensor;
 };
 
-#define TOTAL_USB_HEADER_SIZE (sizeof(struct usb_packet_header) + sizeof(struct usb_payload_header))
+#define TOTAL_USB_HEADER_SIZE                                                  \
+  (sizeof(struct usb_packet_header) + sizeof(struct usb_payload_header))
 
 enum parse_state {
   STATE_FIND_HEADER_A,
@@ -88,8 +86,9 @@ struct usb_supercam {
   u8 trailing_byte;
 };
 
+/* --- Clean V4L2 Device Node Core Structural Callbacks --- */
 static int supercam_v4l2_open(struct file *file) {
-  struct usb_supercam *dev = video_drvdata(file);
+  /* Unused variable removed to clean compiler warning */
   return v4l2_fh_open(file);
 }
 
@@ -104,20 +103,46 @@ static const struct v4l2_file_operations supercam_v4l2_fops = {
     .unlocked_ioctl = video_ioctl2,
 };
 
-static int supercam_vidioc_querycap(struct file *file, void *priv,struct v4l2_capability *cap)
-{
+/* Explicit capability and format properties declarations for modern media
+ * layers */
+static int supercam_vidioc_querycap(struct file *file, void *priv,
+                                    struct v4l2_capability *cap) {
   strscpy(cap->driver, "supercamera", sizeof(cap->driver));
   strscpy(cap->card, "Geek szitman supercamera", sizeof(cap->card));
   cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
   return 0;
 }
 
+static int supercam_vidioc_fmt_vid_cap(struct file *file, void *priv,
+                                       struct v4l2_format *f) {
+  f->fmt.pix.width = 1280;
+  f->fmt.pix.height = 720;
+  f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+  f->fmt.pix.field = V4L2_FIELD_NONE;
+  f->fmt.pix.bytesperline = 0;
+  f->fmt.pix.sizeimage = MAX_FRAME_SIZE;
+  f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+  return 0;
+}
+
+static int supercam_vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
+                                            struct v4l2_fmtdesc *f) {
+  if (f->index > 0)
+    return -EINVAL;
+  f->pixelformat = V4L2_PIX_FMT_MJPEG;
+  return 0;
+}
+
 static const struct v4l2_ioctl_ops supercam_v4l2_ioctl_ops = {
     .vidioc_querycap = supercam_vidioc_querycap,
+    .vidioc_g_fmt_vid_cap = supercam_vidioc_fmt_vid_cap,
+    .vidioc_s_fmt_vid_cap = supercam_vidioc_fmt_vid_cap,
+    .vidioc_try_fmt_vid_cap = supercam_vidioc_fmt_vid_cap,
+    .vidioc_enum_fmt_vid_cap = supercam_vidioc_enum_fmt_vid_cap,
 };
 
-static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr,const u8 *tokens, size_t len)
-{
+static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr,
+                              const u8 *tokens, size_t len) {
   int retval;
   int actual_length;
   u8 *dma_buffer;
@@ -126,10 +151,8 @@ static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr,const u
   if (!dma_buffer)
     return -ENOMEM;
 
-  retval = usb_bulk_msg(
-	dev->udev, 
-	usb_sndbulkpipe(dev->udev, endpoint_addr),dma_buffer, len, &actual_length,USB_TIMEOUT_MS
-  );
+  retval = usb_bulk_msg(dev->udev, usb_sndbulkpipe(dev->udev, endpoint_addr),
+                        dma_buffer, len, &actual_length, USB_TIMEOUT_MS);
 
   kfree(dma_buffer);
   return retval;
@@ -142,7 +165,8 @@ static void supercam_read_bulk_callback(struct urb *urb) {
   u8 *data;
 
   if (urb->status) {
-    if (urb->status == -ENOENT || urb->status == -ECONNRESET || urb->status == -ESHUTDOWN)
+    if (urb->status == -ENOENT || urb->status == -ECONNRESET ||
+        urb->status == -ESHUTDOWN)
       return;
     goto resubmit;
   }
@@ -205,8 +229,7 @@ static void supercam_read_bulk_callback(struct urb *urb) {
         dev->current_frame[dev->current_frame_len++] = b;
 
         if (dev->trailing_byte == JPEG_MARKER_BOUNDARY &&
-            b == JPEG_MARKER_EOI)
-		{
+            b == JPEG_MARKER_EOI) {
           if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
             dev->frame_counter++;
             dev_info(&dev->interface->dev,
@@ -238,8 +261,7 @@ resubmit:
   }
 }
 
-static void supercam_kill_urbs(struct usb_supercam *dev)
-{
+static void supercam_kill_urbs(struct usb_supercam *dev) {
   int i;
   dev->streaming = false;
   for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
@@ -256,8 +278,8 @@ static void supercam_kill_urbs(struct usb_supercam *dev)
   }
 }
 
-static int supercam_probe(struct usb_interface *interface,const struct usb_device_id *id)
-{
+static int supercam_probe(struct usb_interface *interface,
+                          const struct usb_device_id *id) {
   struct usb_device *udev = interface_to_usbdev(interface);
   struct usb_supercam *dev = NULL;
   u8 *drain_buffer;
@@ -267,7 +289,8 @@ static int supercam_probe(struct usb_interface *interface,const struct usb_devic
     return -ENODEV;
   }
 
-  dev_info(&interface->dev,"Geek szitman supercamera matching channel identified.\n");
+  dev_info(&interface->dev,
+           "Geek szitman supercamera matching channel identified.\n");
 
   dev = kzalloc(sizeof(*dev), GFP_KERNEL);
   if (!dev)
@@ -308,7 +331,8 @@ static int supercam_probe(struct usb_interface *interface,const struct usb_devic
   }
 
   for (i = 0; i < 30; ++i) {
-    usb_bulk_msg(udev, usb_rcvbulkpipe(udev, 0x82), drain_buffer, 512, &actual_len, 100);
+    usb_bulk_msg(udev, usb_rcvbulkpipe(udev, 0x82), drain_buffer, 512,
+                 &actual_len, 100);
   }
   kfree(drain_buffer);
 
@@ -340,26 +364,25 @@ static int supercam_probe(struct usb_interface *interface,const struct usb_devic
     dev->urbs[i]->transfer_dma = dev->urb_dma_addrs[i];
     dev->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
   }
-
   usb_set_intfdata(interface, dev);
-
-  retval = supercam_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
+  retval = supercam_write_msg(dev, 0x02, initialization_tokens,
+                              sizeof(initialization_tokens));
   if (retval)
     goto error_sequence;
-  retval = supercam_write_msg(dev, 0x01, start_stream_tokens, sizeof(start_stream_tokens));
+  retval = supercam_write_msg(dev, 0x01, start_stream_tokens,
+                              sizeof(start_stream_tokens));
   if (retval)
     goto error_sequence;
   retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
-  if (retval)
-  {
-    dev_err(&interface->dev, "video_register_device character node exposure failed!\n");
+  if (retval) {
+    dev_err(&interface->dev,
+            "video_register_device character node exposure failed!\n");
     goto error_sequence;
   }
-  dev_info(&interface->dev, "Exposed camera path natively under device filesystem tracker.\n");
+  dev_info(&interface->dev,
+           "Exposed camera path natively under device filesystem tracker.\n");
   dev->streaming = true;
-
-  for (i = 0; i < BULK_TRANSFER_COUNT; ++i)
-  {
+  for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
     retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
     if (retval)
       goto error_unreg_video;
@@ -382,13 +405,10 @@ error:
   }
   return retval;
 }
-
-static void supercam_disconnect(struct usb_interface *interface)
-{
+static void supercam_disconnect(struct usb_interface *interface) {
   struct usb_supercam *dev = usb_get_intfdata(interface);
   usb_set_intfdata(interface, NULL);
-  if (dev)
-  {
+  if (dev) {
     supercam_kill_urbs(dev);
     video_unregister_device(&dev->vdev);
     v4l2_device_unregister(&dev->v4l2_dev);
@@ -399,12 +419,10 @@ static void supercam_disconnect(struct usb_interface *interface)
     kfree(dev);
   }
 }
-
 static struct usb_driver supercam_driver = {
     .name = "supercamera",
     .id_table = supercam_table,
     .probe = supercam_probe,
     .disconnect = supercam_disconnect,
 };
-
 module_usb_driver(supercam_driver);
