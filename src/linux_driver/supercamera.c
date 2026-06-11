@@ -1,7 +1,6 @@
-#include <linux/algorithm.h> /* Unlocks standard min/max boundary matching */
 #include <linux/delay.h>
 #include <linux/init.h>
-#include <linux/kernel.h>
+#include <linux/kernel.h> /* Houses native min() and max() comparison macro subsystems */
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
@@ -15,16 +14,21 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production Real-Time Lookahead Protected Borescope Driver");
+MODULE_DESCRIPTION("Production Protocol-Compliant Borescope Driver for Geek szitman supercamera");
 MODULE_VERSION("5.0");
 
 #define USB_TIMEOUT_MS 1000
 #define BULK_TRANSFER_COUNT 4
-#define BULK_TRANSFER_SIZE 4096
 
-#define INTERNAL_BUFFER_SIZE (64 * 1024)
+/* Ingests whole 4KB memory blocks matching the camera's hardware mapping
+ * alignment */
+#define BULK_TRANSFER_SIZE 4096
 #define MAX_FRAME_SIZE (256 * 1024)
-#define MAX_SCAN_LIMIT 20
+
+#define NATIVE_PACKET_HEADER_SIZE 5
+#define NATIVE_PAYLOAD_HEADER_SIZE 7
+#define TOTAL_PROTOCOL_HEADER_SIZE (NATIVE_PACKET_HEADER_SIZE + NATIVE_PAYLOAD_HEADER_SIZE)
+#define MAX_SCAN_LIMIT 160
 
 #define PROTO_FRAME_HEADER_MAGIC 0xBBAA
 #define PROTO_FRAME_HEADER_A 0xAA
@@ -32,17 +36,10 @@ MODULE_VERSION("5.0");
 #define PROTO_VIDEO_CAMERA_ID 0x0B
 #define PROTO_GRAVITY_CAMERA_ID 0x07
 
-#define JPEG_BOUND_MARKER 0xFF
-#define JPEG_START_MARKER 0xD8
-#define JPEG_END_MARKER 0xD9
-#define JPEG_MAX_SOI_POS 256
-
 static const u8 initialization_tokens[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
 static const u8 start_stream_tokens[] = {0xBB, 0xAA, 0x05, 0x00, 0x00};
 
-static const struct usb_device_id supercam_table[] = {
-    {USB_DEVICE(0x0329, 0x2022)}, {USB_DEVICE(0x2ce3, 0x3828)}, {}};
-
+static const struct usb_device_id supercam_table[] = { {USB_DEVICE(0x0329, 0x2022)}, {USB_DEVICE(0x2ce3, 0x3828)}, {} };
 MODULE_DEVICE_TABLE(usb, supercam_table);
 
 struct __packed usb_packet_header {
@@ -57,10 +54,6 @@ struct __packed usb_payload_header {
   u8 leFlags;
   __le32 leGravitySensor;
 };
-
-#define USB_PACKET_HEADER_SIZE sizeof(struct usb_packet_header)
-#define USB_PAYLOAD_HEADER_SIZE sizeof(struct usb_payload_header)
-#define TOTAL_USB_HEADER_SIZE (USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE)
 
 struct supercam_buffer {
   struct vb2_v4l2_buffer vb;
@@ -86,19 +79,14 @@ struct usb_supercam {
   bool streaming;
   bool vb_streaming;
 
-  /*
-   * PERSISTENT CORE STREAM VECTOR SPACE:
-   * Replaces old file loop registers with a sliding window buffer system.
+  /* Persistent frame assembly state registers matching your C++ engine layout
    */
-  u8 *input_buffer;
-  size_t input_buffer_bytes;
-  size_t read_offset;
-
-  struct usb_payload_header last_payload_header;
-  bool has_seen_first_payload;
-
   u8 *current_frame;
   size_t current_frame_len;
+  int last_frame_id;
+  bool has_stored_header;
+  struct usb_payload_header active_payload_hdr;
+
   unsigned int frame_counter;
 };
 
@@ -137,10 +125,9 @@ static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count) {
   unsigned long flags;
 
   spin_lock_irqsave(&dev->q_lock, flags);
-  dev->input_buffer_bytes = 0;
-  dev->read_offset = 0;
   dev->current_frame_len = 0;
-  dev->has_seen_first_payload = false;
+  dev->last_frame_id = -1;
+  dev->has_stored_header = false;
   dev->vb_streaming = true;
   spin_unlock_irqrestore(&dev->q_lock, flags);
   return 0;
@@ -291,16 +278,15 @@ static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr,
 }
 
 /*
- * KERNEL-SPACE VECTOR ENGINE FOR GHOST SCANNING:
- * Direct implementation of your production sliding lookahead scanner.
+ * NATIVE CHROMIUM PROTOCOL STREAM MULTIPLEXER:
+ * Replicates your server's exact linear ghost scanning limits and lookahead
+ * offsets.
  */
 static void supercam_read_bulk_callback(struct urb *urb) {
   struct usb_supercam *dev = urb->context;
   struct supercam_buffer *vbuf;
-  u8 *urb_data;
-  size_t i, d, max_scan, total_packet_size, payload_start, payload_size;
-  bool is_ghost;
-  size_t next_header_offset = 0;
+  u8 *page_ptr;
+  size_t i = 0;
   unsigned long flags;
   int retval;
 
@@ -311,100 +297,87 @@ static void supercam_read_bulk_callback(struct urb *urb) {
     goto resubmit;
   }
 
-  urb_data = (u8 *)urb->transfer_buffer;
+  page_ptr = (u8 *)urb->transfer_buffer;
 
-  /* Append the newly arrived URB page data into the sliding vector allocation
-   * buffer */
-  if (dev->input_buffer_bytes + urb->actual_length <= INTERNAL_BUFFER_SIZE) {
-    memcpy(dev->input_buffer + dev->input_buffer_bytes, urb_data,
-           urb->actual_length);
-    dev->input_buffer_bytes += urb->actual_length;
-  } else {
-    /* Safety overflow valve: clear buffer state to prevent page table faults */
-    dev->input_buffer_bytes = 0;
-    dev->read_offset = 0;
-    memcpy(dev->input_buffer, urb_data, urb->actual_length);
+  while (i + TOTAL_PROTOCOL_HEADER_SIZE <= urb->actual_length) {
+    const struct usb_packet_header *packetHeader =
+        (const struct usb_packet_header *)(page_ptr + i);
+    uint16_t current_magic = le16_to_cpu(packetHeader->leHeader);
+    uint16_t packet_len = le16_to_cpu(packetHeader->leLength);
 
-    dev->input_buffer_bytes = urb->actual_length;
-  }
-  i = dev->read_offset; /* Process vectors while there's enough data for a valid
-                           PacketHeader */
-  while (i + TOTAL_USB_HEADER_SIZE <= dev->input_buffer_bytes) {
-    struct usb_packet_header pkt_header;
-    memcpy(&pkt_header, &dev->input_buffer[i], USB_PACKET_HEADER_SIZE);
-    uint16_t magic = le16_to_cpu(pkt_header.leHeader);
-    if (magic != PROTO_FRAME_HEADER_MAGIC ||
-        (pkt_header.leCameraId != PROTO_VIDEO_CAMERA_ID &&
-         pkt_header.leCameraId != PROTO_GRAVITY_CAMERA_ID)) {
-      i++;
-      continue;
-    } /* LOOKAHEAD GHOST SCANNER WINDOW Pattern Match */
-    is_ghost = false;
-    max_scan =
-        min((size_t)MAX_SCAN_LIMIT, (size_t)(dev->input_buffer_bytes - i - 3));
-    for (d = USB_PACKET_HEADER_SIZE; d <= max_scan; ++d) {
-      if (dev->input_buffer[i + d] == PROTO_FRAME_HEADER_A &&
-          dev->input_buffer[i + d + 1] == PROTO_FRAME_HEADER_B &&
-          (dev->input_buffer[i + d + 2] == PROTO_VIDEO_CAMERA_ID ||
-           dev->input_buffer[i + d + 2] == PROTO_GRAVITY_CAMERA_ID)) {
-        is_ghost = true;
-        next_header_offset = d;
-        break;
-      }
-    }
-    if (is_ghost) {
-      i += next_header_offset;
-      continue;
-    }
-    total_packet_size =
-        USB_PACKET_HEADER_SIZE + le16_to_cpu(pkt_header.leLength);
-    if (i + total_packet_size > dev->input_buffer_bytes) {
-      break; /* Fragmented packet across page, wait for next URB */
-    }
-    if (le16_to_cpu(pkt_header.leLength) < USB_PAYLOAD_HEADER_SIZE) {
+    /* Synchronize memory page pointer index directly to hardware markers */
+    if (current_magic != PROTO_FRAME_HEADER_MAGIC ||
+        (packetHeader->leCameraId != PROTO_VIDEO_CAMERA_ID &&
+         packetHeader->leCameraId != PROTO_GRAVITY_CAMERA_ID)) {
       i++;
       continue;
     }
-    struct usb_payload_header payload_header;
-    memcpy(&payload_header, &dev->input_buffer[i + USB_PACKET_HEADER_SIZE],
-           USB_PAYLOAD_HEADER_SIZE); /* FRAME DISPATCH TRANSITION: Happens when
-                                        frameId increments */
-    if (dev->has_seen_first_payload && dev->current_frame_len > 0 &&
-        dev->last_payload_header.leFrameId !=
-            payload_header.leFrameId) { /* INLINE OUTPUT TRIMMER: Sanitizes SOI
-                                           and EOI locations safely */
-      size_t soi_offset = -1;
-      size_t eoi_offset = -1;
-      size_t j; /* Scan forward for standard JPEG Start of Image (FF D8) */
-      size_t max_soi = min((size_t)JPEG_MAX_SOI_POS, dev->current_frame_len);
-      for (j = 0; j + 1 < max_soi; ++j) {
-        if (dev->current_frame[j] == JPEG_BOUND_MARKER &&
-            dev->current_frame[j + 1] == JPEG_START_MARKER) {
-          soi_offset = j;
-          break;
-        }
-      } /* Scan backward for standard JPEG End of Image (FF D9) */
-      for (j = dev->current_frame_len; j >= 2; --j) {
-        if (dev->current_frame[j - 2] == JPEG_BOUND_MARKER &&
-            dev->current_frame[j - 1] == JPEG_END_MARKER) {
-          eoi_offset = j;
+
+    /*
+     * YOUR LOOKAHEAD GHOST HEADER SCANNER PATTERN:
+     * Drops uninitialized trailing firmware padding noise on the wire.
+     */
+    {
+      bool isGhost = false;
+      size_t nextHeaderOffset = 0;
+      size_t maxScan =
+          min((size_t)MAX_SCAN_LIMIT, (size_t)(urb->actual_length - i - 3));
+      size_t d;
+
+      for (d = NATIVE_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
+        if (page_ptr[i + d] == PROTO_FRAME_HEADER_A &&
+            page_ptr[i + d + 1] == PROTO_FRAME_HEADER_B &&
+            (page_ptr[i + d + 2] == PROTO_VIDEO_CAMERA_ID ||
+             page_ptr[i + d + 2] == PROTO_GRAVITY_CAMERA_ID)) {
+          isGhost = true;
+          nextHeaderOffset = d;
           break;
         }
       }
-      if (soi_offset != -1 && eoi_offset != -1 && soi_offset < eoi_offset) {
-        size_t active_len = eoi_offset - soi_offset;
+      if (isGhost) {
+        i += nextHeaderOffset;
+        continue;
+      }
+    }
+    size_t totalPacketSize = NATIVE_PACKET_HEADER_SIZE + packet_len;
+    if (i + totalPacketSize > urb->actual_length) {
+      break;
+    }
+    if (packet_len < NATIVE_PAYLOAD_HEADER_SIZE) {
+      i++;
+      continue;
+    }
+    const struct usb_payload_header *payloadHeader =
+        (const struct usb_payload_header
+             *)(page_ptr + i +
+                NATIVE_PACKET_HEADER_SIZE); /** YOUR DYNAMIC FLUSH MECHANIC:*
+                                               Dispatches full assembled frames
+                                               to V4L2 queue when frameId
+                                               increments.*/
+    if (dev->has_stored_header && dev->current_frame_len > 0 &&
+        dev->active_payload_hdr.leFrameId !=
+            payloadHeader
+                ->leFrameId) { /* Perform a backward look for standard JPEG EOI
+                                  (FF D9) terminal boundaries */
+      size_t clean_eoi_len = dev->current_frame_len;
+      while (clean_eoi_len >= 2) {
+        if (dev->current_frame[clean_eoi_len - 2] == 0xFF &&
+            dev->current_frame[clean_eoi_len - 1] == 0xD9) {
+          break;
+        }
+        clean_eoi_len--;
+      }
+      if (clean_eoi_len >= MIN_VALID_FRAME_SIZE) {
         dev->frame_counter++;
         spin_lock_irqsave(&dev->q_lock, flags);
         if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
           vbuf =
               list_first_entry(&dev->rdy_queue, struct supercam_buffer, list);
           list_del(&vbuf->list);
-          void vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
+          void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
           if (vaddr) {
-            / Zero -
-                copy slice directly from trimmed marker endpoints * /
-                    memcpy(vaddr, dev->current_frame + soi_offset, active_len);
-            vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0, active_len);
+            memcpy(vaddr, dev->current_frame, clean_eoi_len);
+            vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0, clean_eoi_len);
             vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
             vbuf->vb.sequence = dev->sequence++;
             vbuf->vb.field = V4L2_FIELD_NONE;
@@ -417,31 +390,20 @@ static void supercam_read_bulk_callback(struct urb *urb) {
       }
       dev->current_frame_len = 0;
     }
-    dev->last_payload_header = payload_header;
-    dev->has_seen_first_payload = true; /* Process valid video feeds matching
-                                           your specific filter parameters */
-    if (pkt_header.leCameraId == PROTO_VIDEO_CAMERA_ID &&
-        payload_header.leCameraNumber < 2 && payload_header.leFlags == 0) {
-      payload_start = i + TOTAL_USB_HEADER_SIZE;
-      payload_size = total_packet_size - TOTAL_USB_HEADER_SIZE;
-      if (dev->current_frame_len + payload_size <= MAX_FRAME_SIZE) {
+    dev->active_payload_hdr = *payloadHeader;
+    dev->has_stored_header = true; /* Process valid video feeds while blocking
+                                      out raw gravity packets */
+    if (packetHeader->leCameraId == PROTO_VIDEO_CAMERA_ID &&
+        payloadHeader->leCameraNumber < 2 && payloadHeader->leFlags == 0) {
+      size_t payloadStart = i + TOTAL_PROTOCOL_HEADER_SIZE;
+      size_t payloadSize = totalPacketSize - TOTAL_PROTOCOL_HEADER_SIZE;
+      if (dev->current_frame_len + payloadSize <= MAX_FRAME_SIZE) {
         memcpy(dev->current_frame + dev->current_frame_len,
-               &dev->input_buffer[payload_start], payload_size);
-        dev->current_frame_len += payload_size;
+               page_ptr + payloadStart, payloadSize);
+        dev->current_frame_len += payloadSize;
       }
     }
-    i += total_packet_size;
-  }
-  dev->read_offset = i; /* Dynamic sliding window shift mechanics matching your
-                           buffer compaction logic */
-  if (dev->read_offset == dev->input_buffer_bytes) {
-    dev->input_buffer_bytes = 0;
-    dev->read_offset = 0;
-  } else if (dev->read_offset > BULK_TRANSFER_SIZE) {
-    size_t remaining = dev->input_buffer_bytes - dev->read_offset;
-    memmove(dev->input_buffer, dev->input_buffer + dev->read_offset, remaining);
-    dev->input_buffer_bytes = remaining;
-    dev->read_offset = 0;
+    i += totalPacketSize;
   }
 resubmit:
   if (dev->streaming) {
@@ -487,15 +449,11 @@ static int supercam_probe(struct usb_interface *interface,
   dev->interface = interface;
   dev->sequence = 0;
   dev->vb_streaming = false;
-  dev->has_seen_first_payload = false;
+  dev->has_stored_header = false;
+  dev->current_frame_len = 0;
   mutex_init(&dev->v4l2_lock);
   spin_lock_init(&dev->q_lock);
   INIT_LIST_HEAD(&dev->rdy_queue);
-  dev->input_buffer = kzalloc(INTERNAL_BUFFER_SIZE, GFP_KERNEL);
-  if (!dev->input_buffer) {
-    retval = -ENOMEM;
-    goto error;
-  }
   dev->current_frame = kzalloc(MAX_FRAME_SIZE, GFP_KERNEL);
   if (!dev->current_frame) {
     retval = -ENOMEM;
@@ -595,15 +553,12 @@ error_unreg_v4l2:
   v4l2_device_unregister(&dev->v4l2_dev);
 error:
   if (dev) {
-    if (dev->input_buffer)
-      kfree(dev->input_buffer);
     if (dev->current_frame)
       kfree(dev->current_frame);
     kfree(dev);
   }
   return retval;
 }
-
 static void supercam_disconnect(struct usb_interface *interface) {
   struct usb_supercam *dev = usb_get_intfdata(interface);
   usb_set_intfdata(interface, NULL);
