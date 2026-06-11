@@ -13,7 +13,7 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION(
     "Linux Kernel Driver for Geek szitman supercamera (com.useeplus.protocol)");
-MODULE_VERSION("1.2");
+MODULE_VERSION("1.3");
 
 #define USB_TIMEOUT_MS 1000
 #define BULK_TRANSFER_COUNT 4
@@ -86,11 +86,7 @@ struct usb_supercam {
   u8 trailing_byte;
 };
 
-/* --- Clean V4L2 Device Node Core Structural Callbacks --- */
-static int supercam_v4l2_open(struct file *file) {
-  /* Unused variable removed to clean compiler warning */
-  return v4l2_fh_open(file);
-}
+static int supercam_v4l2_open(struct file *file) { return v4l2_fh_open(file); }
 
 static int supercam_v4l2_release(struct file *file) {
   return v4l2_fh_release(file);
@@ -103,13 +99,23 @@ static const struct v4l2_file_operations supercam_v4l2_fops = {
     .unlocked_ioctl = video_ioctl2,
 };
 
-/* Explicit capability and format properties declarations for modern media
- * layers */
+/*
+ * FIXED COMPLIANCE HANDLER:
+ * Declares explicit device capabilities targets to suppress subsystem warnings
+ */
 static int supercam_vidioc_querycap(struct file *file, void *priv,
                                     struct v4l2_capability *cap) {
   strscpy(cap->driver, "supercamera", sizeof(cap->driver));
   strscpy(cap->card, "Geek szitman supercamera", sizeof(cap->card));
-  cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+  usb_make_path(video_drvdata(file)->udev, cap->bus_info,
+                sizeof(cap->bus_info));
+
+  /* Global capabilities bitmask */
+  cap->capabilities =
+      V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING | V4L2_CAP_DEVICE_CAPS;
+
+  /* Specific target instance caps layout - THIS REMOVES THE KERNEL WARNING */
+  cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
   return 0;
 }
 
@@ -357,7 +363,6 @@ static int supercam_probe(struct usb_interface *interface,
       retval = -ENOMEM;
       goto error_urbs;
     }
-
     usb_fill_bulk_urb(dev->urbs[i], udev, usb_rcvbulkpipe(udev, 0x81),
                       dev->urb_buffers[i], BULK_TRANSFER_SIZE,
                       supercam_read_bulk_callback, dev);
