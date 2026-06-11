@@ -8,11 +8,11 @@
 #include <stdexcept>
 #include "disruptor.hpp"
 
-struct alignas(disruptor::cache_line_size) VideoFrame {
+struct alignas(disruptor::CACHE_LINE_SIZE) VideoFrame {
     static constexpr size_t PADDING_SIZE = 128;
 
     std::vector<uint8_t> storage;
-    size_t active_size{0};
+    size_t activeSize{0};
 
     VideoFrame() {
         storage.resize(paddingSize());
@@ -20,30 +20,30 @@ struct alignas(disruptor::cache_line_size) VideoFrame {
 
     void preAllocate(size_t frame_reserve_capacity) {
         storage.resize(PADDING_SIZE + frame_reserve_capacity);
-        active_size = 0;
+        activeSize = 0;
     }
 
     void clear() noexcept {
-        active_size = 0;
+        activeSize = 0;
     }
 
     bool empty() const noexcept {
-        return active_size == 0;
+        return activeSize == 0;
     }
 
     void insertContent(std::span<const uint8_t> content) {
-        size_t write_offset = paddingSize() + active_size;
+        size_t write_offset = paddingSize() + activeSize;
 
         if (write_offset + content.size() > storage.size()) {
             storage.resize(write_offset + content.size());
         }
 
         std::memcpy(storage.data() + write_offset, content.data(), content.size());
-        active_size += content.size();
+        activeSize += content.size();
     }
 
     void trim(size_t startOffset, size_t endOffset) {
-        if (endOffset > active_size || startOffset > endOffset) {
+        if (endOffset > activeSize || startOffset > endOffset) {
             throw std::out_of_range("Invalid trim boundaries");
         }
 
@@ -56,7 +56,7 @@ struct alignas(disruptor::cache_line_size) VideoFrame {
                 new_length
             );
         }
-        active_size = new_length;
+        activeSize = new_length;
     }
 
     static size_t paddingSize() noexcept { 
@@ -64,11 +64,11 @@ struct alignas(disruptor::cache_line_size) VideoFrame {
     }
 
     size_t contentSize() const noexcept { 
-        return active_size; 
+        return activeSize; 
     }
 
     size_t totalSize() const noexcept { 
-        return paddingSize() + active_size; 
+        return paddingSize() + activeSize; 
 }
     
     uint8_t front() const {
@@ -77,11 +77,11 @@ struct alignas(disruptor::cache_line_size) VideoFrame {
     }
 
     std::span<const uint8_t> getContentSlice() const noexcept {
-        return { storage.data() + paddingSize(), active_size };
+        return { storage.data() + paddingSize(), activeSize };
     }
 
     std::span<uint8_t> getMutableContentSlice() noexcept {
-        return { storage.data() + paddingSize(), active_size };
+        return { storage.data() + paddingSize(), activeSize };
     }
 
     std::vector<uint8_t>& data() noexcept {

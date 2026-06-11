@@ -80,19 +80,19 @@ TEST(DisruptorTest, ConcurrentStressTestProcessesAllEventsWithoutDataLoss) {
     std::atomic<int64_t> actual_id_sum{0};
 
     std::jthread consumer([&pipeline, &actual_id_sum]() {
-        int64_t next_read = 0;
+        int64_t nextRead = 0;
         int64_t local_sum = 0;
         
-        while (next_read < TOTAL_EVENTS) {
-            int64_t available = pipeline.waitFor(next_read);
+        while (nextRead < TOTAL_EVENTS) {
+            int64_t available = pipeline.waitFor(nextRead);
             
-            while (next_read <= available && next_read < TOTAL_EVENTS) {
-                Event& event = pipeline.getBySequence(next_read);
+            while (nextRead <= available && nextRead < TOTAL_EVENTS) {
+                Event& event = pipeline.getBySequence(nextRead);
                 local_sum += event.id;
-                next_read++;
+                nextRead++;
             }
             
-            pipeline.markConsumed(next_read - 1);
+            pipeline.markConsumed(nextRead - 1);
         }
 
         actual_id_sum.store(local_sum, std::memory_order_release);

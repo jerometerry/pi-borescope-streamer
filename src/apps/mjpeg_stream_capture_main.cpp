@@ -30,7 +30,7 @@
 namespace {
     static std::atomic<bool> running{true};
 
-    struct alignas(disruptor::cache_line_size) PipelineMetrics {
+    struct alignas(disruptor::CACHE_LINE_SIZE) PipelineMetrics {
         std::atomic<uint64_t> totalFramesReceived{0};
         std::atomic<uint64_t> totalFramesDropped{0};
     };
@@ -94,78 +94,74 @@ int main() {
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
         std::jthread metricsMonitor([](const std::stop_token& st) {
-            uint64_t last_received = 0;
-            uint64_t last_dropped = 0;
-            auto last_time = std::chrono::steady_clock::now();
+            uint64_t lastReceived = 0;
+            uint64_t lastDropped = 0;
+            auto lastTime = std::chrono::steady_clock::now();
 
             std::cout << "[Metrics] Monitoring engine activated.\n";
 
             while (!st.stop_requested() && running.load(std::memory_order_relaxed)) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
 
-                uint64_t current_received = metrics.totalFramesReceived.load(std::memory_order_relaxed);
-                uint64_t current_dropped = metrics.totalFramesDropped.load(std::memory_order_relaxed);
-                auto current_time = std::chrono::steady_clock::now();
+                uint64_t currentReceived = metrics.totalFramesReceived.load(std::memory_order_relaxed);
+                uint64_t currentDropped = metrics.totalFramesDropped.load(std::memory_order_relaxed);
+                auto currentTime = std::chrono::steady_clock::now();
 
-                std::chrono::duration<double> elapsed = current_time - last_time;
+                std::chrono::duration<double> elapsed = currentTime - lastTime;
                 double seconds = elapsed.count();
 
                 if (seconds > 0.0) {
-                    uint64_t delta_received = current_received - last_received;
-                    uint64_t delta_dropped = current_dropped - last_dropped;
-                    uint64_t total_attempted = delta_received + delta_dropped;
+                    uint64_t deltaReceived = currentReceived - lastReceived;
+                    uint64_t deltaDropped = currentDropped - lastDropped;
+                    uint64_t totalAttempted = deltaReceived + deltaDropped;
 
-                    double fps = delta_received / seconds;
-                    double drop_rate = (total_attempted > 0) 
-                        ? (static_cast<double>(delta_dropped) / total_attempted) * 100.0 
+                    double fps = deltaReceived / seconds;
+                    double dropRate = (totalAttempted > 0) 
+                        ? (static_cast<double>(deltaDropped) / totalAttempted) * 100.0 
                         : 0.0;
 
-                    if (delta_dropped > 0) {
+                    if (deltaDropped > 0) {
                         std::print("[METRICS] Ingestion: {:.2f} FPS | WARNING: Dropped {} frames ({:.1f}% drop rate) due to disk saturation\n", 
-                                   fps, delta_dropped, drop_rate);
-                    } else if (delta_received > 0) {
+                                   fps, deltaDropped, dropRate);
+                    } else if (deltaReceived > 0) {
                         std::print("[METRICS] Ingestion: {:.2f} FPS | Health: 100% | Total Processed: {}\n", 
-                                   fps, current_received);
+                                   fps, currentReceived);
                     }
                 }
 
-                last_received = current_received;
-                last_dropped = current_dropped;
-                last_time = current_time;
+                lastReceived = currentReceived;
+                lastDropped = currentDropped;
+                lastTime = currentTime;
             }
             std::cout << "[Metrics] Monitoring engine stopped.\n";
         });
 
         std::jthread diskWriter([&ringBuffer]() {
             std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);
-            int64_t next_read = 0;
-            bool keep_running = true;
+            int64_t nextRead = 0;
+            bool keepRunning = true;
 
-            // Notice: The loop relies entirely on the pipeline architecture, not flags.
-            while (keep_running) {
-                int64_t available = ringBuffer.waitFor(next_read);
+            while (keepRunning) {
+                int64_t available = ringBuffer.waitFor(nextRead);
 
-                while (next_read <= available) {
-                    VideoFrame& slot = ringBuffer.getBySequence(next_read);
+                while (nextRead <= available) {
+                    VideoFrame& slot = ringBuffer.getBySequence(nextRead);
 
-                    // 1. Sentinel / Poison Pill Detection (Graceful Shutdown)
-                    if (slot.active_size == 0) {
-                        keep_running = false;
+                    if (slot.activeSize == 0) {
+                        keepRunning = false;
                         break;
                     }
 
-                    // 2. Safely write to disk and check for OS errors (e.g., Disk Full)
-                    if (!outFile.write(reinterpret_cast<const char*>(slot.getContentSlice().data()), slot.active_size)) {
+                    if (!outFile.write(reinterpret_cast<const char*>(slot.getContentSlice().data()), slot.activeSize)) {
                         std::cerr << "\n[Fatal] Failed to write to disk. Is the drive full?\n";
                         running.store(false, std::memory_order_relaxed); // Trigger global app shutdown
-                        keep_running = false;
+                        keepRunning = false;
                         break;
                     }
                     
-                    next_read++;
+                    nextRead++;
                 }
-                // Mark consumed safely outside the batch processing loop
-                ringBuffer.markConsumed(next_read - 1);
+                ringBuffer.markConsumed(nextRead - 1);
             }
             std::cout << "[Disk Writer] Output file closed securely. Stream capture finalized.\n";
         });
@@ -185,7 +181,6 @@ int main() {
                     metrics.totalFramesDropped.fetch_add(1, std::memory_order_relaxed);
                 }
             }
-            // Return false to kill the callback chain if the app is shutting down
             return running.load(std::memory_order_relaxed) && status != UsbTransferStatus::Disconnected; 
         };
 
@@ -201,15 +196,12 @@ int main() {
 
         std::cout << "\n[Server Core] Shutdown signal received. Stopping worker lanes...\n";
 
-        // 1. Stop the upstream hardware producer
         driver.stop();
 
-        // 2. Inject the Poison Pill to wake up and kill the downstream consumer
         int64_t seq = ringBuffer.claim();
-        ringBuffer.getBySequence(seq).active_size = 0; 
+        ringBuffer.getBySequence(seq).activeSize = 0; 
         ringBuffer.publish(seq);
 
-        // jthreads automatically join and clean up here on scope exit
         return EXIT_SUCCESS;
 
     } catch (const std::exception& e) {

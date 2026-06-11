@@ -57,28 +57,28 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
     static auto data = readBinaryFile(fileName_);
     static auto pages = splitPages(data);
     
-    std::atomic<bool> producer_running{true};
+    std::atomic<bool> producerRunning{true};
 
     VideoFrameBuffer ringBuffer;
     ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
-    std::jthread consumer([&ringBuffer, &producer_running]() {
-        int64_t next_read = 0;
+    std::jthread consumer([&ringBuffer, &producerRunning]() {
+        int64_t nextRead = 0;
 
-        while (producer_running.load(std::memory_order_acquire)) {
-            int64_t available = ringBuffer.waitFor(next_read);
+        while (producerRunning.load(std::memory_order_acquire)) {
+            int64_t available = ringBuffer.waitFor(nextRead);
 
-            while (next_read <= available) {
-                VideoFrame& slot = ringBuffer.getBySequence(next_read);
+            while (nextRead <= available) {
+                VideoFrame& slot = ringBuffer.getBySequence(nextRead);
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);
                     benchmark::DoNotOptimize(slot.contentSize());
                     benchmark::ClobberMemory();
                 }
-                next_read++;
+                nextRead++;
             }
-            ringBuffer.markConsumed(next_read - 1);
+            ringBuffer.markConsumed(nextRead - 1);
         }
     });
 
@@ -91,7 +91,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
         pageIndex++;
     }
 
-    producer_running.store(false, std::memory_order_release);
+    producerRunning.store(false, std::memory_order_release);
 
     int64_t seq = ringBuffer.claim();
     ringBuffer.getBySequence(seq).clear(); 
@@ -105,27 +105,27 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
     std::ifstream file(fileName_, std::ios::binary);
     if (!file.is_open()) state.SkipWithError("Could not open file.");
     
-    std::atomic<bool> producer_running{true};
+    std::atomic<bool> producerRunning{true};
 
     VideoFrameBuffer ringBuffer;
     ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
-    std::jthread consumer([&ringBuffer, &producer_running]() {
-        int64_t next_read = 0;
-        while (producer_running.load(std::memory_order_acquire)) {
-            int64_t available = ringBuffer.waitFor(next_read);
+    std::jthread consumer([&ringBuffer, &producerRunning]() {
+        int64_t nextRead = 0;
+        while (producerRunning.load(std::memory_order_acquire)) {
+            int64_t available = ringBuffer.waitFor(nextRead);
 
-            while (next_read <= available) {
-                VideoFrame& slot = ringBuffer.getBySequence(next_read);
+            while (nextRead <= available) {
+                VideoFrame& slot = ringBuffer.getBySequence(nextRead);
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);
                     benchmark::DoNotOptimize(slot.contentSize());
                     benchmark::ClobberMemory();
                 }
-                next_read++;
+                nextRead++;
             }
-            ringBuffer.markConsumed(next_read - 1);
+            ringBuffer.markConsumed(nextRead - 1);
         }
     });
 
@@ -146,7 +146,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
         }
     }
 
-    producer_running.store(false, std::memory_order_release);
+    producerRunning.store(false, std::memory_order_release);
     int64_t seq = ringBuffer.claim();
     ringBuffer.getBySequence(seq).clear();
     ringBuffer.publish(seq);

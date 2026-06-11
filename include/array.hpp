@@ -8,13 +8,13 @@
 #include <stdexcept>
 #include "disruptor.hpp"
 
-struct alignas(disruptor::cache_line_size) Array {
-    std::vector<uint8_t> storage_;
+struct alignas(disruptor::CACHE_LINE_SIZE) Array {
+    std::vector<uint8_t> storage;
     size_t activeSize_{0};
 
 
     void preAllocate(size_t frame_reserve_capacity) {
-        storage_.resize(frame_reserve_capacity);
+        storage.resize(frame_reserve_capacity);
         activeSize_ = 0;
     }
 
@@ -29,11 +29,11 @@ struct alignas(disruptor::cache_line_size) Array {
     void insert(std::span<const uint8_t> content) {
         size_t write_offset = activeSize_;
 
-        if (write_offset + content.size() > storage_.size()) {
-            storage_.resize(write_offset + content.size());
+        if (write_offset + content.size() > storage.size()) {
+            storage.resize(write_offset + content.size());
         }
 
-        std::memcpy(storage_.data() + write_offset, content.data(), content.size());
+        std::memcpy(storage.data() + write_offset, content.data(), content.size());
         activeSize_ += content.size();
     }
 
@@ -45,10 +45,10 @@ struct alignas(disruptor::cache_line_size) Array {
         if (empty()) { 
             throw std::out_of_range("Buffer is empty");
         }
-        return storage_.front();
+        return storage.front();
     }
 
     std::vector<uint8_t>& data() noexcept {
-        return storage_;
+        return storage;
     }
 };

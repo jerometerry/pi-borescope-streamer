@@ -80,21 +80,21 @@ int main(int argc, const char* argv[]) {
     V4l2Publisher publisher(config);
     std::cout << "[V4L2 Core] Streaming daemon active and routing frames.\n";
 
-    int64_t next_read = 0;
+    int64_t nextRead = 0;
 
     while (running.load(std::memory_order_relaxed)) {
-        int64_t available = ringBuffer.waitFor(next_read);
+        int64_t available = ringBuffer.waitFor(nextRead);
 
-        if (next_read <= available) {
-            while (next_read <= available) {
-                Frame& slot = ringBuffer.getBySequence(next_read);
+        if (nextRead <= available) {
+            while (nextRead <= available) {
+                VideoFrame& frame = ringBuffer.getBySequence(nextRead);
 
-                if (slot.active_size > 0) [[likely]] {
-                    publisher.writeFrame(slot);
+                if (frame.activeSize > 0) [[likely]] {
+                    publisher.writeFrame(frame);
                 }
-                next_read++;
+                nextRead++;
             }
-            ringBuffer.markConsumed(next_read - 1);
+            ringBuffer.markConsumed(nextRead - 1);
         } else {
             disruptor::yieldCurrentThread();
         }

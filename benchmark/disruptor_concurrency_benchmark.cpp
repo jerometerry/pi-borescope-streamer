@@ -6,7 +6,7 @@
 #include <thread>
 #include "disruptor.hpp"
 
-struct alignas(disruptor::cache_line_size) Event {
+struct alignas(disruptor::CACHE_LINE_SIZE) Event {
     int64_t id{0};
 };
 
@@ -16,38 +16,38 @@ static void BM_Disruptor_SustainedStream(benchmark::State& state) {
     disruptor::Disruptor<Event, BufferSize, WaitStrategy> pipeline;
 
     std::jthread consumer([&pipeline]() {
-        int64_t next_read = 0;
-        bool keep_running = true;
+        int64_t nextRead = 0;
+        bool keepRunning = true;
 
-        while (keep_running) {
-            int64_t available = pipeline.waitFor(next_read);
+        while (keepRunning) {
+            int64_t available = pipeline.waitFor(nextRead);
 
-            while (next_read <= available) {
-                Event& event = pipeline.getBySequence(next_read);
+            while (nextRead <= available) {
+                Event& event = pipeline.getBySequence(nextRead);
 
                 if (event.id == -1) {
-                    keep_running = false;
+                    keepRunning = false;
                     break;
                 }
 
                 benchmark::DoNotOptimize(event.id);
-                next_read++;
+                nextRead++;
             }
-            pipeline.markConsumed(next_read - 1);
+            pipeline.markConsumed(nextRead - 1);
         }
     });
 
-    int64_t current_seq = 0;
+    int64_t currentSequence = 0;
     for (auto _ : state) {
         int64_t seq = pipeline.claim();
         Event& event = pipeline.getBySequence(seq);
-        event.id = current_seq++;
+        event.id = currentSequence++;
         pipeline.publish(seq);
     }
 
-    int64_t shutdown_seq = pipeline.claim();
-    pipeline.getBySequence(shutdown_seq).id = -1;
-    pipeline.publish(shutdown_seq);
+    int64_t shutdownSequence = pipeline.claim();
+    pipeline.getBySequence(shutdownSequence).id = -1;
+    pipeline.publish(shutdownSequence);
 
     state.SetItemsProcessed(state.iterations());
 }
@@ -57,45 +57,45 @@ static void BM_Disruptor_BackpressureBursts(benchmark::State& state) {
     constexpr size_t BufferSize = 1024;
     disruptor::Disruptor<Event, BufferSize, WaitStrategy> pipeline;
     
-    const int64_t burst_size = state.range(0);
+    const int64_t burstSize = state.range(0);
 
-    std::jthread consumer([&pipeline, burst_size]() {
-        int64_t next_read = 0;
-        bool keep_running = true;
+    std::jthread consumer([&pipeline, burstSize]() {
+        int64_t nextRead = 0;
+        bool keepRunning = true;
 
-        while (keep_running) {
-            int64_t available = pipeline.waitFor(next_read);
+        while (keepRunning) {
+            int64_t available = pipeline.waitFor(nextRead);
 
-            if (next_read % burst_size == 0) {
+            if (nextRead % burstSize == 0) {
                 std::this_thread::sleep_for(std::chrono::nanoseconds(50));
             }
 
-            while (next_read <= available) {
-                Event& event = pipeline.getBySequence(next_read);
+            while (nextRead <= available) {
+                Event& event = pipeline.getBySequence(nextRead);
                 if (event.id == -1) {
-                    keep_running = false;
+                    keepRunning = false;
                     break;
                 }
                 benchmark::DoNotOptimize(event.id);
-                next_read++;
+                nextRead++;
             }
-            pipeline.markConsumed(next_read - 1);
+            pipeline.markConsumed(nextRead - 1);
         }
     });
 
     for (auto _ : state) {
-        for (int64_t i = 0; i < burst_size; ++i) {
+        for (int64_t i = 0; i < burstSize; ++i) {
             int64_t seq = pipeline.claim();
             pipeline.getBySequence(seq).id = i;
             pipeline.publish(seq);
         }
     }
 
-    int64_t shutdown_seq = pipeline.claim();
-    pipeline.getBySequence(shutdown_seq).id = -1;
-    pipeline.publish(shutdown_seq);
+    int64_t shutdownSequence = pipeline.claim();
+    pipeline.getBySequence(shutdownSequence).id = -1;
+    pipeline.publish(shutdownSequence);
 
-    state.SetItemsProcessed(state.iterations() * burst_size);
+    state.SetItemsProcessed(state.iterations() * burstSize);
 }
 
 BENCHMARK(BM_Disruptor_SustainedStream<disruptor::YieldingWaitStrategy>)

@@ -26,12 +26,12 @@ inline static void yieldCurrentThread() {
 }
 
 #if defined(__cpp_lib_hardware_interference_size) && !defined(__arm__) && !defined(__aarch64__)
-    inline constexpr size_t cache_line_size = std::hardware_destructive_interference_size;
+    inline constexpr size_t CACHE_LINE_SIZE = std::hardware_destructive_interference_size;
 #else
-    inline constexpr size_t cache_line_size = 64;
+    inline constexpr size_t CACHE_LINE_SIZE = 64;
 #endif
 
-    struct alignas(cache_line_size) Sequence {
+    struct alignas(CACHE_LINE_SIZE) Sequence {
         std::atomic<int64_t> value{-1};
 
         [[nodiscard]] int64_t get() const noexcept {
@@ -86,14 +86,14 @@ inline static void yieldCurrentThread() {
 
     template <typename T, size_t Capacity>
     requires (std::has_single_bit(Capacity))
-    class alignas(cache_line_size) RingBuffer {
+    class alignas(CACHE_LINE_SIZE) RingBuffer {
     private:
         static constexpr size_t mask = Capacity - 1;
-        std::array<T, Capacity> data_{};
+        std::array<T, Capacity> data{};
 
     public:
         [[nodiscard]] T& operator[](int64_t sequence) noexcept {
-            return data_[sequence & mask]; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+            return data[sequence & mask]; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
         }
         
         [[nodiscard]] static constexpr size_t capacity() noexcept {
@@ -104,17 +104,17 @@ inline static void yieldCurrentThread() {
     template <typename T, size_t Capacity, IsWaitStrategy StrategyType = YieldingWaitStrategy>
     class Disruptor {
     private:
-        alignas(cache_line_size) RingBuffer<T, Capacity> buffer_;
-        alignas(cache_line_size) Sequence publishedSequence_;
-        alignas(cache_line_size) Sequence consumerSequence_;
+        alignas(CACHE_LINE_SIZE) RingBuffer<T, Capacity> buffer;
+        alignas(CACHE_LINE_SIZE) Sequence publishedSequence;
+        alignas(CACHE_LINE_SIZE) Sequence consumerSequence;
 
-        struct alignas(cache_line_size) ProducerState {
+        struct alignas(CACHE_LINE_SIZE) ProducerState {
             int64_t sequence{-1};
-            int64_t cachedConsumerSequence_{-1};
+            int64_t cachedConsumerSequence{-1};
         };
-        ProducerState producer_;
+        ProducerState producer;
         
-        [[no_unique_address]] StrategyType waitStrategy_;
+        [[no_unique_address]] StrategyType waitStrategy;
 
     public:
         void preAllocate(const int64_t slotSize) {
@@ -125,54 +125,54 @@ inline static void yieldCurrentThread() {
         }
 
         [[nodiscard]] int64_t claim() noexcept {
-            int64_t nextSequence = producer_.sequence + 1;
-            int64_t wrapPoint = nextSequence - buffer_.capacity();
+            int64_t nextSequence = producer.sequence + 1;
+            int64_t wrapPoint = nextSequence - buffer.capacity();
 
-            if (producer_.cachedConsumerSequence_ < wrapPoint) {
-                while ((producer_.cachedConsumerSequence_ = consumerSequence_.get()) < wrapPoint) {
+            if (producer.cachedConsumerSequence < wrapPoint) {
+                while ((producer.cachedConsumerSequence = consumerSequence.get()) < wrapPoint) {
                     yieldCurrentThread();
                 }
             }
 
-            producer_.sequence = nextSequence;
+            producer.sequence = nextSequence;
             return nextSequence;
         }
 
         [[nodiscard]] std::optional<int64_t> tryClaim() noexcept {
-            int64_t nextSequence = producer_.sequence + 1;
-            int64_t wrapPoint = nextSequence - buffer_.capacity();
+            int64_t nextSequence = producer.sequence + 1;
+            int64_t wrapPoint = nextSequence - buffer.capacity();
 
-            if (producer_.cachedConsumerSequence_ < wrapPoint) {
-                producer_.cachedConsumerSequence_ = consumerSequence_.get();
+            if (producer.cachedConsumerSequence < wrapPoint) {
+                producer.cachedConsumerSequence = consumerSequence.get();
 
-                if (producer_.cachedConsumerSequence_ < wrapPoint) {
+                if (producer.cachedConsumerSequence < wrapPoint) {
                     return std::nullopt;
                 }
             }
 
-            producer_.sequence = nextSequence;
+            producer.sequence = nextSequence;
             return nextSequence;
         }
 
         [[nodiscard]] T& getBySequence(int64_t sequence) noexcept {
-            return buffer_[sequence];
+            return buffer[sequence];
         }
 
         void publish(int64_t sequence) noexcept {
-            publishedSequence_.set(sequence);
-            waitStrategy_.signalAllWhenBlocking(publishedSequence_);
+            publishedSequence.set(sequence);
+            waitStrategy.signalAllWhenBlocking(publishedSequence);
         }
 
         [[nodiscard]] int64_t waitFor(int64_t nextSequence) noexcept {
-            return waitStrategy_.waitFor(publishedSequence_, nextSequence);
+            return waitStrategy.waitFor(publishedSequence, nextSequence);
         }
 
         void markConsumed(int64_t sequence) noexcept {
-            consumerSequence_.set(sequence);
+            consumerSequence.set(sequence);
         }
 
         [[nodiscard]] int64_t getHighestPublished() const noexcept {
-            return publishedSequence_.get();
+            return publishedSequence.get();
         }
     };
 }
