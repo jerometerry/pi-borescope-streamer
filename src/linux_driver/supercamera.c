@@ -359,7 +359,7 @@ static void supercam_read_bulk_callback(struct urb *urb) {
           spin_unlock_irqrestore(&dev->q_lock, flags);
         }
         dev->current_frame_len = 0;
-        / Reset output buffer pointer * /
+        //Reset output buffer pointer
       }
       dev->last_processed_frame_id = frame_id;
       dev->has_seen_first_frame = true; /* Safely append the packet's 932 bytes
