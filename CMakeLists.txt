@@ -55,14 +55,39 @@ if(ENABLE_CPPCHECK)
     find_program(CPPCHECK_EXE NAMES "cppcheck" 
         PATHS "/opt/homebrew/bin" "/usr/bin" "/usr/local/bin"
     )
+
+    find_program(CPPCHECK_HTML_EXE NAMES "cppcheck-htmlreport"
+        PATHS "/opt/homebrew/bin" "/usr/bin" "/usr/local/bin" "$ENV{HOME}/.local/bin"
+    )
+
     if(CPPCHECK_EXE)
+        set(CPPCHECK_XML_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+        set(CPPCHECK_HTML_DIR "${CMAKE_CURRENT_BINARY_DIR}/html_report")
+
         add_custom_target(run_cppcheck
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build"
-            COMMAND sh -c "\"${CPPCHECK_EXE}\" --project=\"${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json\" --cppcheck-build-dir=\"${CMAKE_CURRENT_BINARY_DIR}/cppcheck_build\" -i\"${CMAKE_CURRENT_BINARY_DIR}/_deps\" --suppress=*:*googletest* --suppress=*:*gmock* --xml --enable=all --inconclusive --inline-suppr --check-level=exhaustive --suppress=missingIncludeSystem --suppress=unmatchedSuppression 2> \"${CMAKE_CURRENT_BINARY_DIR}/cppcheck_report.xml\""
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CPPCHECK_XML_DIR}/cppcheck_build"
+            COMMAND sh -c "\"${CPPCHECK_EXE}\" --project=\"${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json\" --cppcheck-build-dir=\"${CPPCHECK_XML_DIR}/cppcheck_build\" -i\"${CMAKE_CURRENT_BINARY_DIR}/_deps\" --suppress=*:*googletest* --suppress=*:*gmock* --xml --enable=all --inconclusive --inline-suppr --check-level=exhaustive --suppress=missingIncludeSystem --suppress=unmatchedSuppression 2> \"${CPPCHECK_XML_DIR}/cppcheck_report.xml\""
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             COMMENT "Running single-pass whole-program Cppcheck analysis"
             VERBATIM
         )
+
+        if(CPPCHECK_HTML_EXE)
+            add_custom_command(
+                TARGET run_cppcheck POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${CPPCHECK_HTML_DIR}"
+                COMMAND "${CPPCHECK_HTML_EXE}" 
+                    --file="${CPPCHECK_XML_DIR}/cppcheck_report.xml" 
+                    --report-dir="${CPPCHECK_HTML_DIR}" 
+                    --source-dir="${PROJECT_SOURCE_DIR}/src" 
+                    --title="${PROJECT_NAME}"
+                COMMENT "Converting Cppcheck XML to HTML report..."
+                VERBATIM
+            )
+        else()
+            message(WARNING "cppcheck-htmlreport not found. Only the XML report will be generated.")
+        endif()
+        
     else()
         message(WARNING "cppcheck enabled but not found!")
     endif()
