@@ -5,24 +5,23 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/spinlock.h>
-#include <linux/dma-mapping.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-ioctl.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-fh.h>
 #include <media/videobuf2-v4l2.h>
-#include <media/videobuf2-dma-contig.h>
+#include <media/videobuf2-vmalloc.h> /* Swapped to virtual memory allocation page systems */
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production uStreamer Driver for Geek szitman supercamera");
-MODULE_VERSION("2.1");
+MODULE_DESCRIPTION("Virtualized 640x480 uStreamer Driver for Geek szitman supercamera");
+MODULE_VERSION("2.2");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
 #define BULK_TRANSFER_SIZE    (16 * 1024) 
 #define MAX_FRAME_SIZE        (256 * 1024)
-#define MIN_VALID_FRAME_SIZE  (256) /* Bypasses low-light compression stalls */
+#define MIN_VALID_FRAME_SIZE  (256) 
 
 #define PROTO_FRAME_HEADER_A       0xAA
 #define PROTO_FRAME_HEADER_B       0xBB
@@ -88,7 +87,7 @@ struct usb_supercam {
 	u8 *urb_buffers[BULK_TRANSFER_COUNT];
 	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
 	bool streaming;
-	bool vb_streaming; /* Explicitly tracks user-space video channel hook bounds */
+	bool vb_streaming;
 
 	enum parse_state fsm_state;
 	u8 header_buffer[TOTAL_USB_HEADER_SIZE];
@@ -110,7 +109,7 @@ static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
 	
 	*nplanes = 1;
-	sizes[0] = MAX_FRAME_SIZE; 
+	sizes[0] = MAX_FRAME_SIZE; /* Fixed: Explicitly target array index slot 0 */
 	return 0;
 }
 
@@ -142,7 +141,7 @@ static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->current_frame_len = 0;
 	dev->fsm_state = STATE_FIND_HEADER_A;
 	dev->trailing_byte = 0;
-	dev->vb_streaming = true; /* Safe activation gate for image processing */
+	dev->vb_streaming = true; 
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 
 	return 0;
@@ -366,9 +365,7 @@ static void supercam_read_bulk_callback(struct urb *urb) {
             b == JPEG_MARKER_EOI) {
           if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
             dev->frame_counter++;
-            spin_lock_irqsave(&dev->q_lock,
-                              flags); /* Process payload transfers only when
-                                         uStreamer requests capture pages */
+            spin_lock_irqsave(&dev->q_lock, flags);
             if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
               vbuf = list_first_entry(&dev->rdy_queue, struct supercam_buffer,
                                       list);
@@ -435,12 +432,6 @@ static int supercam_probe(struct usb_interface *interface,
   if (interface->cur_altsetting->desc.bInterfaceNumber != 1) {
     return -ENODEV;
   }
-  retval = dma_set_mask_and_coherent(udev->bus->controller, DMA_BIT_MASK(32));
-  if (retval) {
-    dev_err(&interface->dev, "Platform core DMA mask init failed (%d)\n",
-            retval);
-    return retval;
-  }
   dev_info(&interface->dev,
            "Geek szitman supercamera matching channel identified.\n");
   dev = kzalloc(sizeof(*dev), GFP_KERNEL);
@@ -469,11 +460,13 @@ static int supercam_probe(struct usb_interface *interface,
   q->drv_priv = dev;
   q->buf_struct_size = sizeof(struct supercam_buffer);
   q->ops = &supercam_vb2_ops;
-  q->mem_ops = &vb2_dma_contig_memops;
-  q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-  q->min_queued_buffers = 2;
-  q->lock = &dev->v4l2_lock;
-  q->dev = udev->bus->controller;
+  q->mem_ops =
+      &vb2_vmalloc_memops; /* Swapped completely to virtual memory allocation
+                              page layers /q->timestamp_flags =
+                              V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;q->min_queued_buffers
+                              = 2;q->lock = &dev->v4l2_lock;q->dev =
+                              &interface->dev; / Safe standard interface device
+                              binding context */
   retval = vb2_queue_init(q);
   if (retval) {
     dev_err(&interface->dev, "vb2_queue_init failed\n");
@@ -532,8 +525,9 @@ static int supercam_probe(struct usb_interface *interface,
   retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
   if (retval)
     goto error_sequence;
-  dev_info(&interface->dev,
-           "Production 640x480 V4L2 device deployed successfully.\n");
+  dev_info(
+      &interface->dev,
+      "Production virtualized 640x480 V4L2 device deployed successfully.\n");
   dev->streaming = true;
   for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
     retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
