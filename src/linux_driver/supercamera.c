@@ -15,7 +15,7 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("Virtualized 640x480 uStreamer Driver for Geek szitman supercamera");
-MODULE_VERSION("2.4");
+MODULE_VERSION("2.5");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -445,8 +445,9 @@ static int supercam_probe(struct usb_interface *interface,
   dev->sequence = 0;
   dev->vb_streaming = false;
   mutex_init(&dev->v4l2_lock);
-  spin_lock_init(&dev->q_lock);
-  INIT_THREAD(&dev->rdy_queue);
+  spin_lock_init(&dev->q_lock); /* Fixed: Corrected to full standard macro
+                                   naming signature rules */
+  INIT_LIST_HEAD(&dev->rdy_queue);
   dev->current_frame = kzalloc(MAX_FRAME_SIZE, GFP_KERNEL);
   if (!dev->current_frame) {
     retval = -ENOMEM;
@@ -460,8 +461,7 @@ static int supercam_probe(struct usb_interface *interface,
   q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_READ;
   q->drv_priv = dev;
   q->buf_struct_size = sizeof(struct supercam_buffer);
-  q->ops = &supercam_vb2_ops; /* Fixed: Corrected symbol layout matching
-                                 standard multimedia headers */
+  q->ops = &supercam_vb2_ops;
   q->mem_ops = &vb2_vmalloc_memops;
   q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
   q->min_queued_buffers = 2;
