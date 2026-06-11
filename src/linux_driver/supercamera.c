@@ -14,8 +14,8 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production Linux V4L2 Driver for Geek szitman supercamera");
-MODULE_VERSION("1.5");
+MODULE_DESCRIPTION("Production Linux 6.18+ V4L2 Driver for Geek szitman supercamera");
+MODULE_VERSION("1.6");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -46,6 +46,7 @@ struct __packed usb_packet_header {
 	u8 leCameraId;
 	__le16 leLength;
 };
+
 struct __packed usb_payload_header {
 	u8 leFrameId;
 	u8 leCameraNumber;
@@ -79,7 +80,7 @@ struct usb_supercam {
 
 	struct vb2_queue vb_vidq;
 	struct list_head rdy_queue;
-	spinlock_t q_lock;
+	spinlock_t q_lock; 
 	u64 sequence;
 
 	struct urb *urbs[BULK_TRANSFER_COUNT];
@@ -99,6 +100,7 @@ struct usb_supercam {
 	u8 trailing_byte;
 };
 
+/* --- Modernized Videobuf2 Operational Lifecycle Handlers --- */
 static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 				unsigned int *nplanes, unsigned int sizes[],
 				struct device *alloc_devs[])
@@ -109,6 +111,7 @@ static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 	sizes[0] = MAX_FRAME_SIZE;
 	return 0;
 }
+
 static int supercam_buf_prepare(struct vb2_buffer *vb)
 {
 	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
@@ -116,9 +119,11 @@ static int supercam_buf_prepare(struct vb2_buffer *vb)
 	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
 	return 0;
 }
+
 static void supercam_buf_queue(struct vb2_buffer *vb)
 {
-	struct usb_supercam *dev = vb2_get_drvpriv(vb->vb2_queue);
+	/* Fixed: Swapped to 6.18+ underscore naming style helper */
+	struct usb_supercam *dev = vb2_get_drv_priv(vb->vb2_queue);
 	struct supercam_buffer *buf = container_of(vb, struct supercam_buffer, vb.vb2_buf);
 	unsigned long flags;
 
@@ -126,13 +131,16 @@ static void supercam_buf_queue(struct vb2_buffer *vb)
 	list_add_tail(&buf->list, &dev->rdy_queue);
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 }
+
 static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	return 0;
 }
+
 static void supercam_stop_streaming(struct vb2_queue *vq)
 {
-	struct usb_supercam *dev = vb2_get_drvpriv(vq);
+	/* Fixed: Swapped to 6.18+ underscore naming style helper */
+	struct usb_supercam *dev = vb2_get_drv_priv(vq);
 	struct supercam_buffer *buf;
 	unsigned long flags;
 
@@ -144,6 +152,7 @@ static void supercam_stop_streaming(struct vb2_queue *vq)
 	}
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 }
+
 static const struct vb2_ops supercam_vb2_ops = {
 	.queue_setup    = supercam_queue_setup,
 	.buf_prepare    = supercam_buf_prepare,
@@ -153,14 +162,17 @@ static const struct vb2_ops supercam_vb2_ops = {
 	.wait_prepare   = vb2_ops_wait_prepare,
 	.wait_finish    = vb2_ops_wait_finish,
 };
+
 static int supercam_v4l2_open(struct file *file)
 {
 	return v4l2_fh_open(file);
 }
+
 static int supercam_v4l2_release(struct file *file)
 {
 	return _vb2_fop_release(file, NULL);
 }
+
 static const struct v4l2_file_operations supercam_v4l2_fops = {
 	.owner          = THIS_MODULE,
 	.open           = supercam_v4l2_open,
@@ -170,6 +182,7 @@ static const struct v4l2_file_operations supercam_v4l2_fops = {
 	.mmap           = vb2_fop_mmap,
 	.unlocked_ioctl = video_ioctl2, 
 };
+
 static int supercam_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 {
 	struct usb_supercam *dev = video_drvdata(file);
@@ -180,6 +193,7 @@ static int supercam_vidioc_querycap(struct file *file, void *priv, struct v4l2_c
 	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
 	return 0;
 }
+
 static int supercam_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
 	f->fmt.pix.width        = 1280;
@@ -191,6 +205,7 @@ static int supercam_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l
 	f->fmt.pix.colorspace   = V4L2_COLORSPACE_SRGB;
 	return 0;
 }
+
 static int supercam_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struct v4l2_fmtdesc *f)
 {
 	if (f->index > 0)
@@ -198,6 +213,7 @@ static int supercam_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struc
 	f->pixelformat = V4L2_PIX_FMT_MJPEG;
 	return 0;
 }
+
 static const struct v4l2_ioctl_ops supercam_v4l2_ioctl_ops = {
 	.vidioc_querycap        = supercam_vidioc_querycap,
 	.vidioc_g_fmt_vid_cap   = supercam_vidioc_fmt_vid_cap,
@@ -211,6 +227,7 @@ static const struct v4l2_ioctl_ops supercam_v4l2_ioctl_ops = {
 	.vidioc_streamon        = vb2_ioctl_streamon,
 	.vidioc_streamoff       = vb2_ioctl_streamoff,
 };
+
 static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr, const u8 *tokens, size_t len)
 {
 	int retval;
@@ -232,313 +249,288 @@ static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr, const 
 	return retval;
 }
 
-static void supercam_read_bulk_callback(struct urb *urb)
-{
-	struct usb_supercam *dev = urb->context;
-	struct supercam_buffer *vbuf;
-	int retval;
-	int idx;
-	u8 *data;
-	unsigned long flags;
+static void supercam_read_bulk_callback(struct urb *urb) {
+  struct usb_supercam *dev = urb->context;
+  struct supercam_buffer *vbuf;
+  int retval;
+  int idx;
+  u8 *data;
+  unsigned long flags;
 
-	if (urb->status)
-	{
-		if (urb->status == -ENOENT || urb->status == -ECONNRESET || urb->status == -ESHUTDOWN)
-			return;
-		goto resubmit;
-	}
+  if (urb->status) {
+    if (urb->status == -ENOENT || urb->status == -ECONNRESET ||
+        urb->status == -ESHUTDOWN)
+      return;
+    goto resubmit;
+  }
 
-	data = (u8 *)urb->transfer_buffer;
+  data = (u8 *)urb->transfer_buffer;
 
-	for (idx = 0; idx < urb->actual_length; ++idx)
-	{
-		u8 b = data[idx];
+  for (idx = 0; idx < urb->actual_length; ++idx) {
+    u8 b = data[idx];
 
-		switch (dev->fsm_state)
-		{
-		case STATE_FIND_HEADER_A:
-			if (b == PROTO_FRAME_HEADER_A)
-				dev->fsm_state = STATE_FIND_HEADER_B;
-			break;
+    switch (dev->fsm_state) {
+    case STATE_FIND_HEADER_A:
+      if (b == PROTO_FRAME_HEADER_A)
+        dev->fsm_state = STATE_FIND_HEADER_B;
+      break;
 
-		case STATE_FIND_HEADER_B:
-			if (b == PROTO_FRAME_HEADER_B) {
-				dev->header_buffer[0] = PROTO_FRAME_HEADER_A;
-				dev->header_buffer[1] = PROTO_FRAME_HEADER_B;
-				dev->header_bytes_collected = 2;
-				dev->fsm_state = STATE_READ_PACKET_HEADER;
-			} else if (b != PROTO_FRAME_HEADER_A) {
-				dev->fsm_state = STATE_FIND_HEADER_A;
-			}
-			break;
+    case STATE_FIND_HEADER_B:
+      if (b == PROTO_FRAME_HEADER_B) {
+        dev->header_buffer[0] = PROTO_FRAME_HEADER_A;
+        dev->header_buffer[1] = PROTO_FRAME_HEADER_B;
+        dev->header_bytes_collected = 2;
+        dev->fsm_state = STATE_READ_PACKET_HEADER;
+      } else if (b != PROTO_FRAME_HEADER_A) {
+        dev->fsm_state = STATE_FIND_HEADER_A;
+      }
+      break;
 
-		case STATE_READ_PACKET_HEADER:
-			dev->header_buffer[dev->header_bytes_collected++] = b;
-			if (dev->header_bytes_collected == sizeof(struct usb_packet_header)) {
-				const struct usb_packet_header *pkt = (const struct usb_packet_header *)dev->header_buffer;
-				dev->active_camera_id = pkt->leCameraId;
-				dev->payload_bytes_remaining = le16_to_cpu(pkt->leLength);
+    case STATE_READ_PACKET_HEADER:
+      dev->header_buffer[dev->header_bytes_collected++] = b;
+      if (dev->header_bytes_collected == sizeof(struct usb_packet_header)) {
+        const struct usb_packet_header *pkt =
+            (const struct usb_packet_header *)dev->header_buffer;
+        dev->active_camera_id = pkt->leCameraId;
+        dev->payload_bytes_remaining = le16_to_cpu(pkt->leLength);
 
-				if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID || 
-				    dev->active_camera_id == PROTO_GRAVITY_CAMERA_ID) {
-					dev->fsm_state = STATE_READ_PAYLOAD_HEADER;
-				} else {
-					dev->fsm_state = STATE_FIND_HEADER_A;
-				}
-			}
-			break;
+        if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID ||
+            dev->active_camera_id == PROTO_GRAVITY_CAMERA_ID) {
+          dev->fsm_state = STATE_READ_PAYLOAD_HEADER;
+        } else {
+          dev->fsm_state = STATE_FIND_HEADER_A;
+        }
+      }
+      break;
 
-		case STATE_READ_PAYLOAD_HEADER:
-			dev->header_buffer[dev->header_bytes_collected++] = b;
-			dev->payload_bytes_remaining--;
+    case STATE_READ_PAYLOAD_HEADER:
+      dev->header_buffer[dev->header_bytes_collected++] = b;
+      dev->payload_bytes_remaining--;
 
-			if (dev->header_bytes_collected == TOTAL_USB_HEADER_SIZE) {
-				if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID) {
-					dev->fsm_state = STATE_STREAM_VIDEO;
-				} else {
-					dev->fsm_state = STATE_SKIP_TELEMETRY;
-				}
-			}
-			break;
+      if (dev->header_bytes_collected == TOTAL_USB_HEADER_SIZE) {
+        if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID) {
+          dev->fsm_state = STATE_STREAM_VIDEO;
+        } else {
+          dev->fsm_state = STATE_SKIP_TELEMETRY;
+        }
+      }
+      break;
 
-		case STATE_STREAM_VIDEO:
-			if (dev->current_frame_len < MAX_FRAME_SIZE) {
-				dev->current_frame[dev->current_frame_len++] = b;
-				
-				if (dev->trailing_byte == JPEG_MARKER_BOUNDARY && b == JPEG_MARKER_EOI) {
-					if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
-						dev->frame_counter++;
+    case STATE_STREAM_VIDEO:
+      if (dev->current_frame_len < MAX_FRAME_SIZE) {
+        dev->current_frame[dev->current_frame_len++] = b;
 
-						spin_lock_irqsave(&dev->q_lock, flags);
-						if (!list_empty(&dev->rdy_queue)) {
-							vbuf = list_first_entry(&dev->rdy_queue, struct supercam_buffer, list);
-							list_del(&vbuf->list);
+        if (dev->trailing_byte == JPEG_MARKER_BOUNDARY &&
+            b == JPEG_MARKER_EOI) {
+          if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
+            dev->frame_counter++;
 
-							void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
-							if (vaddr)
-							{
+            spin_lock_irqsave(&dev->q_lock, flags);
+            if (!list_empty(&dev->rdy_queue)) {
+              vbuf = list_first_entry(&dev->rdy_queue, struct supercam_buffer,
+                                      list);
+              list_del(&vbuf->list);
 
-								memcpy(vaddr, dev->current_frame, dev->current_frame_len);
-								vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0, dev->current_frame_len);
-								vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
-								vbuf->vb.sequence = dev->sequence++;
-								vbuf->vb.field = V4L2_FIELD_NONE;
-								vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
-							}
-							else
-							{
-								vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-							}
-						}
-						spin_unlock_irqrestore(&dev->q_lock, flags);
-					}
-					dev->current_frame_len = 0;
-				}
-				dev->trailing_byte = b;
-			}
-			dev->payload_bytes_remaining--;
-			if (dev->payload_bytes_remaining == 0) {
-				dev->fsm_state = STATE_FIND_HEADER_A;
-			}
-			break;
-		case STATE_SKIP_TELEMETRY:
-			dev->payload_bytes_remaining--;
-			if (dev->payload_bytes_remaining == 0)
-				dev->fsm_state = STATE_FIND_HEADER_A;
-			break;
-		}
-	}
+              void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
+              if (vaddr) {
+                memcpy(vaddr, dev->current_frame, dev->current_frame_len);
+                vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0,
+                                      dev->current_frame_len);
 
+                vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
+                vbuf->vb.sequence = dev->sequence++;
+                vbuf->vb.field = V4L2_FIELD_NONE;
+
+                vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
+              } else {
+                vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
+              }
+            }
+            spin_unlock_irqrestore(&dev->q_lock, flags);
+          }
+          dev->current_frame_len = 0;
+        }
+        dev->trailing_byte = b;
+      }
+      dev->payload_bytes_remaining--;
+      if (dev->payload_bytes_remaining == 0) {
+        dev->fsm_state = STATE_FIND_HEADER_A;
+      }
+      break;
+    case STATE_SKIP_TELEMETRY:
+      dev->payload_bytes_remaining--;
+      if (dev->payload_bytes_remaining == 0)
+        dev->fsm_state = STATE_FIND_HEADER_A;
+      break;
+    }
+  }
 resubmit:
-	if (dev->streaming)
-	{
-		retval = usb_submit_urb(urb, GFP_ATOMIC);
-	}
+  if (dev->streaming) {
+    retval = usb_submit_urb(urb, GFP_ATOMIC);
+  }
 }
-
-static void supercam_kill_urbs(struct usb_supercam *dev)
-{
-	int i;
-	dev->streaming = false;
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		if (dev->urbs[i]) {
-			usb_kill_urb(dev->urbs[i]);
-			if (dev->urb_buffers[i]) {
-				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE,
-					dev->urb_buffers[i], dev->urb_dma_addrs[i]
-				);
-				dev->urb_buffers[i] = NULL;
-			}
-			usb_free_urb(dev->urbs[i]);
-			dev->urbs[i] = NULL;
-		}
-	}
+static void supercam_kill_urbs(struct usb_supercam *dev) {
+  int i;
+  dev->streaming = false;
+  for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+    if (dev->urbs[i]) {
+      usb_kill_urb(dev->urbs[i]);
+      if (dev->urb_buffers[i]) {
+        usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE, dev->urb_buffers[i],
+                          dev->urb_dma_addrs[i]);
+        dev->urb_buffers[i] = NULL;
+      }
+      usb_free_urb(dev->urbs[i]);
+      dev->urbs[i] = NULL;
+    }
+  }
 }
-	
-static int supercam_probe(struct usb_interface *interface, const struct usb_device_id *id)
-{
-	struct usb_device *udev = interface_to_usbdev(interface);
-	struct usb_supercam *dev = NULL;
-	struct vb2_queue *q;
-	u8 *drain_buffer;
-	int i, retval, actual_len;
-	if (interface->cur_altsetting->desc.bInterfaceNumber != 1)
-	{
-		return -ENODEV;
-	}
-
-	dev_info(&interface->dev, "Geek szitman supercamera matching channel identified.\n");
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev) return -ENOMEM;
-
-	dev->udev = udev;
-	dev->interface = interface;
-	dev->fsm_state = STATE_FIND_HEADER_A;
-	dev->trailing_byte = 0;
-	dev->sequence = 0;
-
-	mutex_init(&dev->v4l2_lock);
-	spin_lock_init(&dev->q_lock);
-
-	INIT_LIST_HEAD(&dev->rdy_queue);
-	dev->current_frame = kzalloc(MAX_FRAME_SIZE, GFP_KERNEL);
-	if (!dev->current_frame) { retval = -ENOMEM; goto error; }
-
-	retval = v4l2_device_register(&interface->dev, &dev->v4l2_dev);
-	if (retval) goto error;
-
-	q = &dev->vb_vidq;
-	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_READ;
-	q->drv_priv = dev;
-	q->buf_struct_size = sizeof(struct supercam_buffer);
-	q->ops = &supercam_vb2_ops;
-	q->mem_ops = &vb2_dma_contig_memops;
-	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
-	q->min_buffers_needed = 2;
-	q->lock = &dev->v4l2_lock;
-	q->dev = &interface->dev;
-	retval = vb2_queue_init(q);
-
-	if (retval)
-	{ 
-		dev_err(&interface->dev, "vb2_queue_init failed\n");
-		goto error_unreg_v4l2; 
-	}
-
-	strscpy(dev->vdev.name, "supercamera-video", sizeof(dev->vdev.name));
-	dev->vdev.v4l2_dev = &dev->v4l2_dev;
-	dev->vdev.fops = &supercam_v4l2_fops;
-	dev->vdev.ioctl_ops = &supercam_v4l2_ioctl_ops;
-	dev->vdev.release = video_device_release_empty;
-	dev->vdev.lock = &dev->v4l2_lock;
-	dev->vdev.queue = q;
-	dev->vdev.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
-	video_set_drvdata(&dev->vdev, dev);
-
-	drain_buffer = kmalloc(512, GFP_KERNEL);
-	if (!drain_buffer)
-	{ 
-		retval = -ENOMEM; 
-		goto error_unreg_v4l2; 
-	}
-	for (i = 0; i < 30; ++i) {
-		usb_bulk_msg(udev, usb_rcvbulkpipe(udev, 0x82), drain_buffer, 512, &actual_len, 100);
-	}
-	kfree(drain_buffer);
-
-	retval = usb_set_interface(udev, 1, 1);
-	if (retval) goto error_unreg_v4l2;
-
-	usb_clear_halt(udev, usb_rcvbulkpipe(udev, 0x81));
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i)
-	{
-		dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!dev->urbs[i])
-		{ 
-			retval = -ENOMEM;
-			goto error_urbs;
-		}
-		dev->urb_buffers[i] = usb_alloc_coherent(udev, BULK_TRANSFER_SIZE, GFP_KERNEL, &dev->urb_dma_addrs[i]);
-		if (!dev->urb_buffers[i]) 
-		{ 
-			retval = -ENOMEM; 
-			goto error_urbs; 
-		}
-		usb_fill_bulk_urb(
-			dev->urbs[i], 
-			udev, 
-			usb_rcvbulkpipe(udev, 0x81), 
-			dev->urb_buffers[i], 
-			BULK_TRANSFER_SIZE, 
-			supercam_read_bulk_callback, 
-			dev
-		);
-		dev->urbs[i]->transfer_dma = dev->urb_dma_addrs[i];
-		dev->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
-	}
-
-	usb_set_intfdata(interface, dev);
-
-	retval = supercam_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
-	if (retval) goto error_sequence;
-
-	retval = supercam_write_msg(dev, 0x01, start_stream_tokens, sizeof(start_stream_tokens));
-	if (retval) goto error_sequence;
-
-	retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
-	if (retval) goto error_sequence;
-
-	dev_info(&interface->dev, "Production V4L2 device deployed successfully.\n");
-	dev->streaming = true;
-
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i)
-	{
-		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
-		if (retval) goto error_unreg_video;
-	}
-
-	return 0;
-
+static int supercam_probe(struct usb_interface *interface,
+                          const struct usb_device_id *id) {
+  struct usb_device *udev = interface_to_usbdev(interface);
+  struct usb_supercam *dev = NULL;
+  struct vb2_queue *q;
+  u8 *drain_buffer;
+  int i, retval, actual_len;
+  if (interface->cur_altsetting->desc.bInterfaceNumber != 1) {
+    return -ENODEV;
+  }
+  dev_info(&interface->dev,
+           "Geek szitman supercamera matching channel identified.\n");
+  dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+  if (!dev)
+    return -ENOMEM;
+  dev->udev = udev;
+  dev->interface = interface;
+  dev->fsm_state = STATE_FIND_HEADER_A;
+  dev->trailing_byte = 0;
+  dev->sequence = 0;
+  mutex_init(&dev->v4l2_lock);
+  spin_lock_init(&dev->q_lock);
+  INIT_LIST_HEAD(&dev->rdy_queue);
+  dev->current_frame = kzalloc(MAX_FRAME_SIZE, GFP_KERNEL);
+  if (!dev->current_frame) {
+    retval = -ENOMEM;
+    goto error;
+  }
+  retval = v4l2_device_register(&interface->dev, &dev->v4l2_dev);
+  if (retval)
+    goto error;
+  q = &dev->vb_vidq;
+  q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_READ;
+  q->drv_priv = dev;
+  q->buf_struct_size = sizeof(struct supercam_buffer);
+  q->ops = &supercam_vb2_ops;
+  q->mem_ops = &vb2_dma_contig_memops;
+  q->timestamp_flags =
+      V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC; /* Fixed: Modern 6.18+ parameter name
+                                            for minimum buffers constraint
+                                            tracking */
+  q->min_queued_buffers = 2;
+  q->lock = &dev->v4l2_lock;
+  q->dev = &interface->dev;
+  retval = vb2_queue_init(q);
+  if (retval) {
+    dev_err(&interface->dev, "vb2_queue_init failed\n");
+    goto error_unreg_v4l2;
+  }
+  strscpy(dev->vdev.name, "supercamera-video", sizeof(dev->vdev.name));
+  dev->vdev.v4l2_dev = &dev->v4l2_dev;
+  dev->vdev.fops = &supercam_v4l2_fops;
+  dev->vdev.ioctl_ops = &supercam_v4l2_ioctl_ops;
+  dev->vdev.release = video_device_release_empty;
+  dev->vdev.lock = &dev->v4l2_lock;
+  dev->vdev.queue = q;
+  dev->vdev.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+  video_set_drvdata(&dev->vdev, dev);
+  drain_buffer = kmalloc(512, GFP_KERNEL);
+  if (!drain_buffer) {
+    retval = -ENOMEM;
+    goto error_unreg_v4l2;
+  }
+  for (i = 0; i < 30; ++i) {
+    usb_bulk_msg(udev, usb_rcvbulkpipe(udev, 0x82), drain_buffer, 512,
+                 &actual_len, 100);
+  }
+  kfree(drain_buffer);
+  retval = usb_set_interface(udev, 1, 1);
+  if (retval)
+    goto error_unreg_v4l2;
+  usb_clear_halt(udev, usb_rcvbulkpipe(udev, 0x81));
+  for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+    dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
+    if (!dev->urbs[i]) {
+      retval = -ENOMEM;
+      goto error_urbs;
+    }
+    dev->urb_buffers[i] = usb_alloc_coherent(
+        udev, BULK_TRANSFER_SIZE, GFP_KERNEL, &dev->urb_dma_addrs[i]);
+    if (!dev->urb_buffers[i]) {
+      retval = -ENOMEM;
+      goto error_urbs;
+    }
+    usb_fill_bulk_urb(dev->urbs[i], udev, usb_rcvbulkpipe(udev, 0x81),
+                      dev->urb_buffers[i], BULK_TRANSFER_SIZE,
+                      supercam_read_bulk_callback, dev);
+    dev->urbs[i]->transfer_dma = dev->urb_dma_addrs[i];
+    dev->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+  }
+  usb_set_intfdata(interface, dev);
+  retval = supercam_write_msg(dev, 0x02, initialization_tokens,
+                              sizeof(initialization_tokens));
+  if (retval)
+    goto error_sequence;
+  retval = supercam_write_msg(dev, 0x01, start_stream_tokens,
+                              sizeof(start_stream_tokens));
+  if (retval)
+    goto error_sequence;
+  retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
+  if (retval)
+    goto error_sequence;
+  dev_info(&interface->dev, "Production V4L2 device deployed successfully.\n");
+  dev->streaming = true;
+  for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+    retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
+    if (retval)
+      goto error_unreg_video;
+  }
+  return 0;
 error_unreg_video:
-	video_unregister_device(&dev->vdev);
+  video_unregister_device(&dev->vdev);
 error_sequence:
-	supercam_kill_urbs(dev);
-	usb_set_intfdata(interface, NULL);
+  supercam_kill_urbs(dev);
+  usb_set_intfdata(interface, NULL);
 error_urbs:
-	supercam_kill_urbs(dev);
+  supercam_kill_urbs(dev);
 error_unreg_v4l2:
-	v4l2_device_unregister(&dev->v4l2_dev);
+  v4l2_device_unregister(&dev->v4l2_dev);
 error:
-	if (dev) {
-		if (dev->current_frame) kfree(dev->current_frame);
-		kfree(dev);
-	}
-	return retval;
+  if (dev) {
+    if (dev->current_frame)
+      kfree(dev->current_frame);
+    kfree(dev);
+  }
+  return retval;
 }
-
-static void supercam_disconnect(struct usb_interface *interface)
-{
-	struct usb_supercam *dev = usb_get_intfdata(interface);
-	usb_set_intfdata(interface, NULL);
-	if (dev)
-	{
-		supercam_kill_urbs(dev);
-		video_unregister_device(&dev->vdev);
-		v4l2_device_unregister(&dev->v4l2_dev);
-
-		if (dev->current_frame) kfree(dev->current_frame);
-
-		dev_info(&interface->dev, "Geek szitman supercamera completely detached.\n");
-		kfree(dev);
-	}
+static void supercam_disconnect(struct usb_interface *interface) {
+  struct usb_supercam *dev = usb_get_intfdata(interface);
+  usb_set_intfdata(interface, NULL);
+  if (dev) {
+    supercam_kill_urbs(dev);
+    video_unregister_device(&dev->vdev);
+    v4l2_device_unregister(&dev->v4l2_dev);
+    if (dev->current_frame)
+      kfree(dev->current_frame);
+    dev_info(&interface->dev,
+             "Geek szitman supercamera completely detached.\n");
+    kfree(dev);
+  }
 }
-
 static struct usb_driver supercam_driver = {
-	.name = "supercamera",
-	.id_table = supercam_table,
-	.probe = supercam_probe,
-	.disconnect = supercam_disconnect,
+    .name = "supercamera",
+    .id_table = supercam_table,
+    .probe = supercam_probe,
+    .disconnect = supercam_disconnect,
 };
-
 module_usb_driver(supercam_driver);
