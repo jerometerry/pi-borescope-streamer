@@ -77,10 +77,10 @@ if(ENABLE_CPPCHECK)
                 TARGET run_cppcheck POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${CPPCHECK_HTML_DIR}"
                 COMMAND "${CPPCHECK_HTML_EXE}" 
-                    --file="${CPPCHECK_XML_DIR}/cppcheck_report.xml" 
-                    --report-dir="${CPPCHECK_HTML_DIR}" 
-                    --source-dir="${PROJECT_SOURCE_DIR}/src" 
-                    --title="${PROJECT_NAME}"
+                    --file=${CPPCHECK_XML_DIR}/cppcheck_report.xml 
+                    --report-dir=${CPPCHECK_HTML_DIR} 
+                    --source-dir=${PROJECT_SOURCE_DIR}/src 
+                    --title=${PROJECT_NAME}
                 COMMENT "Converting Cppcheck XML to HTML report..."
                 VERBATIM
             )
