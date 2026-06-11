@@ -8,7 +8,7 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("Linux Kernel Driver for Geek szitman supercamera (com.useeplus.protocol)");
-MODULE_VERSION("0.9");
+MODULE_VERSION("1.0");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -20,10 +20,12 @@ MODULE_VERSION("0.9");
 #define PROTO_VIDEO_CAMERA_ID      0x0B
 #define PROTO_GRAVITY_CAMERA_ID    0x07
 
+#define JPEG_MARKER_BOUNDARY       0xFF
+#define JPEG_MARKER_EOI            0xD9
+
 static const u8 initialization_tokens[] = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_stream_tokens[]    = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
-/* Back to interface ID mapping table so the kernel triggers our probe instantly */
 static const struct usb_device_id supercam_table[] = {
 	{ USB_DEVICE(0x0329, 0x2022) }, 
 	{ USB_DEVICE(0x2ce3, 0x3828) }, 
@@ -69,11 +71,13 @@ struct usb_supercam {
 	size_t header_bytes_collected;
 	u8 active_camera_id;
 	size_t payload_bytes_remaining;
-	int last_frame_id;
 
 	u8 *current_frame;
 	size_t current_frame_len;
 	unsigned int frame_counter;
+	
+	/* Inline tracker byte to catch JPEG marker shifts fluidly across boundary lines */
+	u8 trailing_byte;
 };
 
 static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr, const u8 *tokens, size_t len)
@@ -154,21 +158,6 @@ static void supercam_read_bulk_callback(struct urb *urb)
 			dev->payload_bytes_remaining--;
 
 			if (dev->header_bytes_collected == TOTAL_USB_HEADER_SIZE) {
-				const struct usb_payload_header *payload = 
-					(const struct usb_payload_header *)(dev->header_buffer + sizeof(struct usb_packet_header));
-
-				if (dev->last_frame_id != -1 && payload->leFrameId != (u8)dev->last_frame_id) {
-					if (dev->current_frame_len > 0) {
-						dev->frame_counter++;
-						dev_info(&dev->interface->dev, 
-							 "[STREAMING] Compiled Video Frame #%u (%zu Bytes).\n", 
-							 dev->frame_counter, dev->current_frame_len);
-						dev->current_frame_len = 0;
-					}
-				}
-
-				dev->last_frame_id = payload->leFrameId;
-
 				if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID) {
 					dev->fsm_state = STATE_STREAM_VIDEO;
 				} else {
@@ -180,10 +169,27 @@ static void supercam_read_bulk_callback(struct urb *urb)
 		case STATE_STREAM_VIDEO:
 			if (dev->current_frame_len < MAX_FRAME_SIZE) {
 				dev->current_frame[dev->current_frame_len++] = b;
+				
+				/* 
+				 * INLINE REAL-TIME BOUNDARY CHECKER:
+				 * Evaluates the streaming stream segment for the real JPEG EOI tail (0xFF 0xD9).
+				 */
+				if (dev->trailing_byte == JPEG_MARKER_BOUNDARY && b == JPEG_MARKER_EOI) {
+					dev->frame_counter++;
+					dev_info(&dev->interface->dev, 
+						 "[STITCHED COMPLETE] Image Frame #%u Assembled Successfully (%zu Bytes).\n", 
+						 dev->frame_counter, dev->current_frame_len);
+					
+					/* Flash pointer counters to process next image frame sequence */
+					dev->current_frame_len = 0;
+				}
+				dev->trailing_byte = b;
 			}
+			
 			dev->payload_bytes_remaining--;
-			if (dev->payload_bytes_remaining == 0)
+			if (dev->payload_bytes_remaining == 0) {
 				dev->fsm_state = STATE_FIND_HEADER_A;
+			}
 			break;
 
 		case STATE_SKIP_TELEMETRY:
@@ -225,9 +231,7 @@ static int supercam_probe(struct usb_interface *interface, const struct usb_devi
 	u8 *drain_buffer;
 	int i, retval, actual_len;
 
-	/* Interface filtering layout constraint matching your descriptor requirements */
 	if (interface->cur_altsetting->desc.bInterfaceNumber != 1) {
-		dev_info(&interface->dev, "Leaving Interface 0 for cross-interface targeting.\n");
 		return -ENODEV; 
 	}
 
@@ -238,8 +242,8 @@ static int supercam_probe(struct usb_interface *interface, const struct usb_devi
 
 	dev->udev = udev;
 	dev->interface = interface;
-	dev->last_frame_id = -1;
 	dev->fsm_state = STATE_FIND_HEADER_A;
+	dev->trailing_byte = 0;
 
 	dev->current_frame = kzalloc(MAX_FRAME_SIZE, GFP_KERNEL);
 	if (!dev->current_frame) {
@@ -247,9 +251,6 @@ static int supercam_probe(struct usb_interface *interface, const struct usb_devi
 		goto error;
 	}
 
-	/* ----------------------------------------------------
-	 * PHASE 1: DRAIN INTERFACE 0 iAP HEARTBEAT PAYLOADS
-	 * ---------------------------------------------------- */
 	drain_buffer = kmalloc(512, GFP_KERNEL);
 	if (!drain_buffer) {
 		retval = -ENOMEM;
@@ -263,9 +264,6 @@ static int supercam_probe(struct usb_interface *interface, const struct usb_devi
 	}
 	kfree(drain_buffer);
 
-	/* ----------------------------------------------------
-	 * PHASE 2: ALTERNATE SETTING SELECTION
-	 * ---------------------------------------------------- */
 	retval = usb_set_interface(udev, 1, 1);
 	if (retval) {
 		dev_err(&interface->dev, "Failed to switch alternate profile indices.\n");
@@ -274,9 +272,6 @@ static int supercam_probe(struct usb_interface *interface, const struct usb_devi
 
 	usb_clear_halt(udev, usb_rcvbulkpipe(udev, 0x81));
 
-	/* ----------------------------------------------------
-	 * PHASE 3: PARALLEL ASYNCHRONOUS URB INITIALIZATION
-	 * ---------------------------------------------------- */
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
 		if (!dev->urbs[i]) { retval = -ENOMEM; goto error_urbs; }
@@ -296,9 +291,6 @@ static int supercam_probe(struct usb_interface *interface, const struct usb_devi
 
 	usb_set_intfdata(interface, dev);
 
-	/* ----------------------------------------------------
-	 * PHASE 4: TARGETED CROSS-INTERFACE TOKEN BURSTS
-	 * ---------------------------------------------------- */
 	dev_info(&interface->dev, "Sending init tokens to EP 2 OUT (0x02)...\n");
 	retval = supercam_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
 	if (retval) goto error_sequence;
@@ -342,7 +334,6 @@ static void supercam_disconnect(struct usb_interface *interface)
 	}
 }
 
-/* Standard interface level subsystem configuration blocks */
 static struct usb_driver supercam_driver = {
 	.name = "supercamera",
 	.id_table = supercam_table,
