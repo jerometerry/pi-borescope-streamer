@@ -93,7 +93,6 @@ struct usb_supercam {
 
 	unsigned int frame_counter;
 
-	/* Diagnostic State Tracking */
 	unsigned long dbg_urbs_processed;
 	unsigned long dbg_ghost_headers;
 	unsigned long dbg_packets_found;
@@ -318,7 +317,6 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 
 	dev->dbg_urbs_processed++;
 
-	/* Broadcast diagnostic metrics every ~300 successful URBs */
 	if (dev->dbg_urbs_processed % 300 == 0) {
 		dev_info(&dev->interface->dev,
 			"DIAGNOSTIC DUMP | URBs: %lu | Packets: %lu | Frames: %lu (Delivered: %lu | Drop SOI: %lu | Drop EOI: %lu | Drop Q: %lu | Ghosts: %lu)\n",
