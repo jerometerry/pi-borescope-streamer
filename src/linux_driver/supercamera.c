@@ -25,6 +25,7 @@ MODULE_VERSION("3.1");
  * Captures whole 4KB memory pages directly from the hardware controller.
  */
 #define BULK_TRANSFER_SIZE    4096 
+#define MIN_VALID_FRAME_SIZE  (256)
 #define MAX_FRAME_SIZE        (256 * 1024)
 #define NATIVE_PACKET_SIZE    944  /* 5B PacketHeader + 939B Payload */
 
