@@ -7,7 +7,12 @@
         "args": []
     },
     "clangd.arguments": [
-        "--compile-commands-dir=${workspaceFolder}/out/build/debug"
+        "--compile-commands-dir=${workspaceFolder}/out/build/debug",
+        "--header-insertion=iwyu",
+        "--background-index"
     ],
-    "cmake.ctest.neverDebugTestsWithLaunchConfiguration": false
+    "cmake.ctest.neverDebugTestsWithLaunchConfiguration": false,
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.autocomplete": "disabled",
+    "C_Cpp.errorSquiggles": "disabled"
 }

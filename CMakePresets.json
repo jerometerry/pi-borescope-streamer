@@ -77,14 +77,18 @@
 			"displayName": "Run Cppcheck",
 			"description": "Executes the standalone Cppcheck target",
 			"configurePreset": "analysis",
-			"targets": ["run_cppcheck"]
+			"targets": [
+				"run_cppcheck"
+			]
 		},
 		{
 			"name": "docs",
 			"displayName": "Build Documentation",
 			"description": "Generates Doxygen documentation",
 			"configurePreset": "analysis",
-			"targets": ["docs"]
+			"targets": [
+				"docs"
+			]
 		},
 		{
 			"name": "test",
@@ -97,12 +101,23 @@
 		{
 			"name": "clean-debug",
 			"configurePreset": "debug",
-			"targets": ["clean"]
+			"targets": [
+				"clean"
+			]
 		},
 		{
 			"name": "clean-release",
 			"configurePreset": "release",
-			"targets": ["clean"]
+			"targets": [
+				"clean"
+			]
+		}
+	],
+	"packagePresets": [
+		{
+			"name": "Test Profile",
+			"description": "",
+			"displayName": ""
 		}
 	]
 }
