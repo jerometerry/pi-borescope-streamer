@@ -1,12 +1,11 @@
-#include <fstream>
-#include <iostream>
-#include <algorithm>
-#include <format>
-#include <string>
-#include <cstring>
-#include <cstdint>
-#include <concepts>
 #include <bit>
+#include <concepts>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <format>
+#include <fstream>
+#include <string>
 
 namespace Units {
     inline constexpr size_t ONE_KILOBYTE = 1024;
@@ -61,7 +60,7 @@ inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(UsbPacketHeader);
 inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(UsbPayloadHeader);
 inline constexpr size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
 
-enum class ParseState {
+enum class ParseState: uint8_t {
     FIND_HEADER_A,
     FIND_HEADER_B,
     READ_PACKET_HEADER,
@@ -101,7 +100,7 @@ int main(int argc, const char* argv[]) {
             if (bytesInTransfer < 0) return EXIT_FAILURE;
 
             for (std::streamsize idx = 0; idx < bytesInTransfer; ++idx) {
-                uint8_t b = transferBuffer[idx];
+                uint8_t b = transferBuffer[idx]; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
 
                 switch (state) {
                     case ParseState::FIND_HEADER_A:
@@ -122,7 +121,7 @@ int main(int argc, const char* argv[]) {
                         break;
 
                     case ParseState::READ_PACKET_HEADER:
-                        headerBuffer[headerBytesCollected++] = b;
+                        headerBuffer[headerBytesCollected++] = b; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
                         if (headerBytesCollected == USB_PACKET_HEADER_SIZE) {
                             const auto* pkt = reinterpret_cast<const UsbPacketHeader*>(headerBuffer);
                             activeCameraId = pkt->getCameraId();
@@ -138,7 +137,7 @@ int main(int argc, const char* argv[]) {
                         break;
 
                     case ParseState::READ_PAYLOAD_HEADER:
-                        headerBuffer[headerBytesCollected++] = b;
+                        headerBuffer[headerBytesCollected++] = b; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
                         payloadBytesRemaining--;
 
                         if (headerBytesCollected == TOTAL_USB_HEADER_SIZE) {
@@ -154,13 +153,12 @@ int main(int argc, const char* argv[]) {
                                         image.write(reinterpret_cast<const char*>(currentFrame), currentFrameLen);
                                         return EXIT_SUCCESS;
                                     }
-                                    currentFrameLen = 0; // Flash reset buffer tracking
+                                    currentFrameLen = 0;
                                 }
                             }
 
                             lastFrameId = payload->getFrameId();
 
-                            // Choose routing pathway with zero memory copies
                             if (activeCameraId == UsbProtocol::VIDEO_CAMERA_ID && 
                                 !payload->hasGravitySensor() && 
                                 payload->getOtherFlags() == 0 && 
@@ -174,7 +172,7 @@ int main(int argc, const char* argv[]) {
 
                     case ParseState::STREAM_VIDEO:
                         if (currentFrameLen < MAX_FRAME_SIZE) {
-                            currentFrame[currentFrameLen++] = b;
+                            currentFrame[currentFrameLen++] = b; // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
                         }
                         payloadBytesRemaining--;
                         
