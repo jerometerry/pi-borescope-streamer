@@ -112,12 +112,5 @@
 				"clean"
 			]
 		}
-	],
-	"packagePresets": [
-		{
-			"name": "Test Profile",
-			"description": "",
-			"displayName": ""
-		}
 	]
 }
