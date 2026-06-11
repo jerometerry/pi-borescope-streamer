@@ -8,7 +8,7 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("Linux Kernel Driver for Geek szitman supercamera (com.useeplus.protocol)");
-MODULE_VERSION("0.7");
+MODULE_VERSION("0.8");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -23,6 +23,7 @@ MODULE_VERSION("0.7");
 static const u8 initialization_tokens[] = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_stream_tokens[]    = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
+/* Direct Hardware Match Table for device registration validation tracking */
 static const struct usb_device_id supercam_device_table[] = {
 	{ USB_DEVICE(0x0329, 0x2022) }, 
 	{ USB_DEVICE(0x2ce3, 0x3828) }, 
@@ -130,7 +131,6 @@ static void supercam_read_bulk_callback(struct urb *urb)
 			}
 			break;
 
-		case PROTO_VIDEO_CAMERA_ID:
 		case STATE_READ_PACKET_HEADER:
 			dev->header_buffer[dev->header_bytes_collected++] = b;
 			if (dev->header_bytes_collected == sizeof(struct usb_packet_header)) {
@@ -244,15 +244,13 @@ static int supercam_device_probe(struct usb_device *udev)
 	}
 
 	drain_buffer = kmalloc(512, GFP_KERNEL);
-	if (!drain_buffer)
-	{
+	if (!drain_buffer) {
 		retval = -ENOMEM;
 		goto error;
 	}
 
 	dev_info(&udev->dev, "Clearing residual iAP authentication queue elements on EP 2 IN...\n");
-	for (i = 0; i < 30; ++i)
-	{
+	for (i = 0; i < 30; ++i) {
 		usb_bulk_msg(udev, usb_rcvbulkpipe(udev, 0x82), 
 			     drain_buffer, 512, &actual_len, 100);
 	}
@@ -266,25 +264,16 @@ static int supercam_device_probe(struct usb_device *udev)
 
 	usb_clear_halt(udev, usb_rcvbulkpipe(udev, 0x81));
 
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i)
-	{
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!dev->urbs[i])
-		{ 
-			retval = -ENOMEM;
-			goto error_urbs; 
-		}
+		if (!dev->urbs[i]) { retval = -ENOMEM; goto error_urbs; }
 
 		dev->urb_buffers[i] = usb_alloc_coherent(udev, BULK_TRANSFER_SIZE, 
 							GFP_KERNEL, &dev->urb_dma_addrs[i]);
-
-		if (!dev->urb_buffers[i])
-		{ 
-			retval = -ENOMEM; goto error_urbs; 
-		}
+		if (!dev->urb_buffers[i]) { retval = -ENOMEM; goto error_urbs; }
 
 		usb_fill_bulk_urb(dev->urbs[i], udev,
-				  usb_rcvbulkpipe(udev, 0x81),
+				  usb_rcvbulkpipe(udev, 0x81), 
 				  dev->urb_buffers[i], BULK_TRANSFER_SIZE,
 				  supercam_read_bulk_callback, dev);
 
@@ -292,7 +281,8 @@ static int supercam_device_probe(struct usb_device *udev)
 		dev->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	}
 
-	usb_set_device_data(udev, dev);
+	/* Store context pointer inside generic device driver-data infrastructure safely */
+	dev_set_drvdata(&udev->dev, dev);
 
 	dev_info(&udev->dev, "Sending init tokens to EP 2 OUT (0x02)...\n");
 	retval = supercam_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
@@ -303,8 +293,7 @@ static int supercam_device_probe(struct usb_device *udev)
 	if (retval) goto error_sequence;
 
 	dev->streaming = true;
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i)
-	{
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
 		if (retval) goto error_sequence;
 	}
@@ -314,12 +303,11 @@ static int supercam_device_probe(struct usb_device *udev)
 
 error_sequence:
 	supercam_kill_urbs(dev);
-	usb_set_device_data(udev, NULL);
+	dev_set_drvdata(&udev->dev, NULL);
 error_urbs:
 	supercam_kill_urbs(dev);
 error:
-	if (dev)
-	{
+	if (dev) {
 		if (dev->current_frame) kfree(dev->current_frame);
 		kfree(dev);
 	}
@@ -328,20 +316,18 @@ error:
 
 static void supercam_device_disconnect(struct usb_device *udev)
 {
-	struct usb_supercam *dev = usb_get_device_data(udev);
-	usb_set_device_data(udev, NULL);
-	if (dev)
-	{
+	struct usb_supercam *dev = dev_get_drvdata(&udev->dev);
+	dev_set_drvdata(&udev->dev, NULL);
+
+	if (dev) {
 		supercam_kill_urbs(dev);
 		if (dev->current_frame) kfree(dev->current_frame);
 		dev_info(&udev->dev, "Geek szitman supercamera removed from hardware matrix.\n");
 		kfree(dev);
 	}
-
 }
 
-static struct usb_device_driver supercam_device_driver = 
-{
+static struct usb_device_driver supercam_device_driver = {
 	.name = "supercamera_dev",
 	.probe = supercam_device_probe,
 	.disconnect = supercam_device_disconnect,
