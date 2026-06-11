@@ -193,8 +193,8 @@ static void supercam_read_bulk_callback(struct urb *urb)
 
 		case STATE_FIND_HEADER_B:
 			if (b == PROTO_FRAME_HEADER_B) {
-				dev->header_buffer = PROTO_FRAME_HEADER_A;
-				dev->header_buffer = PROTO_FRAME_HEADER_B;
+				dev->header_buffer[0] = PROTO_FRAME_HEADER_A;
+				dev->header_buffer[1] = PROTO_FRAME_HEADER_B;
 				dev->header_bytes_collected = 2;
 				dev->fsm_state = STATE_READ_PACKET_HEADER;
 			} else if (b != PROTO_FRAME_HEADER_A) {
