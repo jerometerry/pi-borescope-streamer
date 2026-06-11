@@ -7,7 +7,7 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("Linux Kernel Driver for Geek szitman supercamera (com.useeplus.protocol)");
-MODULE_VERSION("0.4");
+MODULE_VERSION("0.5");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -22,23 +22,20 @@ MODULE_VERSION("0.4");
 static const u8 initialization_tokens[] = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_stream_tokens[]    = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
-static const struct usb_device_id supercam_table[] = 
-{
+static const struct usb_device_id supercam_table[] = {
 	{ USB_DEVICE(0x0329, 0x2022) }, 
 	{ USB_DEVICE(0x2ce3, 0x3828) }, 
 	{ }                             
 };
 MODULE_DEVICE_TABLE(usb, supercam_table);
 
-struct __packed usb_packet_header
-{
+struct __packed usb_packet_header {
 	__le16 leHeader;
 	u8 leCameraId;
 	__le16 leLength;
 };
 
-struct __packed usb_payload_header
-{
+struct __packed usb_payload_header {
 	u8 leFrameId;
 	u8 leCameraNumber;
 	u8 leFlags;
@@ -47,8 +44,7 @@ struct __packed usb_payload_header
 
 #define TOTAL_USB_HEADER_SIZE (sizeof(struct usb_packet_header) + sizeof(struct usb_payload_header))
 
-enum parse_state 
-{
+enum parse_state {
 	STATE_FIND_HEADER_A,
 	STATE_FIND_HEADER_B,
 	STATE_READ_PACKET_HEADER,
@@ -57,8 +53,7 @@ enum parse_state
 	STATE_SKIP_TELEMETRY
 };
 
-struct usb_supercam
-{
+struct usb_supercam {
 	struct usb_device *udev;
 	struct usb_interface *interface;
 	
@@ -81,6 +76,9 @@ struct usb_supercam
 	u8 *current_frame;
 	size_t current_frame_len;
 	unsigned int frame_counter;
+
+	/* Sniffer constraints to avoid kernel trace flooding */
+	unsigned int diagnostic_packets_logged;
 };
 
 static int supercam_send_tokens(struct usb_supercam *dev, const u8 *tokens, size_t len)
@@ -91,19 +89,14 @@ static int supercam_send_tokens(struct usb_supercam *dev, const u8 *tokens, size
 
 	dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
 	if (!dma_buffer)
-	{
 		return -ENOMEM;
-	}
 
-	retval = usb_bulk_msg
-	(
-		dev->udev,
-		usb_sndbulkpipe(dev->udev, dev->bulk_out_endpointAddr),
-		dma_buffer,
-		len,
-		&actual_length,
-		USB_TIMEOUT_MS
-	);
+	retval = usb_bulk_msg(dev->udev,
+			      usb_sndbulkpipe(dev->udev, dev->bulk_out_endpointAddr),
+			      dma_buffer,
+			      len,
+			      &actual_length,
+			      USB_TIMEOUT_MS);
 
 	kfree(dma_buffer);
 	return retval;
@@ -112,68 +105,58 @@ static int supercam_send_tokens(struct usb_supercam *dev, const u8 *tokens, size
 static void supercam_read_bulk_callback(struct urb *urb)
 {
 	struct usb_supercam *dev = urb->context;
-
 	int retval;
 	int idx;
 	u8 *data;
 
-	if (urb->status)
-	{
-		/* Stop errors or normal teardowns during device disconnection gracefully */
+	if (urb->status) {
 		if (urb->status == -ENOENT || urb->status == -ECONNRESET || urb->status == -ESHUTDOWN)
-		{
 			return;
-		}
-
-		dev_err(&dev->interface->dev, "URB completion failed with status: %d\n", urb->status);
+		dev_err_ratelimited(&dev->interface->dev, "URB status error: %d\n", urb->status);
 		goto resubmit;
 	}
 
 	data = (u8 *)urb->transfer_buffer;
 
-	for (idx = 0; idx < urb->actual_length; ++idx)
-	{
+	for (idx = 0; idx < urb->actual_length; ++idx) {
 		u8 b = data[idx];
 
-		switch (dev->fsm_state)
-		{
+		switch (dev->fsm_state) {
 		case STATE_FIND_HEADER_A:
 			if (b == PROTO_FRAME_HEADER_A)
-			{
 				dev->fsm_state = STATE_FIND_HEADER_B;
-			}
 			break;
 
 		case STATE_FIND_HEADER_B:
-			if (b == PROTO_FRAME_HEADER_B)
-			{
+			if (b == PROTO_FRAME_HEADER_B) {
 				dev->header_buffer[0] = PROTO_FRAME_HEADER_A;
 				dev->header_buffer[1] = PROTO_FRAME_HEADER_B;
 				dev->header_bytes_collected = 2;
 				dev->fsm_state = STATE_READ_PACKET_HEADER;
-			}
-			else if (b != PROTO_FRAME_HEADER_A)
-			{
+			} else if (b != PROTO_FRAME_HEADER_A) {
 				dev->fsm_state = STATE_FIND_HEADER_A;
 			}
 			break;
 
 		case STATE_READ_PACKET_HEADER:
 			dev->header_buffer[dev->header_bytes_collected++] = b;
-			if (dev->header_bytes_collected == sizeof(struct usb_packet_header))
-			{
+			if (dev->header_bytes_collected == sizeof(struct usb_packet_header)) {
 				const struct usb_packet_header *pkt = (const struct usb_packet_header *)dev->header_buffer;
 				
 				dev->active_camera_id = pkt->leCameraId;
 				dev->payload_bytes_remaining = le16_to_cpu(pkt->leLength);
 
 				if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID || 
-				    dev->active_camera_id == PROTO_GRAVITY_CAMERA_ID)
-				{
+				    dev->active_camera_id == PROTO_GRAVITY_CAMERA_ID) {
 					dev->fsm_state = STATE_READ_PAYLOAD_HEADER;
-				}
-				else
-				{
+				} else {
+					/* Diagnostic trace: Reveal when raw payload synchronization drifts */
+					if (dev->diagnostic_packets_logged < 10) {
+						dev_info(&dev->interface->dev, 
+							 "Header Synch Drift! Found active_camera_id: 0x%02X\n", 
+							 dev->active_camera_id);
+						dev->diagnostic_packets_logged++;
+					}
 					dev->fsm_state = STATE_FIND_HEADER_A;
 				}
 			}
@@ -183,15 +166,21 @@ static void supercam_read_bulk_callback(struct urb *urb)
 			dev->header_buffer[dev->header_bytes_collected++] = b;
 			dev->payload_bytes_remaining--;
 
-			if (dev->header_bytes_collected == TOTAL_USB_HEADER_SIZE)
-			{
+			if (dev->header_bytes_collected == TOTAL_USB_HEADER_SIZE) {
 				const struct usb_payload_header *payload = 
 					(const struct usb_payload_header *)(dev->header_buffer + sizeof(struct usb_packet_header));
 
-				if (dev->last_frame_id != -1 && payload->leFrameId != (u8)dev->last_frame_id)
-				{
-					if (dev->current_frame_len > 0)
-					{
+				/* Dump the raw stream attributes of the first 5 parsed packets */
+				if (dev->diagnostic_packets_logged < 5) {
+					dev_info(&dev->interface->dev, 
+						 "PACKET SNIFFER -> CamStreamID: 0x%02X | Length: %zu | FrameSeqID: %u | CamSubSys: %u | FlagsByte: 0x%02X\n",
+						 dev->active_camera_id, dev->payload_bytes_remaining, 
+						 payload->leFrameId, payload->leCameraNumber, payload->leFlags);
+					dev->diagnostic_packets_logged++;
+				}
+
+				if (dev->last_frame_id != -1 && payload->leFrameId != (u8)dev->last_frame_id) {
+					if (dev->current_frame_len > 0) {
 						dev->frame_counter++;
 						dev_info(&dev->interface->dev, 
 							 "Streaming Frame #%u compiled successfully (%zu Bytes).\n", 
@@ -202,48 +191,36 @@ static void supercam_read_bulk_callback(struct urb *urb)
 
 				dev->last_frame_id = payload->leFrameId;
 
-				if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID && 
-				    !(payload->leFlags & 0x01) && 
-				    ((payload->leFlags >> 2) & 0x3F) == 0 && 
-				    payload->leCameraNumber < 2)
-				{
+				/* RELAXED COHERENCY ROUTING: Pass video channel unconditionally for testing */
+				if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID) {
 					dev->fsm_state = STATE_STREAM_VIDEO;
-				}
-				else
-				{
+				} else {
 					dev->fsm_state = STATE_SKIP_TELEMETRY;
 				}
 			}
 			break;
 
 		case STATE_STREAM_VIDEO:
-			if (dev->current_frame_len < MAX_FRAME_SIZE)
-			{
+			if (dev->current_frame_len < MAX_FRAME_SIZE) {
 				dev->current_frame[dev->current_frame_len++] = b;
 			}
 			dev->payload_bytes_remaining--;
 			if (dev->payload_bytes_remaining == 0)
-			{
 				dev->fsm_state = STATE_FIND_HEADER_A;
-			}
 			break;
 
 		case STATE_SKIP_TELEMETRY:
 			dev->payload_bytes_remaining--;
 			if (dev->payload_bytes_remaining == 0)
-			{
 				dev->fsm_state = STATE_FIND_HEADER_A;
-			}
 			break;
 		}
 	}
 
 resubmit:
-	if (dev->streaming)
-	{
+	if (dev->streaming) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
-		if (retval)
-		{
+		if (retval) {
 			dev_err_ratelimited(&dev->interface->dev, "URB re-submission failed: %d\n", retval);
 		}
 	}
@@ -253,14 +230,10 @@ static void supercam_kill_urbs(struct usb_supercam *dev)
 {
 	int i;
 	dev->streaming = false;
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i)
-	{
-		if (dev->urbs[i])
-		{
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		if (dev->urbs[i]) {
 			usb_kill_urb(dev->urbs[i]);
-		
-			if (dev->urb_buffers[i])
-			{
+			if (dev->urb_buffers[i]) {
 				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE, 
 						  dev->urb_buffers[i], dev->urb_dma_addrs[i]);
 				dev->urb_buffers[i] = NULL;
@@ -280,73 +253,62 @@ static int supercam_probe(struct usb_interface *interface, const struct usb_devi
 	int i;
 	int retval = -ENOMEM;
 
-	if (interface->cur_altsetting->desc.bInterfaceNumber != 1)
-	{
+	if (interface->cur_altsetting->desc.bInterfaceNumber != 1) {
 		return -ENODEV; 
 	}
 
 	dev_info(&interface->dev, "Geek szitman supercamera core Interface 1 detected.\n");
 
 	retval = usb_set_interface(udev, 1, 1);
-	if (retval)
-	{
+	if (retval) {
 		dev_err(&interface->dev, "Failed to activate Alternate Setting 1 (Error: %d)\n", retval);
 		return retval;
 	}
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
-	{
 		return -ENOMEM;
-	}
 
 	dev->udev = usb_get_dev(udev);
 	dev->interface = interface;
 	dev->last_frame_id = -1;
 	dev->fsm_state = STATE_FIND_HEADER_A;
+	dev->diagnostic_packets_logged = 0;
 
 	dev->current_frame = kzalloc(MAX_FRAME_SIZE, GFP_KERNEL);
-	if (!dev->current_frame)
-	{
+	if (!dev->current_frame) {
 		retval = -ENOMEM;
 		goto error;
 	}
 
 	iface_desc = interface->cur_altsetting;
-	for (i = 0; i < iface_desc->desc.bNumEndpoints; ++i)
-	{
+	for (i = 0; i < iface_desc->desc.bNumEndpoints; ++i) {
 		endpoint = &iface_desc->endpoint[i].desc;
-		if (!dev->bulk_in_endpointAddr && usb_endpoint_is_bulk_in(endpoint))
-		{
+		if (!dev->bulk_in_endpointAddr && usb_endpoint_is_bulk_in(endpoint)) {
 			dev->bulk_in_endpointAddr = endpoint->bEndpointAddress;
 			dev->bulk_in_size = usb_endpoint_maxp(endpoint); 
 		}
-		if (!dev->bulk_out_endpointAddr && usb_endpoint_is_bulk_out(endpoint))
-		{
+		if (!dev->bulk_out_endpointAddr && usb_endpoint_is_bulk_out(endpoint)) {
 			dev->bulk_out_endpointAddr = endpoint->bEndpointAddress;
 		}
 	}
 
-	if (!(dev->bulk_in_endpointAddr && dev->bulk_out_endpointAddr))
-	{
+	if (!(dev->bulk_in_endpointAddr && dev->bulk_out_endpointAddr)) {
 		dev_err(&interface->dev, "Could not find both bulk IN and bulk OUT endpoints\n");
 		retval = -ENODEV;
 		goto error;
 	}
 
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i)
-	{
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!dev->urbs[i])
-		{
+		if (!dev->urbs[i]) {
 			retval = -ENOMEM;
 			goto error_urbs;
 		}
 
 		dev->urb_buffers[i] = usb_alloc_coherent(dev->udev, BULK_TRANSFER_SIZE, 
 							GFP_KERNEL, &dev->urb_dma_addrs[i]);
-		if (!dev->urb_buffers[i])
-		{
+		if (!dev->urb_buffers[i]) {
 			retval = -ENOMEM;
 			goto error_urbs;
 		}
@@ -364,32 +326,22 @@ static int supercam_probe(struct usb_interface *interface, const struct usb_devi
 
 	dev_info(&interface->dev, "Sending hardware initialization tokens...\n");
 	retval = supercam_send_tokens(dev, initialization_tokens, sizeof(initialization_tokens));
-	if (retval)
-	{
-		goto error_sequence;
-	}
+	if (retval) goto error_sequence;
 
 	dev_info(&interface->dev, "Sending streaming request tokens...\n");
 	retval = supercam_send_tokens(dev, start_stream_tokens, sizeof(start_stream_tokens));
-	if (retval)
-	{
-		goto error_sequence;
-	}
+	if (retval) goto error_sequence;
 
 	dev->streaming = true;
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i)
-	{
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
-		if (retval)
-		{
+		if (retval) {
 			dev_err(&interface->dev, "Failed initial URB enqueue (%d)\n", retval);
 			goto error_sequence;
 		}
 	}
-
 	dev_info(&interface->dev, "Hardware pipelines successfully initialized and streaming.\n");
 	return 0;
-
 error_sequence:
 	supercam_kill_urbs(dev);
 	usb_set_intfdata(interface, NULL);
@@ -398,10 +350,7 @@ error_urbs:
 error:
 	if (dev)
 	{
-		if (dev->current_frame)
-		{
-			kfree(dev->current_frame);
-		}
+		if (dev->current_frame) kfree(dev->current_frame);
 		usb_put_dev(dev->udev);
 		kfree(dev);
 	}
@@ -412,13 +361,10 @@ static void supercam_disconnect(struct usb_interface *interface)
 {
 	struct usb_supercam *dev = usb_get_intfdata(interface);
 	usb_set_intfdata(interface, NULL);
-
-	if (dev) {
+	if (dev)
+	{
 		supercam_kill_urbs(dev);
-		if (dev->current_frame)
-		{
-			kfree(dev->current_frame);
-		}
+		if (dev->current_frame) kfree(dev->current_frame);
 		dev_info(&interface->dev, "Geek szitman supercamera disconnected.\n");
 		usb_put_dev(dev->udev);
 		kfree(dev);
@@ -432,5 +378,5 @@ static struct usb_driver supercam_driver =
 	.probe = supercam_probe,
 	.disconnect = supercam_disconnect,
 };
-
+	
 module_usb_driver(supercam_driver);
