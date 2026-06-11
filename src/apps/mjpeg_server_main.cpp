@@ -23,12 +23,12 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "video_frame_buffer.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
+#include "video_frame_buffer.hpp"
 
 namespace {
     constexpr int DEFAULT_PORT = 8080;

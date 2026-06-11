@@ -21,11 +21,11 @@
 #include <vector>
 #include "constants.hpp"
 #include "disruptor.hpp"
-#include "video_frame.hpp"
-#include "video_frame_buffer.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 
 namespace {
     static std::atomic<bool> running{true};

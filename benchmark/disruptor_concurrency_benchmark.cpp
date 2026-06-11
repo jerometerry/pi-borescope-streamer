@@ -1,8 +1,8 @@
 #include <benchmark/benchmark.h>
-#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <thread>
 #include "disruptor.hpp"
 

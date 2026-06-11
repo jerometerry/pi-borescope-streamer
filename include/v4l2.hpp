@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
-#include <string>
 #include <cstddef>
+#include <string>
 #include "constants.hpp"
 
 namespace V4L2 {

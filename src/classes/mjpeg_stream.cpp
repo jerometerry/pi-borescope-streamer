@@ -5,11 +5,11 @@
 #include <string>
 #include <vector>
 #include "constants.hpp"
-#include "video_frame.hpp"
-#include "video_frame_buffer.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 
 MjpegStream::MjpegStream(VideoFrameBuffer& disruptor) :
     disruptor_(&disruptor) {

@@ -1,12 +1,12 @@
 #include <libusb.h>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <vector>
-#include <atomic>
-#include "mjpeg_stream_capture.hpp"
 #include "constants.hpp"
+#include "mjpeg_stream_capture.hpp"
 #include "usb_camera.hpp"
 #include "usb_device_info.hpp"
 

@@ -4,8 +4,8 @@
 #include <functional>
 #include <span>
 #include <vector>
-#include "constants.hpp"
 #include "buffer_ptr.hpp"
+#include "constants.hpp"
 #include "usb_payload_header.hpp"
 
 class BufferPool;

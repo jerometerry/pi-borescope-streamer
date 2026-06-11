@@ -4,9 +4,9 @@
 #include <functional>
 #include <span>
 #include <vector>
+#include "usb_payload_header.hpp"
 #include "video_frame.hpp"
 #include "video_frame_buffer.hpp"
-#include "usb_payload_header.hpp"
 
 /**
  * @brief The translator that extracts and reassembles clean MJPEG video pictures from the hardware stream.

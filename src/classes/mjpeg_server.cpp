@@ -14,11 +14,11 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "video_frame.hpp"
-#include "video_frame_buffer.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
 #include "usb_device_finder.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 #include "zero_allocation_response_builder.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, VideoFrameBuffer& disruptor)

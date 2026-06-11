@@ -1,6 +1,6 @@
 #pragma once
-#include "disruptor.hpp"
 #include "array.hpp"
+#include "disruptor.hpp"
 
 inline constexpr int64_t ARRAY_BUFFER_CAPACITY = 128;
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+
 struct UsbDeviceInfo;
 
 namespace MjpegStreamCapture {
