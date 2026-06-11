@@ -10,6 +10,7 @@ sudo apt install build-essential linux-headers-$(uname -r)
 ## Building
 
 ```bash
+make clean
 make
 ```
 
@@ -23,6 +24,12 @@ modinfo supercamera.ko
 
 ```bash
 sudo insmod supercamera.ko
+```
+
+## Unload Linux Driver 
+
+```bash
+sudo rmmod supercamera
 ```
 
 ## Verify Linux Driver Loaded 
@@ -53,4 +60,8 @@ jterry@authentic-nerd:~/github/pi-borescope-streamer/src/linux_driver $ dmesg | 
 [442659.175596] supercamera 3-1:1.1: Sending hardware initialization tokens...
 [442659.175631] supercamera 3-1:1.1: Sending streaming request tokens...
 [442659.679777] supercamera 3-1:1.1: Hardware pipes successfully initialized and streaming.
+```
+
+```bash
+sudo dmesg -w
 ```
