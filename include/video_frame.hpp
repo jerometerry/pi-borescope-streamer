@@ -8,13 +8,13 @@
 #include <stdexcept>
 #include "disruptor.hpp"
 
-struct alignas(disruptor::cache_line_size) Frame {
+struct alignas(disruptor::cache_line_size) VideoFrame {
     static constexpr size_t PADDING_SIZE = 128;
 
     std::vector<uint8_t> storage;
     size_t active_size{0};
 
-    Frame() {
+    VideoFrame() {
         storage.resize(paddingSize());
     }
 

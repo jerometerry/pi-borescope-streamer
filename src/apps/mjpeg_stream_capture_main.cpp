@@ -21,8 +21,8 @@
 #include <vector>
 #include "constants.hpp"
 #include "disruptor.hpp"
-#include "frame.hpp"
-#include "frame_disruptor.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
@@ -39,7 +39,6 @@ namespace {
 }
 
 void signalHandler(int /*signum*/) {
-    // Notify the main thread to begin graceful pipeline shutdown
     running.store(false, std::memory_order_relaxed);
 }
 
@@ -91,8 +90,7 @@ int main() {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
 
-        // Pre-allocate slots. Ensure FrameDisruptor is using BlockingWaitStrategy internally!
-        FrameDisruptor ringBuffer;
+        VideoFrameBuffer ringBuffer;
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
         std::jthread metricsMonitor([](const std::stop_token& st) {
@@ -148,7 +146,7 @@ int main() {
                 int64_t available = ringBuffer.waitFor(next_read);
 
                 while (next_read <= available) {
-                    Frame& slot = ringBuffer.getBySequence(next_read);
+                    VideoFrame& slot = ringBuffer.getBySequence(next_read);
 
                     // 1. Sentinel / Poison Pill Detection (Graceful Shutdown)
                     if (slot.active_size == 0) {
@@ -178,7 +176,7 @@ int main() {
                 
                 if (seq_opt.has_value()) {
                     int64_t seq = *seq_opt;
-                    Frame& slot = ringBuffer.getBySequence(seq);
+                    VideoFrame& slot = ringBuffer.getBySequence(seq);
                     slot.insertContent(payload);
                     ringBuffer.publish(seq);
 

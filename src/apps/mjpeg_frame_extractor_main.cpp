@@ -3,6 +3,7 @@
  * @brief An offline tool to pull clean JPEG pictures out of raw camera dumps.
  */
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -12,6 +13,8 @@
 #include <string>
 #include <vector>
 #include "constants.hpp"
+#include "usb_packet_header.hpp"
+#include "usb_payload_header.hpp"
 
 class FrameExtractor {
 public:

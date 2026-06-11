@@ -92,7 +92,7 @@ TEST(MjpegFrameQueueTest, SafelyRejectsEmptyFrames) {
     uint32_t popId = 0;
     auto poppedFrame = frameQueue.pop(popId);
     
-    EXPECT_EQ(popId, 1) << "Frame ID should match the first valid push.";
+    EXPECT_EQ(popId, 1) << "VideoFrame ID should match the first valid push.";
     ASSERT_TRUE(poppedFrame) << "Popped frame must not be null.";
 
     std::span<const uint8_t> payload = poppedFrame->getContentSlice();

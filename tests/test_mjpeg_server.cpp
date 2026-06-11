@@ -15,8 +15,8 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "frame.hpp"
-#include "frame_disruptor.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 #include "mjpeg_server.hpp"
 
 namespace {
@@ -31,7 +31,7 @@ namespace {
 class MjpegServerTest : public ::testing::Test {
 private:
     std::atomic<bool> running_{true};
-    FrameDisruptor disruptor_;
+    VideoFrameBuffer disruptor_;
     MjpegServer server_;
 
 public:
@@ -57,7 +57,7 @@ protected:
 
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
         int64_t seq = disruptor_.claim();
-        Frame& slot = disruptor_.getBySequence(seq);
+        VideoFrame& slot = disruptor_.getBySequence(seq);
 
         slot.clear();
         slot.insertContent(data);

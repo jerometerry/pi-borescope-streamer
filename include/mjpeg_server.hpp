@@ -4,7 +4,7 @@
 #include <functional>
 #include <thread>
 #include <vector>
-#include "frame_disruptor.hpp"
+#include "video_frame_buffer.hpp"
 
 // IWYU pragma: begin_exports
 struct us_listen_socket_t;
@@ -27,7 +27,7 @@ public:
      * @param running A reference to the global shutdown flag to monitor for graceful exit.
      * @param frameSource The provider (usually MjpegFrameQueue) that supplies the video frames.
      */
-    explicit MjpegServer(int port, const std::atomic<bool>& running, FrameDisruptor& disruptor);
+    explicit MjpegServer(int port, const std::atomic<bool>& running, VideoFrameBuffer& disruptor);
     ~MjpegServer();
 
     MjpegServer(const MjpegServer&) = delete;
@@ -56,7 +56,7 @@ private:
 
     const int port_;
     const std::atomic<bool>& running_;
-    FrameDisruptor* disruptor_;
+    VideoFrameBuffer* disruptor_;
     int64_t nextReadSequence_{0};
 
     std::thread networkThread_;

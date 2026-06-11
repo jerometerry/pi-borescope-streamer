@@ -14,14 +14,14 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "frame.hpp"
-#include "frame_disruptor.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
 #include "usb_device_finder.hpp"
 #include "zero_allocation_response_builder.hpp"
 
-MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, FrameDisruptor& disruptor)
+MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, VideoFrameBuffer& disruptor)
     : port_(port), running_(running), disruptor_(&disruptor) {}
 
 MjpegServer::~MjpegServer() {
@@ -58,7 +58,7 @@ void MjpegServer::onTimer(us_timer_t *t) {
     bool processedAny = false;
 
     while (server->nextReadSequence_ <= available) {
-        Frame& currentFrame = server->disruptor_->getBySequence(server->nextReadSequence_);
+        VideoFrame& currentFrame = server->disruptor_->getBySequence(server->nextReadSequence_);
 
         const uint32_t currentFrameId = static_cast<uint32_t>(server->nextReadSequence_);
 

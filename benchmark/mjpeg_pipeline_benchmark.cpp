@@ -12,8 +12,8 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "frame.hpp"
-#include "frame_disruptor.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 #include "mjpeg_stream.hpp"
 #include "zero_allocation_response_builder.hpp"
 
@@ -59,7 +59,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
     
     std::atomic<bool> producer_running{true};
 
-    FrameDisruptor ringBuffer;
+    VideoFrameBuffer ringBuffer;
     ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
     std::jthread consumer([&ringBuffer, &producer_running]() {
@@ -69,7 +69,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
             int64_t available = ringBuffer.waitFor(next_read);
 
             while (next_read <= available) {
-                Frame& slot = ringBuffer.getBySequence(next_read);
+                VideoFrame& slot = ringBuffer.getBySequence(next_read);
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);
@@ -107,7 +107,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
     
     std::atomic<bool> producer_running{true};
 
-    FrameDisruptor ringBuffer;
+    VideoFrameBuffer ringBuffer;
     ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
     std::jthread consumer([&ringBuffer, &producer_running]() {
@@ -116,7 +116,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
             int64_t available = ringBuffer.waitFor(next_read);
 
             while (next_read <= available) {
-                Frame& slot = ringBuffer.getBySequence(next_read);
+                VideoFrame& slot = ringBuffer.getBySequence(next_read);
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);

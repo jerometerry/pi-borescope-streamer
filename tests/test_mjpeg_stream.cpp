@@ -7,15 +7,15 @@
 #include <string>
 #include <vector>
 #include "constants.hpp"
-#include "frame.hpp"
-#include "frame_disruptor.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
 
 class MjpegStreamTest : public ::testing::Test {
 private:
-    FrameDisruptor disruptor_;
+    VideoFrameBuffer disruptor_;
     MjpegStream stream_;
     int64_t next_read_seq_{0};
 
@@ -42,7 +42,7 @@ protected:
         int64_t available = disruptor_.getHighestPublished();
         
         while (next_read_seq_ <= available) {
-            Frame& slot = disruptor_.getBySequence(next_read_seq_);
+            VideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
             
             if (slot.contentSize() > 0) {
                 auto slice = slot.getContentSlice();
@@ -63,7 +63,7 @@ protected:
     void verifyNoValidFramesPublished() {
         int64_t available = disruptor_.getHighestPublished();
         while (next_read_seq_ <= available) {
-            Frame& slot = disruptor_.getBySequence(next_read_seq_);
+            VideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
             EXPECT_EQ(slot.contentSize(), 0) 
                 << "Found unexpected valid frame at sequence " << next_read_seq_;
             
@@ -463,7 +463,7 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
 }
 
 TEST_F(MjpegStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
-    FrameDisruptor ringBuffer;
+    VideoFrameBuffer ringBuffer;
     ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     MjpegStream silentDecoder(ringBuffer);
     std::vector<uint8_t> packet(100, 0x00);

@@ -4,8 +4,8 @@
 #include <functional>
 #include <span>
 #include <vector>
-#include "frame.hpp"
-#include "frame_disruptor.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 #include "usb_payload_header.hpp"
 
 /**
@@ -29,7 +29,7 @@ public:
      * @param onFrameReady The function we call to hand off a finished, clean JPEG picture. 
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
      */
-    explicit MjpegStream(FrameDisruptor& disruptor);
+    explicit MjpegStream(VideoFrameBuffer& disruptor);
 
     ~MjpegStream() = default;
 
@@ -46,7 +46,7 @@ private:
     /**
      * @brief 
      */
-    FrameDisruptor* disruptor_;
+    VideoFrameBuffer* disruptor_;
 
     /**
      * @brief 
@@ -79,11 +79,11 @@ private:
     UsbPayloadHeader payloadHeader_{};
 
     /**
-     * @brief Get the Active Frame Slot object
+     * @brief Get the Active VideoFrame Slot object
      * 
-     * @return Frame& 
+     * @return VideoFrame& 
      */
-    Frame& getActiveFrameSlot();
+    VideoFrame& getActiveFrameSlot();
 
     /**
      * @brief Snip out the exact picture and send it off.

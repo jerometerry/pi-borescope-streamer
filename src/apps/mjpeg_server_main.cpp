@@ -23,7 +23,7 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "frame_disruptor.hpp"
+#include "video_frame_buffer.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_stream.hpp"
 #include "usb_camera.hpp"
@@ -110,7 +110,7 @@ int main(int argc, const char* argv[]) {
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
         
-        FrameDisruptor ringBuffer;
+        VideoFrameBuffer ringBuffer;
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
         MjpegStream stream(ringBuffer);

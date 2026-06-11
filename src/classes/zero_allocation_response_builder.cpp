@@ -2,16 +2,16 @@
 #include <cstring>
 #include <string_view>
 #include <vector>
-#include "frame.hpp"
+#include "video_frame.hpp"
 #include "zero_allocation_response_builder.hpp"
 
-std::string_view ZeroAllocationResponseBuilder::build(Frame& frame) {
+std::string_view ZeroAllocationResponseBuilder::build(VideoFrame& frame) {
     size_t size = frame.contentSize();
 
     // buffer has 128 bytes reserved for zero-byte allocations
     // startPtr is offset 128 bytes from the start of the allocated buffer
 
-    char* payloadPtr = reinterpret_cast<char*>(frame.storage.data()) + Frame::PADDING_SIZE;
+    char* payloadPtr = reinterpret_cast<char*>(frame.storage.data()) + VideoFrame::PADDING_SIZE;
     char* startPtr = payloadPtr;
     char* cursor = startPtr;
     
