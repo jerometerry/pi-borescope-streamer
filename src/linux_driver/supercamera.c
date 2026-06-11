@@ -16,7 +16,7 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("Production Protocol-Compliant Borescope Driver");
-MODULE_VERSION("5.4");
+MODULE_VERSION("5.5");
 
 #define USB_TIMEOUT_MS             1000
 #define BULK_TRANSFER_COUNT        4
@@ -92,6 +92,16 @@ struct usb_supercam {
 	size_t parse_len;
 
 	unsigned int frame_counter;
+
+	/* Diagnostic State Tracking */
+	unsigned long dbg_urbs_processed;
+	unsigned long dbg_ghost_headers;
+	unsigned long dbg_packets_found;
+	unsigned long dbg_frames_found;
+	unsigned long dbg_frames_dropped_soi;
+	unsigned long dbg_frames_dropped_eoi;
+	unsigned long dbg_frames_dropped_queue;
+	unsigned long dbg_frames_delivered;
 };
 
 static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
@@ -133,7 +143,6 @@ static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->current_frame_len = 0;
-	 
 	dev->last_frame_id = -1;
 	dev->has_stored_header = false;
 	dev->vb_streaming = true; 
@@ -307,7 +316,17 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 		goto resubmit;
 	}
 
-	/* Append the new URB data to our persistent parse buffer */
+	dev->dbg_urbs_processed++;
+
+	/* Broadcast diagnostic metrics every ~300 successful URBs */
+	if (dev->dbg_urbs_processed % 300 == 0) {
+		dev_info(&dev->interface->dev,
+			"DIAGNOSTIC DUMP | URBs: %lu | Packets: %lu | Frames: %lu (Delivered: %lu | Drop SOI: %lu | Drop EOI: %lu | Drop Q: %lu | Ghosts: %lu)\n",
+			dev->dbg_urbs_processed, dev->dbg_packets_found, dev->dbg_frames_found,
+			dev->dbg_frames_delivered, dev->dbg_frames_dropped_soi, dev->dbg_frames_dropped_eoi, 
+			dev->dbg_frames_dropped_queue, dev->dbg_ghost_headers);
+	}
+
 	if (dev->parse_len + urb->actual_length > BULK_TRANSFER_SIZE * 2) {
 		dev_warn(&dev->interface->dev, "Parse buffer overflow, dropping data\n");
 		dev->parse_len = 0;
@@ -333,8 +352,7 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 		{
 			bool isGhost = false;
 			size_t nextHeaderOffset = 0;
-			size_t maxScan =
-				min((size_t)MAX_SCAN_LIMIT, (size_t)(dev->parse_len - i - 3));
+			size_t maxScan = min((size_t)MAX_SCAN_LIMIT, (size_t)(dev->parse_len - i - 3));
 			size_t d;
 
 			for (d = NATIVE_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
@@ -349,14 +367,15 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 			}
 
 			if (isGhost) {
+				dev->dbg_ghost_headers++;
 				i += nextHeaderOffset;
 				continue;
 			}
 		}
 
+		dev->dbg_packets_found++;
 		size_t totalPacketSize = NATIVE_PACKET_HEADER_SIZE + packet_len;
 
-		/* If the packet straddles into the next URB, break and wait */
 		if (i + totalPacketSize > dev->parse_len) {
 			break;
 		}
@@ -373,35 +392,34 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 		if (dev->has_stored_header && dev->current_frame_len > 0 &&
 			dev->active_payload_hdr.leFrameId != current_frame_id) {
 			
+			dev->dbg_frames_found++;
 			size_t soiOffset = 0;
 			size_t eoiOffset = 0;
 			size_t j;
 			bool found_soi = false;
 			bool found_eoi = false; 
 
-			/* Scan forward for valid JPEG SOI (FF D8) */
 			for (j = 0; j + 1 < min((size_t)256, dev->current_frame_len); ++j) {
-				if (dev->current_frame[j] == 0xFF &&
-					dev->current_frame[j + 1] == 0xD8) {
+				if (dev->current_frame[j] == 0xFF && dev->current_frame[j + 1] == 0xD8) {
 					soiOffset = j;
 					found_soi = true;
 					break;
 				}
 			} 
 			
-			/* Scan backwards for valid JPEG EOI (FF D9) */
 			for (j = dev->current_frame_len; j >= 2; --j) {
-				if (dev->current_frame[j - 2] == 0xFF &&
-					dev->current_frame[j - 1] == 0xD9) {
+				if (dev->current_frame[j - 2] == 0xFF && dev->current_frame[j - 1] == 0xD9) {
 					eoiOffset = j;
 					found_eoi = true;
 					break;
 				}
 			}
 
-			if (found_soi && found_eoi && eoiOffset > soiOffset &&
-				eoiOffset <= dev->current_frame_len) {
-				
+			if (!found_soi) {
+				dev->dbg_frames_dropped_soi++;
+			} else if (!found_eoi || eoiOffset <= soiOffset) {
+				dev->dbg_frames_dropped_eoi++;
+			} else {
 				size_t final_content_size = eoiOffset - soiOffset;
 				dev->frame_counter++;
 
@@ -417,9 +435,13 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 						vbuf->vb.sequence = dev->sequence++;
 						vbuf->vb.field = V4L2_FIELD_NONE;
 						vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
+						dev->dbg_frames_delivered++;
 					} else {
 						vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
+						dev->dbg_frames_dropped_queue++;
 					}
+				} else {
+					dev->dbg_frames_dropped_queue++;
 				}
 				spin_unlock_irqrestore(&dev->q_lock, flags);
 			}
@@ -450,7 +472,6 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 		i += totalPacketSize;
 	}
 
-	/* Shift the unparsed leftover bytes to the front of the buffer */
 	if (i < dev->parse_len) {
 		size_t remaining = dev->parse_len - i;
 		memmove(dev->parse_buffer, dev->parse_buffer + i, remaining);
@@ -517,14 +538,12 @@ static int supercam_probe(struct usb_interface *interface,
 	spin_lock_init(&dev->q_lock);
 	INIT_LIST_HEAD(&dev->rdy_queue);
 
-	/* Use virtual memory for large allocations to avoid fragmentation errors */
 	dev->current_frame = vzalloc(MAX_FRAME_SIZE);
 	if (!dev->current_frame) {
 		retval = -ENOMEM;
 		goto error;
 	}
 
-	/* Double the bulk transfer size to safely hold straddling URBs */
 	dev->parse_buffer = kzalloc(BULK_TRANSFER_SIZE * 2, GFP_KERNEL);
 	if (!dev->parse_buffer) {
 		retval = -ENOMEM;
