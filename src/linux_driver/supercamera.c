@@ -15,14 +15,14 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production 640x480 uStreamer Driver for Geek szitman supercamera");
-MODULE_VERSION("2.0");
+MODULE_DESCRIPTION("Production uStreamer Driver for Geek szitman supercamera");
+MODULE_VERSION("2.1");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
 #define BULK_TRANSFER_SIZE    (16 * 1024) 
 #define MAX_FRAME_SIZE        (256 * 1024)
-#define MIN_VALID_FRAME_SIZE  (2 * 1024)  
+#define MIN_VALID_FRAME_SIZE  (256) /* Bypasses low-light compression stalls */
 
 #define PROTO_FRAME_HEADER_A       0xAA
 #define PROTO_FRAME_HEADER_B       0xBB
@@ -88,6 +88,7 @@ struct usb_supercam {
 	u8 *urb_buffers[BULK_TRANSFER_COUNT];
 	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
 	bool streaming;
+	bool vb_streaming; /* Explicitly tracks user-space video channel hook bounds */
 
 	enum parse_state fsm_state;
 	u8 header_buffer[TOTAL_USB_HEADER_SIZE];
@@ -134,6 +135,16 @@ static void supercam_buf_queue(struct vb2_buffer *vb)
 
 static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
+	struct usb_supercam *dev = vb2_get_drv_priv(vq);
+	unsigned long flags;
+
+	spin_lock_irqsave(&dev->q_lock, flags);
+	dev->current_frame_len = 0;
+	dev->fsm_state = STATE_FIND_HEADER_A;
+	dev->trailing_byte = 0;
+	dev->vb_streaming = true; /* Safe activation gate for image processing */
+	spin_unlock_irqrestore(&dev->q_lock, flags);
+
 	return 0;
 }
 
@@ -144,6 +155,7 @@ static void supercam_stop_streaming(struct vb2_queue *vq)
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->q_lock, flags);
+	dev->vb_streaming = false;
 	while (!list_empty(&dev->rdy_queue)) {
 		buf = list_first_entry(&dev->rdy_queue, struct supercam_buffer, list);
 		list_del(&buf->list);
@@ -193,10 +205,6 @@ static int supercam_vidioc_querycap(struct file *file, void *priv, struct v4l2_c
 	return 0;
 }
 
-/* 
- * FIXED NATIVE RESOLUTION DEFINITIONS:
- * Correctly restricts aspect boundaries down to 640x480 to match hardware outputs
- */
 static int supercam_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
 	f->fmt.pix.width        = 640;
@@ -343,7 +351,6 @@ static void supercam_read_bulk_callback(struct urb *urb) {
     case STATE_READ_PAYLOAD_HEADER:
       dev->header_buffer[dev->header_bytes_collected++] = b;
       dev->payload_bytes_remaining--;
-
       if (dev->header_bytes_collected == TOTAL_USB_HEADER_SIZE) {
         if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID) {
           dev->fsm_state = STATE_STREAM_VIDEO;
@@ -359,8 +366,10 @@ static void supercam_read_bulk_callback(struct urb *urb) {
             b == JPEG_MARKER_EOI) {
           if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
             dev->frame_counter++;
-            spin_lock_irqsave(&dev->q_lock, flags);
-            if (!list_empty(&dev->rdy_queue)) {
+            spin_lock_irqsave(&dev->q_lock,
+                              flags); /* Process payload transfers only when
+                                         uStreamer requests capture pages */
+            if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
               vbuf = list_first_entry(&dev->rdy_queue, struct supercam_buffer,
                                       list);
               list_del(&vbuf->list);
@@ -442,6 +451,7 @@ static int supercam_probe(struct usb_interface *interface,
   dev->fsm_state = STATE_FIND_HEADER_A;
   dev->trailing_byte = 0;
   dev->sequence = 0;
+  dev->vb_streaming = false;
   mutex_init(&dev->v4l2_lock);
   spin_lock_init(&dev->q_lock);
   INIT_LIST_HEAD(&dev->rdy_queue);
