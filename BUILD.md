@@ -2,6 +2,99 @@
 
 This project utilizes modern CMake with `CMakePresets.json` to guarantee reproducible builds across local development environments (macOS) and target hardware (Raspberry Pi). 
 
+## Dependencies
+
+### Core Build Tools & Compilers
+
+These are required just to configure the project and compile the standard release binaries.
+
+* **macOS (Homebrew):**
+```bash
+xcode-select --install # Provides AppleClang, Git, and base system headers
+brew install cmake ninja pkg-config
+
+```
+
+* **Raspberry Pi / Debian (APT):**
+```bash
+sudo apt update
+sudo apt install build-essential cmake ninja-build pkg-config git
+
+```
+
+### Required System Libraries
+
+Your project natively links against OpenSSL, Zlib, and Libusb. These must be present on the system before CMake can successfully generate the build tree.
+
+* **macOS (Homebrew):**
+* *(Note: macOS ships with Zlib, so you only need to install OpenSSL and Libusb).*
+
+
+```bash
+brew install openssl@3 libusb
+
+```
+
+* **Raspberry Pi / Debian (APT):**
+```bash
+sudo apt install libssl-dev zlib1g-dev libusb-1.0-0-dev
+
+```
+
+### Static Analysis Tools (The `analysis` Preset)
+
+If a developer wants to run your comprehensive code-quality checks, they will need this stack.
+
+* **macOS (Homebrew):**
+```bash
+brew install llvm cppcheck include-what-you-use
+
+```
+
+* *Note: Homebrew's `llvm` provides `clang-tidy`.*
+
+
+* **Raspberry Pi / Debian (APT):**
+```bash
+sudo apt install clang-tidy cppcheck iwyu
+
+```
+
+* **Python Requirement (Both Platforms):**
+To convert the Cppcheck XML output into the HTML report you specified in your README, the user must install the Pygments library via Python.
+```bash
+pip3 install --user pygments --break-system-packages
+
+```
+
+### Documentation Generation (The `docs` Target)
+
+Doxygen requires the `dot` tool to generate dependency graphs, class diagrams, and include hierarchies. `dot` is packaged inside the Graphviz suite.
+
+* **macOS (Homebrew):**
+```bash
+brew install doxygen graphviz
+
+```
+
+* **Raspberry Pi / Debian (APT):**
+```bash
+sudo apt install doxygen graphviz
+
+```
+
+### Hardware & Daemon Dependencies (Linux Only)
+
+If a user is deploying this on a Raspberry Pi and wants to utilize the `v4l2-borescope-daemon` features to pipe the stream into `/dev/video*`, they need the Video4Linux loopback driver.
+
+* **Raspberry Pi / Debian (APT):**
+```bash
+sudo apt install v4l2loopback-dkms v4l2-utils
+
+```
+
+*(FFmpeg is also highly recommended for testing the daemon, via `sudo apt install ffmpeg`).*
+
 ## Command Line Workflow (macOS & Raspberry Pi)
 
 Because the project relies on Presets, the build commands are identical regardless of your operating system.
