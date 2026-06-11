@@ -14,8 +14,8 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production Protocol-Aligned Borescope Driver");
-MODULE_VERSION("5.2");
+MODULE_DESCRIPTION("Production Protocol-Compliant Borescope Driver");
+MODULE_VERSION("5.3");
 
 #define USB_TIMEOUT_MS             1000
 #define BULK_TRANSFER_COUNT        4
@@ -267,25 +267,21 @@ static const struct v4l2_ioctl_ops supercam_v4l2_ioctl_ops = {
 	.vidioc_streamoff       = vb2_ioctl_streamoff,
 };
 
-static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr, const u8 *tokens, size_t len)
-{
-	int retval;
-	int actual_length;
-	u8 *dma_buffer;
+static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr,
+                              const u8 *tokens, size_t len) {
+  int retval;
+  int actual_length;
+  u8 *dma_buffer;
 
-	dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
-	if (!dma_buffer)
-		return -ENOMEM;
+  dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
+  if (!dma_buffer)
+    return -ENOMEM;
 
-	retval = usb_bulk_msg(dev->udev,
-			      usb_sndbulkpipe(dev->udev, endpoint_addr),
-			      dma_buffer,
-			      len,
-			      &actual_length,
-			      USB_TIMEOUT_MS);
+  retval = usb_bulk_msg(dev->udev, usb_sndbulkpipe(dev->udev, endpoint_addr),
+                        dma_buffer, len, &actual_length, USB_TIMEOUT_MS);
 
-	kfree(dma_buffer);
-	return retval;
+  kfree(dma_buffer);
+  return retval;
 }
 
 static void supercam_read_bulk_callback(struct urb *urb) {
@@ -318,7 +314,7 @@ static void supercam_read_bulk_callback(struct urb *urb) {
       continue;
     }
 
-    /* Lookahead ghost parser barrier */
+    /* Lookahead ghost parser loop matching your C++ server logic */
     {
       bool isGhost = false;
       size_t nextHeaderOffset = 0;
@@ -356,27 +352,33 @@ static void supercam_read_bulk_callback(struct urb *urb) {
     const struct usb_payload_header *payloadHeader =
         (const struct usb_payload_header *)(transfer_buffer + i +
                                             NATIVE_PACKET_HEADER_SIZE);
-    u8 current_frame_id = payloadHeader->leFrameId;
+    u8 current_frame_id =
+        payloadHeader->leFrameId; /* Output frame flush handler */
     if (dev->has_stored_header && dev->current_frame_len > 0 &&
         dev->active_payload_hdr.leFrameId != current_frame_id) {
       size_t soiOffset = 0;
       size_t eoiOffset = 0;
       size_t j;
+      bool found_soi = false;
+      bool found_eoi = false; /* Scan forward for Start of Image (FF D8) */
       for (j = 0; j + 1 < min((size_t)256, dev->current_frame_len); ++j) {
         if (dev->current_frame[j] == 0xFF &&
             dev->current_frame[j + 1] == 0xD8) {
           soiOffset = j;
+          found_soi = true;
           break;
         }
-      }
+      } /* Scan backwards for End of Image (FF D9) */
       for (j = dev->current_frame_len; j >= 2; --j) {
         if (dev->current_frame[j - 2] == 0xFF &&
             dev->current_frame[j - 1] == 0xD9) {
           eoiOffset = j;
+          found_eoi = true;
           break;
         }
       }
-      if (eoiOffset > soiOffset && eoiOffset <= dev->current_frame_len) {
+      if (found_soi && found_eoi && eoiOffset > soiOffset &&
+          eoiOffset <= dev->current_frame_len) {
         size_t final_content_size = eoiOffset - soiOffset;
         dev->frame_counter++;
         spin_lock_irqsave(&dev->q_lock, flags);
@@ -402,8 +404,7 @@ static void supercam_read_bulk_callback(struct urb *urb) {
     }
     dev->active_payload_hdr = *payloadHeader;
     dev->has_stored_header =
-        true; /** FIXED BITMASK COMPLIANCE FILTER:* Implements your exact C++
-                 layout rules using standard C shift masks*/
+        true; /* Check your C++ bitmask flags configuration */
     {
       bool hasGravitySensor = (payloadHeader->leFlags & 0x01) != 0;
       uint8_t otherFlags = (payloadHeader->leFlags >> 2) & 0x3F;
