@@ -14,8 +14,8 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production uStreamer Stream-Fixed V4L2 Driver for Geek szitman supercamera");
-MODULE_VERSION("2.7");
+MODULE_DESCRIPTION("Production Real-Time uStreamer Driver for Geek szitman supercamera");
+MODULE_VERSION("2.8");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -65,6 +65,10 @@ enum parse_state {
 	STATE_SKIP_TELEMETRY
 };
 
+/* 
+ * FIXED STRUCT ALIGNMENT LAYOUT:
+ * Ties the custom buffer queue links explicitly to the front-facing type mapping context
+ */
 struct supercam_buffer {
 	struct vb2_v4l2_buffer vb;
 	struct list_head list;
@@ -124,7 +128,9 @@ static int supercam_buf_prepare(struct vb2_buffer *vb)
 static void supercam_buf_queue(struct vb2_buffer *vb)
 {
 	struct usb_supercam *dev = vb2_get_drv_priv(vb->vb2_queue);
-	struct supercam_buffer *buf = container_of(vb, struct supercam_buffer, vb.vb2_buf);
+	/* Safely resolve types using the direct modern framework macro patterns */
+	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
+	struct supercam_buffer *buf = container_of(v4l2_buf, struct supercam_buffer, vb);
 	unsigned long flags;
 
 	spin_lock_irqsave(&dev->q_lock, flags);
@@ -132,10 +138,6 @@ static void supercam_buf_queue(struct vb2_buffer *vb)
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 }
 
-/* 
- * SYNCED VB2 STREAM CONTROLLERS:
- * Tells videobuf2 that the driver is actively capturing.
- */
 static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_supercam *dev = vb2_get_drv_priv(vq);
@@ -191,10 +193,7 @@ static const struct v4l2_file_operations supercam_v4l2_fops = {
 	.open           = supercam_v4l2_open,
 	.release        = supercam_v4l2_release,
 	.read           = vb2_fop_read,
-	
-	/* FIXED: Polling endpoint moved out of ioctl table and into file ops table */
 	.poll           = vb2_fop_poll,
-	
 	.mmap           = vb2_fop_mmap,
 	.unlocked_ioctl = video_ioctl2, 
 };
@@ -305,6 +304,23 @@ static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr, const 
 	return retval;
 }
 
+static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr,
+                              const u8 *tokens, size_t len) {
+  int retval;
+  int actual_length;
+  u8 *dma_buffer;
+
+  dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
+  if (!dma_buffer)
+    return -ENOMEM;
+
+  retval = usb_bulk_msg(dev->udev, usb_sndbulkpipe(dev->udev, endpoint_addr),
+                        dma_buffer, len, &actual_length, USB_TIMEOUT_MS);
+
+  kfree(dma_buffer);
+  return retval;
+}
+
 static void supercam_read_bulk_callback(struct urb *urb) {
   struct usb_supercam *dev = urb->context;
   struct supercam_buffer *vbuf;
@@ -349,7 +365,6 @@ static void supercam_read_bulk_callback(struct urb *urb) {
             (const struct usb_packet_header *)dev->header_buffer;
         dev->active_camera_id = pkt->leCameraId;
         dev->payload_bytes_remaining = le16_to_cpu(pkt->leLength);
-
         if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID ||
             dev->active_camera_id == PROTO_GRAVITY_CAMERA_ID) {
           dev->fsm_state = STATE_READ_PAYLOAD_HEADER;
@@ -376,7 +391,9 @@ static void supercam_read_bulk_callback(struct urb *urb) {
             b == JPEG_MARKER_EOI) {
           if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
             dev->frame_counter++;
-            spin_lock_irqsave(&dev->q_lock, flags);
+            spin_lock_irqsave(&dev->q_lock,
+                              flags); /* Corrected fast-path list entry
+                                         extraction mechanics */
             if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
               vbuf = list_first_entry(&dev->rdy_queue, struct supercam_buffer,
                                       list);

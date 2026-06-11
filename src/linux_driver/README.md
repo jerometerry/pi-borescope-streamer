@@ -23,7 +23,23 @@ modinfo supercamera.ko
 ## Load Linux Driver 
 
 ```bash
-sudo insmod supercamera.ko
+# Verify no supercamera module is found
+lsmod | grep supercamera
+
+# If there is, remove the existing supercamera module to deploy a new version
+sudo rmmod supercamera 2>/dev/null
+
+# check if videobuf2_vmalloc module is loaded
+lsmod | grep videobuf2_vmalloc
+
+# If it's not, load it
+sudo modprobe videobuf2_vmalloc
+
+# Load the new supercamera module
+sudo insmod ./supercamera.ko 2>/dev/null
+
+# Verify supercamera module is loaded
+lsmod | grep supercamera
 ```
 
 ## Unload Linux Driver 
