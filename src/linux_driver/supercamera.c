@@ -14,14 +14,14 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production Zero-Timeout uStreamer Driver for Geek szitman supercamera");
-MODULE_VERSION("2.6");
+MODULE_DESCRIPTION("Production uStreamer Stream-Fixed V4L2 Driver for Geek szitman supercamera");
+MODULE_VERSION("2.7");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
 #define BULK_TRANSFER_SIZE    (16 * 1024) 
 #define MAX_FRAME_SIZE        (256 * 1024)
-#define MIN_VALID_FRAME_SIZE  (26) 
+#define MIN_VALID_FRAME_SIZE  (256) 
 
 #define PROTO_FRAME_HEADER_A       0xAA
 #define PROTO_FRAME_HEADER_B       0xBB
@@ -132,6 +132,10 @@ static void supercam_buf_queue(struct vb2_buffer *vb)
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 }
 
+/* 
+ * SYNCED VB2 STREAM CONTROLLERS:
+ * Tells videobuf2 that the driver is actively capturing.
+ */
 static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_supercam *dev = vb2_get_drv_priv(vq);
@@ -143,7 +147,6 @@ static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->trailing_byte = 0;
 	dev->vb_streaming = true; 
 	spin_unlock_irqrestore(&dev->q_lock, flags);
-
 	return 0;
 }
 
@@ -189,7 +192,7 @@ static const struct v4l2_file_operations supercam_v4l2_fops = {
 	.release        = supercam_v4l2_release,
 	.read           = vb2_fop_read,
 	
-	/* FIXED CHASSIS POLLING ENDPOINT: Unlocks uStreamer select() blocks natively */
+	/* FIXED: Polling endpoint moved out of ioctl table and into file ops table */
 	.poll           = vb2_fop_poll,
 	
 	.mmap           = vb2_fop_mmap,
@@ -257,7 +260,6 @@ static int supercam_vidioc_g_parm(struct file *file, void *priv, struct v4l2_str
 	return 0;
 }
 
-/* FIXED FRAME RATE SETTING ENDPOINT: Replaces HW FPS errors cleanly */
 static int supercam_vidioc_s_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
 	return supercam_vidioc_g_parm(file, priv, sp);
@@ -273,7 +275,7 @@ static const struct v4l2_ioctl_ops supercam_v4l2_ioctl_ops = {
 	.vidioc_g_input         = supercam_vidioc_g_input,
 	.vidioc_s_input         = supercam_vidioc_s_input,
 	.vidioc_g_parm          = supercam_vidioc_g_parm, 
-	.vidioc_s_parm          = supercam_vidioc_s_parm, /* Maps modern framerate setters */
+	.vidioc_s_parm          = supercam_vidioc_s_parm, 
 	.vidioc_reqbufs         = vb2_ioctl_reqbufs,
 	.vidioc_querybuf        = vb2_ioctl_querybuf,
 	.vidioc_qbuf            = vb2_ioctl_qbuf,
