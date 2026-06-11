@@ -106,9 +106,12 @@ static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 				struct device *alloc_devs[])
 {
 	if (*nplanes)
-		return sizes < MAX_FRAME_SIZE ? -EINVAL : 0;
+	{
+		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
+	}
+	
 	*nplanes = 1;
-	sizes = MAX_FRAME_SIZE;
+	sizes[0] = MAX_FRAME_SIZE;
 	return 0;
 }
 
