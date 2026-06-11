@@ -19,6 +19,7 @@ MODULE_VERSION("5.0");
 
 #define USB_TIMEOUT_MS 1000
 #define BULK_TRANSFER_COUNT 4
+#define MIN_VALID_FRAME_SIZE 1024
 
 /* Ingests whole 4KB memory blocks matching the camera's hardware mapping
  * alignment */
