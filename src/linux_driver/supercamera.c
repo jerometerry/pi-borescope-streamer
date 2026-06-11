@@ -10,12 +10,12 @@
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-fh.h>
 #include <media/videobuf2-v4l2.h>
-#include <media/videobuf2-vmalloc.h> /* Swapped to virtual memory allocation page systems */
+#include <media/videobuf2-vmalloc.h> 
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("Virtualized 640x480 uStreamer Driver for Geek szitman supercamera");
-MODULE_VERSION("2.2");
+MODULE_VERSION("2.3");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -109,7 +109,7 @@ static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
 	
 	*nplanes = 1;
-	sizes[0] = MAX_FRAME_SIZE; /* Fixed: Explicitly target array index slot 0 */
+	sizes[0] = MAX_FRAME_SIZE; 
 	return 0;
 }
 
@@ -350,6 +350,7 @@ static void supercam_read_bulk_callback(struct urb *urb) {
     case STATE_READ_PAYLOAD_HEADER:
       dev->header_buffer[dev->header_bytes_collected++] = b;
       dev->payload_bytes_remaining--;
+
       if (dev->header_bytes_collected == TOTAL_USB_HEADER_SIZE) {
         if (dev->active_camera_id == PROTO_VIDEO_CAMERA_ID) {
           dev->fsm_state = STATE_STREAM_VIDEO;
@@ -460,13 +461,13 @@ static int supercam_probe(struct usb_interface *interface,
   q->drv_priv = dev;
   q->buf_struct_size = sizeof(struct supercam_buffer);
   q->ops = &supercam_vb2_ops;
-  q->mem_ops =
-      &vb2_vmalloc_memops; /* Swapped completely to virtual memory allocation
-                              page layers /q->timestamp_flags =
-                              V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;q->min_queued_buffers
-                              = 2;q->lock = &dev->v4l2_lock;q->dev =
-                              &interface->dev; / Safe standard interface device
-                              binding context */
+  q->mem_ops = &vb2_alloc_vmalloc_memops;
+  q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+  q->min_queued_buffers = 2;
+  q->lock = &dev->v4l2_lock;
+  q->dev = &interface->dev; /* FIXED AUDIT STRSCPY LOG: Satisfies
+                               vb2_queue_init_name 6.18+ parameter rules */
+  strscpy(q->name, "supercamera-queue", sizeof(q->name));
   retval = vb2_queue_init(q);
   if (retval) {
     dev_err(&interface->dev, "vb2_queue_init failed\n");
