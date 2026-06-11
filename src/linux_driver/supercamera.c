@@ -14,8 +14,8 @@
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production Linux 6.18+ V4L2 Driver for Geek szitman supercamera");
-MODULE_VERSION("1.6");
+MODULE_DESCRIPTION("Production uStreamer-Compliant V4L2 Driver for Geek szitman supercamera");
+MODULE_VERSION("1.7");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -100,15 +100,15 @@ struct usb_supercam {
 	u8 trailing_byte;
 };
 
-/* --- Modernized Videobuf2 Operational Lifecycle Handlers --- */
+/* --- Videobuf2 Operational Lifecycle Handlers --- */
 static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 				unsigned int *nplanes, unsigned int sizes[],
 				struct device *alloc_devs[])
 {
 	if (*nplanes)
-		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
+		return sizes < MAX_FRAME_SIZE ? -EINVAL : 0;
 	*nplanes = 1;
-	sizes[0] = MAX_FRAME_SIZE;
+	sizes = MAX_FRAME_SIZE;
 	return 0;
 }
 
@@ -122,7 +122,6 @@ static int supercam_buf_prepare(struct vb2_buffer *vb)
 
 static void supercam_buf_queue(struct vb2_buffer *vb)
 {
-	/* Fixed: Swapped to 6.18+ underscore naming style helper */
 	struct usb_supercam *dev = vb2_get_drv_priv(vb->vb2_queue);
 	struct supercam_buffer *buf = container_of(vb, struct supercam_buffer, vb.vb2_buf);
 	unsigned long flags;
@@ -139,7 +138,6 @@ static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 static void supercam_stop_streaming(struct vb2_queue *vq)
 {
-	/* Fixed: Swapped to 6.18+ underscore naming style helper */
 	struct usb_supercam *dev = vb2_get_drv_priv(vq);
 	struct supercam_buffer *buf;
 	unsigned long flags;
@@ -203,7 +201,7 @@ static int supercam_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l
 	f->fmt.pix.bytesperline = 0;
 	f->fmt.pix.sizeimage    = MAX_FRAME_SIZE;
 	f->fmt.pix.colorspace   = V4L2_COLORSPACE_SRGB;
-	return 0;
+	return f->fmt.pix.width == 1280 ? 0 : 0;
 }
 
 static int supercam_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struct v4l2_fmtdesc *f)
@@ -214,12 +212,42 @@ static int supercam_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struc
 	return 0;
 }
 
+/* ----------------------------------------------------
+ * FIXED V4L2 INPUT IOCTL COMPLIANCE MODULES
+ * These three callbacks permanently satisfy uStreamer's setup pipeline
+ * ---------------------------------------------------- */
+static int supercam_vidioc_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
+{
+	if (inp->index > 0)
+		return -EINVAL;
+	inp->type = V4L2_INPUT_TYPE_CAMERA;
+	strscpy(inp->name, "Borescope Lens Channel 0", sizeof(inp->name));
+	return 0;
+}
+
+static int supercam_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
+{
+	*i = 0; /* Input channel routing is always index 0 */
+	return 0;
+}
+
+static int supercam_vidioc_s_input(struct file *file, void *priv, unsigned int i)
+{
+	return i == 0 ? 0 : -EINVAL;
+}
+
 static const struct v4l2_ioctl_ops supercam_v4l2_ioctl_ops = {
 	.vidioc_querycap        = supercam_vidioc_querycap,
 	.vidioc_g_fmt_vid_cap   = supercam_vidioc_fmt_vid_cap,
 	.vidioc_s_fmt_vid_cap   = supercam_vidioc_fmt_vid_cap,
 	.vidioc_try_fmt_vid_cap = supercam_vidioc_fmt_vid_cap,
 	.vidioc_enum_fmt_vid_cap = supercam_vidioc_enum_fmt_vid_cap,
+	
+	/* Hook the newly implemented input enumerator endpoints */
+	.vidioc_enum_input      = supercam_vidioc_enum_input,
+	.vidioc_g_input         = supercam_vidioc_g_input,
+	.vidioc_s_input         = supercam_vidioc_s_input,
+
 	.vidioc_reqbufs         = vb2_ioctl_reqbufs,
 	.vidioc_querybuf        = vb2_ioctl_querybuf,
 	.vidioc_qbuf            = vb2_ioctl_qbuf,
@@ -319,28 +347,23 @@ static void supercam_read_bulk_callback(struct urb *urb) {
     case STATE_STREAM_VIDEO:
       if (dev->current_frame_len < MAX_FRAME_SIZE) {
         dev->current_frame[dev->current_frame_len++] = b;
-
         if (dev->trailing_byte == JPEG_MARKER_BOUNDARY &&
             b == JPEG_MARKER_EOI) {
           if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
             dev->frame_counter++;
-
             spin_lock_irqsave(&dev->q_lock, flags);
             if (!list_empty(&dev->rdy_queue)) {
               vbuf = list_first_entry(&dev->rdy_queue, struct supercam_buffer,
                                       list);
               list_del(&vbuf->list);
-
               void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
               if (vaddr) {
                 memcpy(vaddr, dev->current_frame, dev->current_frame_len);
                 vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0,
                                       dev->current_frame_len);
-
                 vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
                 vbuf->vb.sequence = dev->sequence++;
                 vbuf->vb.field = V4L2_FIELD_NONE;
-
                 vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
               } else {
                 vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
@@ -423,10 +446,7 @@ static int supercam_probe(struct usb_interface *interface,
   q->buf_struct_size = sizeof(struct supercam_buffer);
   q->ops = &supercam_vb2_ops;
   q->mem_ops = &vb2_dma_contig_memops;
-  q->timestamp_flags =
-      V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC; /* Fixed: Modern 6.18+ parameter name
-                                            for minimum buffers constraint
-                                            tracking */
+  q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
   q->min_queued_buffers = 2;
   q->lock = &dev->v4l2_lock;
   q->dev = &interface->dev;
