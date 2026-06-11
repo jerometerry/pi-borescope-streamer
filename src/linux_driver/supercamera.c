@@ -446,7 +446,7 @@ static int supercam_probe(struct usb_interface *interface,
   dev->vb_streaming = false;
   mutex_init(&dev->v4l2_lock);
   spin_lock_init(&dev->q_lock);
-  INIT_HEAD(&dev->rdy_queue);
+  INIT_THREAD(&dev->rdy_queue);
   dev->current_frame = kzalloc(MAX_FRAME_SIZE, GFP_KERNEL);
   if (!dev->current_frame) {
     retval = -ENOMEM;
