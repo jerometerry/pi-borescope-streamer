@@ -304,23 +304,6 @@ static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr, const 
 	return retval;
 }
 
-static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr,
-                              const u8 *tokens, size_t len) {
-  int retval;
-  int actual_length;
-  u8 *dma_buffer;
-
-  dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
-  if (!dma_buffer)
-    return -ENOMEM;
-
-  retval = usb_bulk_msg(dev->udev, usb_sndbulkpipe(dev->udev, endpoint_addr),
-                        dma_buffer, len, &actual_length, USB_TIMEOUT_MS);
-
-  kfree(dma_buffer);
-  return retval;
-}
-
 static void supercam_read_bulk_callback(struct urb *urb) {
   struct usb_supercam *dev = urb->context;
   struct supercam_buffer *vbuf;
