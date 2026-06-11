@@ -45,18 +45,18 @@ static const struct usb_device_id supercam_table[] = {
 };
 MODULE_DEVICE_TABLE(usb, supercam_table);
 
-struct __packed usb_packet_header {
+struct usb_packet_header {
 	__le16 leHeader;
 	u8 leCameraId;
 	__le16 leLength;
-};
+} __packed;
 
-struct __packed usb_payload_header {
+struct usb_payload_header {
 	u8 leFrameId;
 	u8 leCameraNumber;
 	u8 leFlags;
 	__le32 leGravitySensor;
-};
+} __packed;
 
 struct supercam_buffer {
 	struct vb2_v4l2_buffer vb;
@@ -133,7 +133,7 @@ static int supercam_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->current_frame_len = 0;
-	dev->parse_len = 0;
+	 
 	dev->last_frame_id = -1;
 	dev->has_stored_header = false;
 	dev->vb_streaming = true; 
