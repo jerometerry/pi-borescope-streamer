@@ -15,7 +15,7 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("Hardened 4KB Page-Aligned uStreamer Driver");
-MODULE_VERSION("3.0");
+MODULE_VERSION("3.1");
 
 #define USB_TIMEOUT_MS        1000
 #define BULK_TRANSFER_COUNT   4
@@ -55,6 +55,8 @@ struct __packed usb_payload_header {
 	__le32 leGravitySensor;
 };
 
+#define TOTAL_USB_HEADER_SIZE (sizeof(struct usb_packet_header) + sizeof(struct usb_payload_header))
+
 struct supercam_buffer {
 	struct vb2_v4l2_buffer vb;
 	struct list_head list;
@@ -93,10 +95,10 @@ static int supercam_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 				struct device *alloc_devs[])
 {
 	if (*nplanes)
-		return sizes < MAX_FRAME_SIZE ? -EINVAL : 0;
+		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
 	
 	*nplanes = 1;
-	sizes = MAX_FRAME_SIZE; 
+	sizes[0] = MAX_FRAME_SIZE; /* Fixed: Correct array element indexing */
 	return 0;
 }
 
@@ -245,7 +247,8 @@ static int supercam_vidioc_s_parm(struct file *file, void *priv, struct v4l2_str
 	return supercam_vidioc_g_parm(file, priv, sp);
 }
 
-static const struct vb2_ioctl_ops supercam_v4l2_ioctl_ops = {
+/* Fixed: Typo resolved, this uses the correct struct type signature */
+static const struct v4l2_ioctl_ops supercam_v4l2_ioctl_ops = {
 	.vidioc_querycap        = supercam_vidioc_querycap,
 	.vidioc_g_fmt_vid_cap   = supercam_vidioc_fmt_vid_cap,
 	.vidioc_s_fmt_vid_cap   = supercam_vidioc_fmt_vid_cap,
@@ -285,10 +288,6 @@ static int supercam_write_msg(struct usb_supercam *dev, u8 endpoint_addr, const 
 	return retval;
 }
 
-/*
- * ADVANCED HIGH-SPEED LINEAR PARSER CORE:
- * Processes raw 4KB memory blocks based directly on your hardware notes.
- */
 static void supercam_read_bulk_callback(struct urb *urb) {
   struct usb_supercam *dev = urb->context;
   struct supercam_buffer *vbuf;
@@ -339,7 +338,6 @@ static void supercam_read_bulk_callback(struct urb *urb) {
           frame_id != dev->last_processed_frame_id) {
         if (dev->current_frame_len >= MIN_VALID_FRAME_SIZE) {
           dev->frame_counter++;
-
           spin_lock_irqsave(&dev->q_lock, flags);
           if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
             vbuf =
