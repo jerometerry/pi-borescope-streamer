@@ -133,6 +133,7 @@ FetchContent_Declare(
     uWebSockets
     GIT_REPOSITORY https://github.com/uNetworking/uWebSockets.git
     GIT_TAG v20.67.0
+    GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(uWebSockets)
 
@@ -144,6 +145,7 @@ FetchContent_Declare(
     uSockets
     GIT_REPOSITORY https://github.com/uNetworking/uSockets.git
     GIT_TAG v0.8.8
+    GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(uSockets)
 
