@@ -7,6 +7,30 @@ sudo apt update
 sudo apt install build-essential linux-headers-$(uname -r)
 ```
 
+## Linux Kernel Style Check
+
+The Linux Kernel has it's own style checker. It's good practice when writing kernel drivers to stick with the 
+Linux Kernel requirements.
+
+On the Raspberry Pi, you can check out the official linux repo, which contains the checkpath.pl script.
+
+See my [Recompiling Kernel](../../RecompileKernel.md) docs for Raspberry Pi specific details on recompiling the kernel.
+If you're tinkering with building linux drivers, recompiling the kernel may be necessary to configure it for your needs. 
+
+**Checkout the Raspberry Pi Linux Repo**
+
+Make sure to switch to the branch for your specific kernel version.
+
+```bash
+git clone --depth=1 https://github.com/raspberrypi/linux
+```
+
+**Running Linux Kernel Style Check**
+
+```bash
+$/github/linux/scripts/checkpatch.pl --file ./useeplus_v4l2.c 
+```
+
 ## Building
 
 ```bash
