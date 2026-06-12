@@ -18,7 +18,7 @@
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("V4L2 driver for iHighSky DPTL non-UVC borescopes");
+MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
 #define USB_TIMEOUT_MS             1000
@@ -41,12 +41,12 @@ MODULE_VERSION("0.1.0");
 static const u8 initialization_tokens[]  = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_stream_tokens[]    = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
-static const struct usb_device_id ihighsky_table[] = {
+static const struct usb_device_id useeplus_table[] = {
     { USB_DEVICE(0x0329, 0x2022) }, 
     { USB_DEVICE(0x2ce3, 0x3828) }, 
     { }                             
 };
-MODULE_DEVICE_TABLE(usb, ihighsky_table);
+MODULE_DEVICE_TABLE(usb, useeplus_table);
 
 struct usb_packet_header {
     __le16 leHeader;
@@ -61,12 +61,12 @@ struct usb_payload_header {
     __le32 leGravitySensor;
 } __packed;
 
-struct ihighsky_buffer {
+struct useeplus_buffer {
     struct vb2_v4l2_buffer vb;
     struct list_head list;
 };
 
-struct usb_ihighsky {
+struct usb_useeplus {
     struct usb_device *udev;
     struct usb_interface *interface;
     
@@ -106,7 +106,7 @@ struct usb_ihighsky {
     unsigned long dbg_frames_delivered;
 };
 
-static int ihighsky_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
+static int useeplus_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
                 unsigned int *nplanes, unsigned int sizes[],
                 struct device *alloc_devs[])
 {
@@ -118,7 +118,7 @@ static int ihighsky_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
     return 0;
 }
 
-static int ihighsky_buf_prepare(struct vb2_buffer *vb)
+static int useeplus_buf_prepare(struct vb2_buffer *vb)
 {
     if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
         return -EINVAL;
@@ -126,11 +126,11 @@ static int ihighsky_buf_prepare(struct vb2_buffer *vb)
     return 0;
 }
 
-static void ihighsky_buf_queue(struct vb2_buffer *vb)
+static void useeplus_buf_queue(struct vb2_buffer *vb)
 {
-    struct usb_ihighsky *dev = vb2_get_drv_priv(vb->vb2_queue);
+    struct usb_useeplus *dev = vb2_get_drv_priv(vb->vb2_queue);
     struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
-    struct ihighsky_buffer *buf = container_of(v4l2_buf, struct ihighsky_buffer, vb);
+    struct useeplus_buffer *buf = container_of(v4l2_buf, struct useeplus_buffer, vb);
     unsigned long flags;
 
     spin_lock_irqsave(&dev->q_lock, flags);
@@ -138,9 +138,9 @@ static void ihighsky_buf_queue(struct vb2_buffer *vb)
     spin_unlock_irqrestore(&dev->q_lock, flags);
 }
 
-static int ihighsky_start_streaming(struct vb2_queue *vq, unsigned int count)
+static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
-    struct usb_ihighsky *dev = vb2_get_drv_priv(vq);
+    struct usb_useeplus *dev = vb2_get_drv_priv(vq);
     unsigned long flags;
 
     spin_lock_irqsave(&dev->q_lock, flags);
@@ -152,64 +152,64 @@ static int ihighsky_start_streaming(struct vb2_queue *vq, unsigned int count)
     return 0;
 }
 
-static void ihighsky_stop_streaming(struct vb2_queue *vq)
+static void useeplus_stop_streaming(struct vb2_queue *vq)
 {
-    struct usb_ihighsky *dev = vb2_get_drv_priv(vq);
-    struct ihighsky_buffer *buf;
+    struct usb_useeplus *dev = vb2_get_drv_priv(vq);
+    struct useeplus_buffer *buf;
     unsigned long flags;
 
     spin_lock_irqsave(&dev->q_lock, flags);
     dev->vb_streaming = false;
     while (!list_empty(&dev->rdy_queue)) {
-        buf = list_first_entry(&dev->rdy_queue, struct ihighsky_buffer, list);
+        buf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
         list_del(&buf->list);
         vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
     }
     spin_unlock_irqrestore(&dev->q_lock, flags);
 }
 
-static const struct vb2_ops ihighsky_vb2_ops = {
-    .queue_setup    = ihighsky_queue_setup,
-    .buf_prepare    = ihighsky_buf_prepare,
-    .buf_queue      = ihighsky_buf_queue,
-    .start_streaming = ihighsky_start_streaming,
-    .stop_streaming = ihighsky_stop_streaming,
+static const struct vb2_ops useeplus_vb2_ops = {
+    .queue_setup    = useeplus_queue_setup,
+    .buf_prepare    = useeplus_buf_prepare,
+    .buf_queue      = useeplus_buf_queue,
+    .start_streaming = useeplus_start_streaming,
+    .stop_streaming = useeplus_stop_streaming,
     .wait_prepare   = vb2_ops_wait_prepare,
     .wait_finish    = vb2_ops_wait_finish,
 };
 
-static int ihighsky_v4l2_open(struct file *file)
+static int useeplus_v4l2_open(struct file *file)
 {
     return v4l2_fh_open(file);
 }
 
-static int ihighsky_v4l2_release(struct file *file)
+static int useeplus_v4l2_release(struct file *file)
 {
     return _vb2_fop_release(file, NULL);
 }
 
-static const struct v4l2_file_operations ihighsky_v4l2_fops = {
+static const struct v4l2_file_operations useeplus_v4l2_fops = {
     .owner          = THIS_MODULE,
-    .open           = ihighsky_v4l2_open,
-    .release        = ihighsky_v4l2_release,
+    .open           = useeplus_v4l2_open,
+    .release        = useeplus_v4l2_release,
     .read           = vb2_fop_read,
     .poll           = vb2_fop_poll,
     .mmap           = vb2_fop_mmap,
     .unlocked_ioctl = video_ioctl2, 
 };
 
-static int ihighsky_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
+static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 {
-    struct usb_ihighsky *dev = video_drvdata(file);
-    strscpy(cap->driver, "ihighsky-dptl", sizeof(cap->driver));
-    strscpy(cap->card, "iHighSky DPTL Borescope", sizeof(cap->card));
+    struct usb_useeplus *dev = video_drvdata(file);
+    strscpy(cap->driver, "useeplus-dptl", sizeof(cap->driver));
+    strscpy(cap->card, "useeplus DPTL Borescope", sizeof(cap->card));
     usb_make_path(dev->udev, cap->bus_info, sizeof(cap->bus_info));
     cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING | V4L2_CAP_DEVICE_CAPS;
     cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
     return 0;
 }
 
-static int ihighsky_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
+static int useeplus_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
     f->fmt.pix.width        = 640;
     f->fmt.pix.height       = 480;
@@ -221,7 +221,7 @@ static int ihighsky_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l
     return 0;
 }
 
-static int ihighsky_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struct v4l2_fmtdesc *f)
+static int useeplus_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struct v4l2_fmtdesc *f)
 {
     if (f->index > 0)
         return -EINVAL;
@@ -229,7 +229,7 @@ static int ihighsky_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struc
     return 0;
 }
 
-static int ihighsky_vidioc_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
+static int useeplus_vidioc_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 {
     if (inp->index > 0)
         return -EINVAL;
@@ -238,18 +238,18 @@ static int ihighsky_vidioc_enum_input(struct file *file, void *priv, struct v4l2
     return 0;
 }
 
-static int ihighsky_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
+static int useeplus_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
 {
     *i = 0; 
     return 0;
 }
 
-static int ihighsky_vidioc_s_input(struct file *file, void *priv, unsigned int i)
+static int useeplus_vidioc_s_input(struct file *file, void *priv, unsigned int i)
 {
     return i == 0 ? 0 : -EINVAL;
 }
 
-static int ihighsky_vidioc_g_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
+static int useeplus_vidioc_g_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
     if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
         return -EINVAL;
@@ -259,22 +259,22 @@ static int ihighsky_vidioc_g_parm(struct file *file, void *priv, struct v4l2_str
     return 0;
 }
 
-static int ihighsky_vidioc_s_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
+static int useeplus_vidioc_s_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
-    return ihighsky_vidioc_g_parm(file, priv, sp);
+    return useeplus_vidioc_g_parm(file, priv, sp);
 }
 
-static const struct v4l2_ioctl_ops ihighsky_v4l2_ioctl_ops = {
-    .vidioc_querycap        = ihighsky_vidioc_querycap,
-    .vidioc_g_fmt_vid_cap   = ihighsky_vidioc_fmt_vid_cap,
-    .vidioc_s_fmt_vid_cap   = ihighsky_vidioc_fmt_vid_cap,
-    .vidioc_try_fmt_vid_cap = ihighsky_vidioc_fmt_vid_cap,
-    .vidioc_enum_fmt_vid_cap = ihighsky_vidioc_enum_fmt_vid_cap,
-    .vidioc_enum_input      = ihighsky_vidioc_enum_input,
-    .vidioc_g_input         = ihighsky_vidioc_g_input,
-    .vidioc_s_input         = ihighsky_vidioc_s_input,
-    .vidioc_g_parm          = ihighsky_vidioc_g_parm, 
-    .vidioc_s_parm          = ihighsky_vidioc_s_parm, 
+static const struct v4l2_ioctl_ops useeplus_v4l2_ioctl_ops = {
+    .vidioc_querycap        = useeplus_vidioc_querycap,
+    .vidioc_g_fmt_vid_cap   = useeplus_vidioc_fmt_vid_cap,
+    .vidioc_s_fmt_vid_cap   = useeplus_vidioc_fmt_vid_cap,
+    .vidioc_try_fmt_vid_cap = useeplus_vidioc_fmt_vid_cap,
+    .vidioc_enum_fmt_vid_cap = useeplus_vidioc_enum_fmt_vid_cap,
+    .vidioc_enum_input      = useeplus_vidioc_enum_input,
+    .vidioc_g_input         = useeplus_vidioc_g_input,
+    .vidioc_s_input         = useeplus_vidioc_s_input,
+    .vidioc_g_parm          = useeplus_vidioc_g_parm, 
+    .vidioc_s_parm          = useeplus_vidioc_s_parm, 
     .vidioc_reqbufs         = vb2_ioctl_reqbufs,
     .vidioc_querybuf        = vb2_ioctl_querybuf,
     .vidioc_qbuf            = vb2_ioctl_qbuf,
@@ -283,7 +283,7 @@ static const struct v4l2_ioctl_ops ihighsky_v4l2_ioctl_ops = {
     .vidioc_streamoff       = vb2_ioctl_streamoff,
 };
 
-static int ihighsky_write_msg(struct usb_ihighsky *dev, u8 endpoint_addr, const u8 *tokens, size_t len)
+static int useeplus_write_msg(struct usb_useeplus *dev, u8 endpoint_addr, const u8 *tokens, size_t len)
 {
     int retval;
     int actual_length;
@@ -304,9 +304,9 @@ static int ihighsky_write_msg(struct usb_ihighsky *dev, u8 endpoint_addr, const 
     return retval;
 }
 
-static void ihighsky_read_bulk_callback(struct urb *urb) {
-    struct usb_ihighsky *dev = urb->context;
-    struct ihighsky_buffer *vbuf;
+static void useeplus_read_bulk_callback(struct urb *urb) {
+    struct usb_useeplus *dev = urb->context;
+    struct useeplus_buffer *vbuf;
     size_t i = 0;
     unsigned long flags;
     int retval;
@@ -426,7 +426,7 @@ static void ihighsky_read_bulk_callback(struct urb *urb) {
 
                 spin_lock_irqsave(&dev->q_lock, flags);
                 if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
-                    vbuf = list_first_entry(&dev->rdy_queue, struct ihighsky_buffer, list);
+                    vbuf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
                     list_del(&vbuf->list);
                     void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
                     if (vaddr) {
@@ -487,7 +487,7 @@ resubmit:
     }
 }
 
-static void ihighsky_kill_urbs(struct usb_ihighsky *dev) {
+static void useeplus_kill_urbs(struct usb_useeplus *dev) {
     int i;
     dev->streaming = false;
     for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
@@ -504,10 +504,10 @@ static void ihighsky_kill_urbs(struct usb_ihighsky *dev) {
     }
 }
 
-static int ihighsky_probe(struct usb_interface *interface,
+static int useeplus_probe(struct usb_interface *interface,
                           const struct usb_device_id *id) {
     struct usb_device *udev = interface_to_usbdev(interface);
-    struct usb_ihighsky *dev = NULL;
+    struct usb_useeplus *dev = NULL;
     struct vb2_queue *q;
     u8 *drain_buffer;
     int i, retval, actual_len;
@@ -517,7 +517,7 @@ static int ihighsky_probe(struct usb_interface *interface,
     }
 
     dev_info(&interface->dev,
-             "iHighSky DPTL matching channel identified.\n");
+             "useeplus DPTL matching channel identified.\n");
              
     dev = kzalloc(sizeof(*dev), GFP_KERNEL);
     if (!dev)
@@ -555,14 +555,14 @@ static int ihighsky_probe(struct usb_interface *interface,
     q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_READ;
     q->drv_priv = dev;
-    q->buf_struct_size = sizeof(struct ihighsky_buffer);
-    q->ops = &ihighsky_vb2_ops;
+    q->buf_struct_size = sizeof(struct useeplus_buffer);
+    q->ops = &useeplus_vb2_ops;
     q->mem_ops = &vb2_vmalloc_memops;
     q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
     q->min_queued_buffers = 2;
     q->lock = &dev->v4l2_lock;
     q->dev = &interface->dev;
-    strscpy(q->name, "ihighsky-queue", sizeof(q->name));
+    strscpy(q->name, "useeplus-queue", sizeof(q->name));
     
     retval = vb2_queue_init(q);
     if (retval) {
@@ -570,10 +570,10 @@ static int ihighsky_probe(struct usb_interface *interface,
         goto error_unreg_v4l2;
     }
     
-    strscpy(dev->vdev.name, "ihighsky-video", sizeof(dev->vdev.name));
+    strscpy(dev->vdev.name, "useeplus-video", sizeof(dev->vdev.name));
     dev->vdev.v4l2_dev = &dev->v4l2_dev;
-    dev->vdev.fops = &ihighsky_v4l2_fops;
-    dev->vdev.ioctl_ops = &ihighsky_v4l2_ioctl_ops;
+    dev->vdev.fops = &useeplus_v4l2_fops;
+    dev->vdev.ioctl_ops = &useeplus_v4l2_ioctl_ops;
     dev->vdev.release = video_device_release_empty;
     dev->vdev.lock = &dev->v4l2_lock;
     dev->vdev.queue = q;
@@ -612,19 +612,19 @@ static int ihighsky_probe(struct usb_interface *interface,
         }
         usb_fill_bulk_urb(dev->urbs[i], udev, usb_rcvbulkpipe(udev, 0x81),
                           dev->urb_buffers[i], BULK_TRANSFER_SIZE,
-                          ihighsky_read_bulk_callback, dev);
+                          useeplus_read_bulk_callback, dev);
         dev->urbs[i]->transfer_dma = dev->urb_dma_addrs[i];
         dev->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
     }
     
     usb_set_intfdata(interface, dev);
     
-    retval = ihighsky_write_msg(dev, 0x02, initialization_tokens,
+    retval = useeplus_write_msg(dev, 0x02, initialization_tokens,
                                 sizeof(initialization_tokens));
     if (retval)
         goto error_sequence;
         
-    retval = ihighsky_write_msg(dev, 0x01, start_stream_tokens,
+    retval = useeplus_write_msg(dev, 0x01, start_stream_tokens,
                                 sizeof(start_stream_tokens));
     if (retval)
         goto error_sequence;
@@ -648,10 +648,10 @@ static int ihighsky_probe(struct usb_interface *interface,
 error_unreg_video:
     video_unregister_device(&dev->vdev);
 error_sequence:
-    ihighsky_kill_urbs(dev);
+    useeplus_kill_urbs(dev);
     usb_set_intfdata(interface, NULL);
 error_urbs:
-    ihighsky_kill_urbs(dev);
+    useeplus_kill_urbs(dev);
 error_unreg_v4l2:
     v4l2_device_unregister(&dev->v4l2_dev);
 error:
@@ -665,12 +665,12 @@ error:
     return retval;
 }
 
-static void ihighsky_disconnect(struct usb_interface *interface) {
-    struct usb_ihighsky *dev = usb_get_intfdata(interface);
+static void useeplus_disconnect(struct usb_interface *interface) {
+    struct usb_useeplus *dev = usb_get_intfdata(interface);
     usb_set_intfdata(interface, NULL);
     
     if (dev) {
-        ihighsky_kill_urbs(dev);
+        useeplus_kill_urbs(dev);
         video_unregister_device(&dev->vdev);
         v4l2_device_unregister(&dev->v4l2_dev);
         
@@ -680,16 +680,16 @@ static void ihighsky_disconnect(struct usb_interface *interface) {
             kfree(dev->parse_buffer);
             
         dev_info(&interface->dev,
-                 "iHighSky DPTL completely detached.\n");
+                 "useeplus DPTL completely detached.\n");
         kfree(dev);
     }
 }
 
-static struct usb_driver ihighsky_driver = {
-    .name       = "ihighsky-dptl",
-    .id_table   = ihighsky_table,
-    .probe      = ihighsky_probe,
-    .disconnect = ihighsky_disconnect,
+static struct usb_driver useeplus_driver = {
+    .name       = "useeplus",
+    .id_table   = useeplus_table,
+    .probe      = useeplus_probe,
+    .disconnect = useeplus_disconnect,
 };
 
-module_usb_driver(ihighsky_driver);
+module_usb_driver(useeplus_driver);

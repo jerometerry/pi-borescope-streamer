@@ -1,4 +1,4 @@
-obj-m += supercamera.o
+obj-m += useeplus_v4l2.o
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
 PWD  := $(shell pwd)
