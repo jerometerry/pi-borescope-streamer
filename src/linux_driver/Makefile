@@ -19,5 +19,8 @@ check:
 		-I$(KDIR)/arch/arm64/include/uapi \
 		useeplus_v4l2.c
 
+style:
+	$(KDIR)/scripts/checkpatch.pl --file ./useeplus_v4l2.c
+
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
