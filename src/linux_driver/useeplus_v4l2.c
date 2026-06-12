@@ -498,22 +498,51 @@ resubmit:
 	}
 }
 
-static void useeplus_kill_urbs(struct usb_useeplus *dev)
+static void useeplus_stop_urbs(struct usb_useeplus *dev)
 {
 	int i;
 
 	dev->streaming = false;
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		if (dev->urbs[i]) {
+		if (dev->urbs[i])
 			usb_kill_urb(dev->urbs[i]);
-			if (dev->urb_buffers[i]) {
-				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE, dev->urb_buffers[i],
-								  dev->urb_dma_addrs[i]);
-				dev->urb_buffers[i] = NULL;
-			}
+	}
+}
+
+static void useeplus_free_resources(struct usb_useeplus *dev)
+{
+	int i;
+
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		if (dev->urb_buffers[i]) {
+			usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE,
+							  dev->urb_buffers[i], dev->urb_dma_addrs[i]);
+			dev->urb_buffers[i] = NULL;
+		}
+		if (dev->urbs[i]) {
 			usb_free_urb(dev->urbs[i]);
 			dev->urbs[i] = NULL;
 		}
+	}
+
+    if (dev->parse_buffer) {
+		kfree(dev->parse_buffer);
+		dev->parse_buffer = NULL;
+	}
+
+    if (dev->current_frame) {
+		vfree(dev->current_frame);
+		dev->current_frame = NULL;
+	}
+}
+
+static void useeplus_video_device_release(struct video_device *vdev)
+{
+	struct usb_useeplus *dev = video_get_drvdata(vdev);
+
+	if (dev) {
+		useeplus_free_resources(dev);
+		kfree(dev);
 	}
 }
 
@@ -529,8 +558,7 @@ static int useeplus_probe(struct usb_interface *interface,
 	if (interface->cur_altsetting->desc.bInterfaceNumber != 1)
 		return -ENODEV;
 
-	dev_info(&interface->dev,
-			 "Useeplus borescope identified.\n");
+	dev_info(&interface->dev, "Useeplus borescope identified.\n");
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
@@ -551,18 +579,18 @@ static int useeplus_probe(struct usb_interface *interface,
 	dev->current_frame = vzalloc(MAX_FRAME_SIZE);
 	if (!dev->current_frame) {
 		retval = -ENOMEM;
-		goto error;
+		goto error_free_dev;
 	}
 
 	dev->parse_buffer = kzalloc(BULK_TRANSFER_SIZE * 2, GFP_KERNEL);
 	if (!dev->parse_buffer) {
 		retval = -ENOMEM;
-		goto error;
+		goto error_free_res;
 	}
 
 	retval = v4l2_device_register(&interface->dev, &dev->v4l2_dev);
 	if (retval)
-		goto error;
+		goto error_free_res;
 
 	q = &dev->vb_vidq;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -587,7 +615,7 @@ static int useeplus_probe(struct usb_interface *interface,
 	dev->vdev.v4l2_dev = &dev->v4l2_dev;
 	dev->vdev.fops = &useeplus_v4l2_fops;
 	dev->vdev.ioctl_ops = &useeplus_v4l2_ioctl_ops;
-	dev->vdev.release = video_device_release_empty;
+    dev->vdev.release = useeplus_video_device_release;
 	dev->vdev.lock = &dev->v4l2_lock;
 	dev->vdev.queue = q;
 	dev->vdev.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
@@ -615,7 +643,7 @@ static int useeplus_probe(struct usb_interface *interface,
 		dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
 		if (!dev->urbs[i]) {
 			retval = -ENOMEM;
-			goto error_urbs;
+			goto error_free_res;
 		}
 
 		dev->urb_buffers[i] = usb_alloc_coherent(
@@ -623,7 +651,7 @@ static int useeplus_probe(struct usb_interface *interface,
 
 		if (!dev->urb_buffers[i]) {
 			retval = -ENOMEM;
-			goto error_urbs;
+			goto error_free_res;
 		}
 
 		usb_fill_bulk_urb(dev->urbs[i], udev, usb_rcvbulkpipe(udev, 0x81),
@@ -638,45 +666,36 @@ static int useeplus_probe(struct usb_interface *interface,
 
 	retval = useeplus_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
 	if (retval)
-		goto error_sequence;
+		goto error_clear_intfdata;
 
 	retval = useeplus_write_msg(dev, 0x01, start_stream_tokens, sizeof(start_stream_tokens));
 	if (retval)
-		goto error_sequence;
-
-	retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
-	if (retval)
-		goto error_sequence;
-
-	dev_info(
-		&interface->dev,
-		"Useeplus protocol borescope connected successfully.\n");
+		goto error_clear_intfdata;
 
 	dev->streaming = true;
-
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
 		if (retval)
-			goto error_unreg_video;
+			goto error_stop_traffic;
 	}
 
+	retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
+	if (retval)
+		goto error_stop_traffic;
+
+	dev_info(&interface->dev, "Useeplus protocol borescope connected successfully.\n");
 	return 0;
 
-error_unreg_video:
-	video_unregister_device(&dev->vdev);
-error_sequence:
-	useeplus_kill_urbs(dev);
+error_stop_traffic:
+	useeplus_stop_urbs(dev);
+error_clear_intfdata:
 	usb_set_intfdata(interface, NULL);
-error_urbs:
-	useeplus_kill_urbs(dev);
 error_unreg_v4l2:
 	v4l2_device_unregister(&dev->v4l2_dev);
-error:
-	if (dev) {
-		vfree(dev->current_frame);
-		kfree(dev->parse_buffer);
-		kfree(dev);
-	}
+error_free_res:
+	useeplus_free_resources(dev);
+error_free_dev:
+	kfree(dev);
 	return retval;
 }
 
@@ -687,17 +706,10 @@ static void useeplus_disconnect(struct usb_interface *interface)
 	usb_set_intfdata(interface, NULL);
 
 	if (dev) {
-		useeplus_kill_urbs(dev);
 		video_unregister_device(&dev->vdev);
 		v4l2_device_unregister(&dev->v4l2_dev);
-
-		if (dev->current_frame)
-			vfree(dev->current_frame);
-
-		kfree(dev->parse_buffer);
-
+		useeplus_stop_urbs(dev);
 		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
-		kfree(dev);
 	}
 }
 
