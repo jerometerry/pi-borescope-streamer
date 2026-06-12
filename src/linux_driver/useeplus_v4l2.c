@@ -179,6 +179,24 @@ static int useeplus_write_msg(struct usb_useeplus *dev, u8 endpoint_addr, const 
 	return retval;
 }
 
+static void useeplus_stop_urbs(struct usb_useeplus *dev)
+{
+	int i;
+
+	WRITE_ONCE(dev->streaming, false);
+
+	/* Ensure the updated streaming state is visible to other cores
+	 * (specifically the asynchronous URB callback thread) before
+	 * we begin actively killing the in-flight URBs.
+	 */
+	smp_wmb();
+
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		if (dev->urbs[i])
+			usb_kill_urb(dev->urbs[i]);
+	}
+}
+
 static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
@@ -535,24 +553,6 @@ resubmit:
 			dev_err(&dev->interface->dev,
 					"Asynchronous URB resubmission failed with error %d\n", retval);
 		}
-	}
-}
-
-static void useeplus_stop_urbs(struct usb_useeplus *dev)
-{
-	int i;
-
-	WRITE_ONCE(dev->streaming, false);
-
-	/* Ensure the updated streaming state is visible to other cores
-	 * (specifically the asynchronous URB callback thread) before
-	 * we begin actively killing the in-flight URBs.
-	 */
-	smp_wmb();
-
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		if (dev->urbs[i])
-			usb_kill_urb(dev->urbs[i]);
 	}
 }
 
