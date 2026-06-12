@@ -29,10 +29,8 @@ MODULE_VERSION("0.1.0");
 
 #define USB_PACKET_HEADER_SIZE			5
 #define USB_PAYLOAD_HEADER_SIZE			7
-#define TOTAL_USB_HEADER_SIZE 			(USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE)
+#define TOTAL_USB_HEADER_SIZE			(USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE)
 #define MAX_SCAN_LIMIT					160
-
-
 
 #define INTERFACE_A_NUMBER				0
 #define INTERFACE_B_NUMBER				1
@@ -472,10 +470,10 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 						vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
 						dev->dbg_frames_delivered++;
-                    } else {
+					} else {
 						vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
 					}
-                }
+				}
 			}
 			dev->current_frame_len = 0;
 		}
