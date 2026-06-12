@@ -519,18 +519,15 @@ static void useeplus_free_resources(struct usb_useeplus *dev)
 							  dev->urb_buffers[i], dev->urb_dma_addrs[i]);
 			dev->urb_buffers[i] = NULL;
 		}
-		if (dev->urbs[i]) {
-			usb_free_urb(dev->urbs[i]);
-			dev->urbs[i] = NULL;
-		}
+		
+        usb_free_urb(dev->urbs[i]);
+        dev->urbs[i] = NULL;
 	}
 
-    if (dev->parse_buffer) {
-		kfree(dev->parse_buffer);
-		dev->parse_buffer = NULL;
-	}
+	kfree(dev->parse_buffer);
+	dev->parse_buffer = NULL;
 
-    if (dev->current_frame) {
+	if (dev->current_frame) {
 		vfree(dev->current_frame);
 		dev->current_frame = NULL;
 	}
@@ -615,7 +612,7 @@ static int useeplus_probe(struct usb_interface *interface,
 	dev->vdev.v4l2_dev = &dev->v4l2_dev;
 	dev->vdev.fops = &useeplus_v4l2_fops;
 	dev->vdev.ioctl_ops = &useeplus_v4l2_ioctl_ops;
-    dev->vdev.release = useeplus_video_device_release;
+	dev->vdev.release = useeplus_video_device_release;
 	dev->vdev.lock = &dev->v4l2_lock;
 	dev->vdev.queue = q;
 	dev->vdev.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
