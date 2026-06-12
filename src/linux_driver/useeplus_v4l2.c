@@ -519,7 +519,7 @@ static void useeplus_free_resources(struct usb_useeplus *dev)
 							  dev->urb_buffers[i], dev->urb_dma_addrs[i]);
 			dev->urb_buffers[i] = NULL;
 		}
-	
+
 		usb_free_urb(dev->urbs[i]);
 		dev->urbs[i] = NULL;
 	}
