@@ -4,11 +4,12 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 PWD  := $(shell pwd)
 
 ifeq ($(CHECKER),1)
-    CHECK_FLAGS := C=1 CHECK="sparse"
+    export C := 1
+    export CHECK := sparse
 endif
 
 default:
-	$(MAKE) -C $(KDIR) M=$(PWD) $(CHECK_FLAGS) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
