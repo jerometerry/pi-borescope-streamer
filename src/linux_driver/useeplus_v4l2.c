@@ -430,16 +430,16 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			} else {
 				size_t final_content_size = eoiOffset - soiOffset;
 
-                dev->frame_counter++;
+				dev->frame_counter++;
 
 				spin_lock_irqsave(&dev->q_lock, flags);
 				if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
 					vbuf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
 					list_del(&vbuf->list);
 
-                    void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
+					void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
 
-                    if (vaddr) {
+					if (vaddr) {
 						memcpy(vaddr, dev->current_frame + soiOffset, final_content_size);
 						vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0, final_content_size);
 						vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
@@ -482,7 +482,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	if (i < dev->parse_len) {
 		size_t remaining = dev->parse_len - i;
 
-        memmove(dev->parse_buffer, dev->parse_buffer + i, remaining);
+		memmove(dev->parse_buffer, dev->parse_buffer + i, remaining);
 		dev->parse_len = remaining;
 	} else {
 		dev->parse_len = 0;
@@ -502,7 +502,7 @@ static void useeplus_kill_urbs(struct usb_useeplus *dev)
 {
 	int i;
 
-    dev->streaming = false;
+	dev->streaming = false;
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (dev->urbs[i]) {
 			usb_kill_urb(dev->urbs[i]);
@@ -606,9 +606,8 @@ static int useeplus_probe(struct usb_interface *interface,
 	kfree(drain_buffer);
 
 	retval = usb_set_interface(udev, 1, 1);
-	if (retval) {
+	if (retval)
 		goto error_unreg_v4l2;
-	}
 
 	usb_clear_halt(udev, usb_rcvbulkpipe(udev, 0x81));
 
@@ -619,19 +618,19 @@ static int useeplus_probe(struct usb_interface *interface,
 			goto error_urbs;
 		}
 
-        dev->urb_buffers[i] = usb_alloc_coherent(
+		dev->urb_buffers[i] = usb_alloc_coherent(
 			udev, BULK_TRANSFER_SIZE, GFP_KERNEL, &dev->urb_dma_addrs[i]);
 
-        if (!dev->urb_buffers[i]) {
+		if (!dev->urb_buffers[i]) {
 			retval = -ENOMEM;
 			goto error_urbs;
 		}
 
-        usb_fill_bulk_urb(dev->urbs[i], udev, usb_rcvbulkpipe(udev, 0x81),
+		usb_fill_bulk_urb(dev->urbs[i], udev, usb_rcvbulkpipe(udev, 0x81),
 						  dev->urb_buffers[i], BULK_TRANSFER_SIZE,
 						  useeplus_read_bulk_callback, dev);
 
-        dev->urbs[i]->transfer_dma = dev->urb_dma_addrs[i];
+		dev->urbs[i]->transfer_dma = dev->urb_dma_addrs[i];
 		dev->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	}
 
@@ -655,13 +654,13 @@ static int useeplus_probe(struct usb_interface *interface,
 
 	dev->streaming = true;
 
-    for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
 		if (retval)
 			goto error_unreg_video;
 	}
 
-    return 0;
+	return 0;
 
 error_unreg_video:
 	video_unregister_device(&dev->vdev);
@@ -689,7 +688,7 @@ static void useeplus_disconnect(struct usb_interface *interface)
 {
 	struct usb_useeplus *dev = usb_get_intfdata(interface);
 
-    usb_set_intfdata(interface, NULL);
+	usb_set_intfdata(interface, NULL);
 
 	if (dev) {
 		useeplus_kill_urbs(dev);
