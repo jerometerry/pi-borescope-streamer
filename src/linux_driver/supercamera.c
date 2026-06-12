@@ -379,16 +379,17 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 		}
 
 		if (packet_len < NATIVE_PAYLOAD_HEADER_SIZE) {
-			i++;
+			i += totalPacketSize;
 			continue;
 		}
 
-		const struct usb_payload_header *payloadHeader =
-			(const struct usb_payload_header *)(dev->parse_buffer + i + NATIVE_PACKET_HEADER_SIZE);
-		u8 current_frame_id = payloadHeader->leFrameId;
+		size_t payload_offset = i + NATIVE_PACKET_HEADER_SIZE;
+		u8 current_frame_id = dev->parse_buffer[payload_offset];
+		u8 current_camera_number = dev->parse_buffer[payload_offset + 1];
+		u8 current_flags = dev->parse_buffer[payload_offset + 2];
 
 		if (dev->has_stored_header && dev->current_frame_len > 0 &&
-			dev->active_payload_hdr.leFrameId != current_frame_id) {
+			dev->last_frame_id != current_frame_id) {
 			
 			dev->dbg_frames_found++;
 			size_t soiOffset = 0;
@@ -446,27 +447,23 @@ static void supercam_read_bulk_callback(struct urb *urb) {
 			dev->current_frame_len = 0;
 		}
 
-		dev->active_payload_hdr = *payloadHeader;
+		dev->last_frame_id = current_frame_id;
 		dev->has_stored_header = true;
 
-		{
-			bool hasGravitySensor = (payloadHeader->leFlags & 0x01) != 0;
-			uint8_t otherFlags = (payloadHeader->leFlags >> 2) & 0x3F;
+		bool hasGravitySensor = (current_flags & 0x01) != 0;
+		uint8_t otherFlags = (current_flags >> 2) & 0x3F;
+
+		if (!hasGravitySensor && otherFlags == 0 && current_camera_number < 2) {
+			size_t payloadStart = i + TOTAL_PROTOCOL_HEADER_SIZE;
+			size_t payloadSize = totalPacketSize - TOTAL_PROTOCOL_HEADER_SIZE;
 			
-			if (packetHeader->leCameraId == PROTO_VIDEO_CAMERA_ID &&
-				!hasGravitySensor && otherFlags == 0 &&
-				payloadHeader->leCameraNumber < 2) {
-				
-				size_t payloadStart = i + TOTAL_PROTOCOL_HEADER_SIZE;
-				size_t payloadSize = totalPacketSize - TOTAL_PROTOCOL_HEADER_SIZE;
-				
-				if (dev->current_frame_len + payloadSize <= MAX_FRAME_SIZE) {
-					memcpy(dev->current_frame + dev->current_frame_len,
-						   dev->parse_buffer + payloadStart, payloadSize);
-					dev->current_frame_len += payloadSize;
-				}
+			if (dev->current_frame_len + payloadSize <= MAX_FRAME_SIZE) {
+				memcpy(dev->current_frame + dev->current_frame_len,
+					   dev->parse_buffer + payloadStart, payloadSize);
+				dev->current_frame_len += payloadSize;
 			}
 		}
+		
 		i += totalPacketSize;
 	}
 
