@@ -673,8 +673,8 @@ error_unreg_v4l2:
 	v4l2_device_unregister(&dev->v4l2_dev);
 error:
 	if (dev) {
-        vfree(dev->current_frame);
-        kfree(dev->parse_buffer);
+		vfree(dev->current_frame);
+		kfree(dev->parse_buffer);
 		kfree(dev);
 	}
 	return retval;
@@ -694,8 +694,7 @@ static void useeplus_disconnect(struct usb_interface *interface)
 		if (dev->current_frame)
 			vfree(dev->current_frame);
 
-		if (dev->parse_buffer)
-			kfree(dev->parse_buffer);
+		kfree(dev->parse_buffer);
 
 		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
 		kfree(dev);
