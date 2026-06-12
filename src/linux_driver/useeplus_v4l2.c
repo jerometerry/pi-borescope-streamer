@@ -162,6 +162,24 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
 	unsigned long flags;
+	int i, retval;
+
+	retval = useeplus_write_msg(dev, ENDPOINT_2, initialization_tokens, sizeof(initialization_tokens));
+	if (retval)
+		return retval;
+
+	retval = useeplus_write_msg(dev, ENDPOINT_1, start_stream_tokens, sizeof(start_stream_tokens));
+	if (retval)
+		return retval;
+
+	dev->streaming = true;
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
+		if (retval) {
+			useeplus_stop_urbs(dev);
+			return retval;
+		}
+	}
 
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->current_frame_len = 0;
@@ -449,29 +467,32 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			} else {
 				size_t final_content_size = eoiOffset - soiOffset;
 
-				dev->frame_counter++;
+				{
+					struct useeplus_buffer *vbuf = NULL;
+					dev->frame_counter++;
 
-				spin_lock_irqsave(&dev->q_lock, flags);
-				if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
-					vbuf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
-					list_del(&vbuf->list);
-				}
-				spin_unlock_irqrestore(&dev->q_lock, flags);
+					spin_lock_irqsave(&dev->q_lock, flags);
+					if (dev->vb_streaming && !list_empty(&dev->rdy_queue)) {
+						vbuf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
+						list_del(&vbuf->list);
+					}
+					spin_unlock_irqrestore(&dev->q_lock, flags);
 
-				if (vbuf) {
-					void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
+					if (vbuf) {
+						void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
 
-					if (vaddr) {
-						memcpy(vaddr, dev->current_frame + soiOffset, final_content_size);
-						vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0, final_content_size);
-						vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
-						vbuf->vb.sequence = dev->sequence++;
-						vbuf->vb.field = V4L2_FIELD_NONE;
+						if (vaddr) {
+							memcpy(vaddr, dev->current_frame + soiOffset, final_content_size);
+							vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0, final_content_size);
+							vbuf->vb.vb2_buf.timestamp = ktime_get_ns();
+							vbuf->vb.sequence = dev->sequence++;
+							vbuf->vb.field = V4L2_FIELD_NONE;
 
-						vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
-						dev->dbg_frames_delivered++;
-					} else {
-						vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
+							vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_DONE);
+							dev->dbg_frames_delivered++;
+						} else {
+							vb2_buffer_done(&vbuf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
+						}
 					}
 				}
 			}
@@ -688,30 +709,15 @@ static int useeplus_probe(struct usb_interface *interface,
 
 	usb_set_intfdata(interface, dev);
 
-	retval = useeplus_write_msg(dev, ENDPOINT_2, initialization_tokens, sizeof(initialization_tokens));
-	if (retval)
-		goto error_clear_intfdata;
-
-	retval = useeplus_write_msg(dev, ENDPOINT_1, start_stream_tokens, sizeof(start_stream_tokens));
-	if (retval)
-		goto error_clear_intfdata;
-
-	dev->streaming = true;
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
-		if (retval)
-			goto error_stop_traffic;
-	}
-
 	retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
 	if (retval)
-		goto error_stop_traffic;
+		goto error_clear_intfdata;
 
 	dev_info(&interface->dev, "Useeplus protocol borescope connected successfully.\n");
 	return 0;
 
-error_stop_traffic:
-	useeplus_stop_urbs(dev);
+error_clear_intfdata:
+	usb_set_intfdata(interface, NULL);
 error_clear_intfdata:
 	usb_set_intfdata(interface, NULL);
 error_unreg_v4l2:
@@ -731,6 +737,8 @@ static void useeplus_disconnect(struct usb_interface *interface)
 
 	if (dev) {
 		useeplus_stop_urbs(dev);
+		video_unregister_device(&dev->vdev);
+		v4l2_device_disconnect(&dev->v4l2_dev);
 		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
 	}
 }
