@@ -11,6 +11,8 @@ check:
 		-Wbitwise -Wcontext \
 		-I$(KDIR)/include \
 		-I$(KDIR)/arch/arm64/include \
+		-I$(KDIR)/arch/arm64/include/generated \
+		-I$(KDIR)/include/generated \
 		-I$(KDIR)/include/uapi \
 		-I$(KDIR)/arch/arm64/include/uapi \
 		useeplus_v4l2.c
