@@ -508,7 +508,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	}
 
 resubmit:
-	if (dev->streaming) {
+	if (READ_ONCE(dev->streaming)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval && retval != -EPIPE) {
 			dev_err(&dev->interface->dev,
@@ -521,7 +521,9 @@ static void useeplus_stop_urbs(struct usb_useeplus *dev)
 {
 	int i;
 
-	dev->streaming = false;
+	WRITE_ONCE(dev->streaming, false);
+	smp_wmb();
+
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (dev->urbs[i])
 			usb_kill_urb(dev->urbs[i]);
@@ -558,6 +560,7 @@ static void useeplus_video_device_release(struct video_device *vdev)
 
 	if (dev) {
 		useeplus_free_resources(dev);
+		v4l2_device_unregister(&dev->v4l2_dev);
 		kfree(dev);
 	}
 }
@@ -722,8 +725,6 @@ static void useeplus_disconnect(struct usb_interface *interface)
 	usb_set_intfdata(interface, NULL);
 
 	if (dev) {
-		video_unregister_device(&dev->vdev);
-		v4l2_device_unregister(&dev->v4l2_dev);
 		useeplus_stop_urbs(dev);
 		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
 	}
