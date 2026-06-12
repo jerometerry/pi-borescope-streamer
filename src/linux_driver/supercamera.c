@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR GPL-2.0-only
+
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/usb.h>
@@ -13,10 +15,10 @@
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h> 
 
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("Production Protocol-Compliant Borescope Driver");
-MODULE_VERSION("5.5");
+MODULE_DESCRIPTION("V4L2 driver for iHighSky DPTL non-UVC borescopes");
+MODULE_VERSION("0.1");
 
 #define USB_TIMEOUT_MS             1000
 #define BULK_TRANSFER_COUNT        4
