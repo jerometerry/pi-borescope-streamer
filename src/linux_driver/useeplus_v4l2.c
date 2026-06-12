@@ -523,8 +523,8 @@ static void useeplus_stop_urbs(struct usb_useeplus *dev)
 
 	WRITE_ONCE(dev->streaming, false);
 
-	/* Ensure the updated streaming state is visible to other cores 
-	 * (specifically the asynchronous URB callback thread) before 
+	/* Ensure the updated streaming state is visible to other cores
+	 * (specifically the asynchronous URB callback thread) before
 	 * we begin actively killing the in-flight URBs.
 	 */
 	smp_wmb();
