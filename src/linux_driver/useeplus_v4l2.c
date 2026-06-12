@@ -158,6 +158,27 @@ static void useeplus_buf_queue(struct vb2_buffer *vb)
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 }
 
+static int useeplus_write_msg(struct usb_useeplus *dev, u8 endpoint_addr, const u8 *tokens, size_t len)
+{
+	int retval;
+	int actual_length;
+	u8 *dma_buffer;
+
+	dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
+	if (!dma_buffer)
+		return -ENOMEM;
+
+	retval = usb_bulk_msg(dev->udev,
+				  usb_sndbulkpipe(dev->udev, endpoint_addr),
+				  dma_buffer,
+				  len,
+				  &actual_length,
+				  USB_TIMEOUT_MS);
+
+	kfree(dma_buffer);
+	return retval;
+}
+
 static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
@@ -326,27 +347,6 @@ static const struct v4l2_ioctl_ops useeplus_v4l2_ioctl_ops = {
 	.vidioc_streamon			= vb2_ioctl_streamon,
 	.vidioc_streamoff			= vb2_ioctl_streamoff,
 };
-
-static int useeplus_write_msg(struct usb_useeplus *dev, u8 endpoint_addr, const u8 *tokens, size_t len)
-{
-	int retval;
-	int actual_length;
-	u8 *dma_buffer;
-
-	dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
-	if (!dma_buffer)
-		return -ENOMEM;
-
-	retval = usb_bulk_msg(dev->udev,
-				  usb_sndbulkpipe(dev->udev, endpoint_addr),
-				  dma_buffer,
-				  len,
-				  &actual_length,
-				  USB_TIMEOUT_MS);
-
-	kfree(dma_buffer);
-	return retval;
-}
 
 static void useeplus_read_bulk_callback(struct urb *urb)
 {
