@@ -43,8 +43,8 @@ static const u8 start_stream_tokens[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
 static const struct usb_device_id useeplus_table[] = {
 	{ USB_DEVICE(0x0329, 0x2022) },
-	{ USB_DEVICE(0x2ce3, 0x3828) }, 
-	{ }							 
+	{ USB_DEVICE(0x2ce3, 0x3828) },
+	{ }
 };
 MODULE_DEVICE_TABLE(usb, useeplus_table);
 
@@ -72,11 +72,11 @@ struct usb_useeplus {
 
 	struct v4l2_device v4l2_dev;
 	struct video_device vdev;
-	struct mutex v4l2_lock; 
+	struct mutex v4l2_lock;
 
 	struct vb2_queue vb_vidq;
 	struct list_head rdy_queue;
-	spinlock_t q_lock; 
+	spinlock_t q_lock;
 	u64 sequence;
 
 	struct urb *urbs[BULK_TRANSFER_COUNT];
@@ -110,20 +110,19 @@ static int useeplus_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 				unsigned int *nplanes, unsigned int sizes[],
 				struct device *alloc_devs[])
 {
-	if (*nplanes) {
+	if (*nplanes)
 		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
-	}
 	
 	*nplanes = 1;
-	sizes[0] = MAX_FRAME_SIZE; 
+	sizes[0] = MAX_FRAME_SIZE;
 	return 0;
 }
 
 static int useeplus_buf_prepare(struct vb2_buffer *vb)
 {
-	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE) {
+	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
 		return -EINVAL;
-	}
+
 	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
 	return 0;
 }
@@ -149,7 +148,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->current_frame_len = 0;
 	dev->last_frame_id = -1;
 	dev->has_stored_header = false;
-	dev->vb_streaming = true; 
+	dev->vb_streaming = true;
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 	return 0;
 }
@@ -199,13 +198,14 @@ static const struct v4l2_file_operations useeplus_v4l2_fops = {
 	.read		   = vb2_fop_read,
 	.poll		   = vb2_fop_poll,
 	.mmap		   = vb2_fop_mmap,
-	.unlocked_ioctl = video_ioctl2, 
+	.unlocked_ioctl = video_ioctl2,
 };
 
 static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 {
 	struct usb_useeplus *dev = video_drvdata(file);
-	strscpy(cap->driver, "Useeplus", sizeof(cap->driver));
+
+    strscpy(cap->driver, "Useeplus", sizeof(cap->driver));
 	strscpy(cap->card, "Useeplus non-UVC Borescope", sizeof(cap->card));
 	usb_make_path(dev->udev, cap->bus_info, sizeof(cap->bus_info));
 	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING | V4L2_CAP_DEVICE_CAPS;
@@ -227,18 +227,18 @@ static int useeplus_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l
 
 static int useeplus_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struct v4l2_fmtdesc *f)
 {
-	if (f->index > 0) {
+	if (f->index > 0)
 		return -EINVAL;
-	}
+
 	f->pixelformat = V4L2_PIX_FMT_MJPEG;
 	return 0;
 }
 
 static int useeplus_vidioc_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 {
-	if (inp->index > 0) {
+	if (inp->index > 0)
 		return -EINVAL;
-	}
+
 	inp->type = V4L2_INPUT_TYPE_CAMERA;
 	strscpy(inp->name, "Borescope Lens Channel 0", sizeof(inp->name));
 	return 0;
@@ -246,7 +246,7 @@ static int useeplus_vidioc_enum_input(struct file *file, void *priv, struct v4l2
 
 static int useeplus_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
 {
-	*i = 0; 
+	*i = 0;
 	return 0;
 }
 
@@ -257,12 +257,12 @@ static int useeplus_vidioc_s_input(struct file *file, void *priv, unsigned int i
 
 static int useeplus_vidioc_g_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
-	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
+	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
-	}
+
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
 	sp->parm.capture.timeperframe.numerator = 1;
-	sp->parm.capture.timeperframe.denominator = 30; 
+	sp->parm.capture.timeperframe.denominator = 30;
 	return 0;
 }
 
@@ -280,8 +280,8 @@ static const struct v4l2_ioctl_ops useeplus_v4l2_ioctl_ops = {
 	.vidioc_enum_input	   = useeplus_vidioc_enum_input,
 	.vidioc_g_input		  = useeplus_vidioc_g_input,
 	.vidioc_s_input		  = useeplus_vidioc_s_input,
-	.vidioc_g_parm		   = useeplus_vidioc_g_parm, 
-	.vidioc_s_parm		   = useeplus_vidioc_s_parm, 
+	.vidioc_g_parm		   = useeplus_vidioc_g_parm,
+	.vidioc_s_parm		   = useeplus_vidioc_s_parm,
 	.vidioc_reqbufs		  = vb2_ioctl_reqbufs,
 	.vidioc_querybuf		 = vb2_ioctl_querybuf,
 	.vidioc_qbuf			 = vb2_ioctl_qbuf,
@@ -297,9 +297,8 @@ static int useeplus_write_msg(struct usb_useeplus *dev, u8 endpoint_addr, const 
 	u8 *dma_buffer;
 
 	dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
-	if (!dma_buffer) {
+	if (!dma_buffer)
 		return -ENOMEM;
-	}
 
 	retval = usb_bulk_msg(dev->udev,
 				  usb_sndbulkpipe(dev->udev, endpoint_addr),
@@ -321,9 +320,9 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	int retval;
 
 	if (urb->status) {
-		if (urb->status == -ENOENT || urb->status == -ECONNRESET || urb->status == -ESHUTDOWN) {
+		if (urb->status == -ENOENT || urb->status == -ECONNRESET || urb->status == -ESHUTDOWN)
 			return;
-		}
+
 		goto resubmit;
 	}
 
@@ -333,7 +332,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		dev_dbg(&dev->interface->dev,
 			"DIAGNOSTIC DUMP | URBs: %lu | Packets: %lu | Frames: %lu (Delivered: %lu | Drop SOI: %lu | Drop EOI: %lu | Drop Q: %lu | Ghosts: %lu)\n",
 			dev->dbg_urbs_processed, dev->dbg_packets_found, dev->dbg_frames_found,
-			dev->dbg_frames_delivered, dev->dbg_frames_dropped_soi, dev->dbg_frames_dropped_eoi, 
+			dev->dbg_frames_delivered, dev->dbg_frames_dropped_soi, dev->dbg_frames_dropped_eoi,
 			dev->dbg_frames_dropped_queue, dev->dbg_ghost_headers);
 	}
 
@@ -346,7 +345,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	}
 
 	while (i + TOTAL_PROTOCOL_HEADER_SIZE <= dev->parse_len) {
-		
+
 		uint16_t current_magic = get_unaligned_le16(dev->parse_buffer + i);
 		u8 current_camera_id = dev->parse_buffer[i + 2];
 		uint16_t packet_len = get_unaligned_le16(dev->parse_buffer + i + 3);
@@ -385,9 +384,8 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		dev->dbg_packets_found++;
 		size_t totalPacketSize = NATIVE_PACKET_HEADER_SIZE + packet_len;
 
-		if (i + totalPacketSize > dev->parse_len) {
+		if (i + totalPacketSize > dev->parse_len)
 			break;
-		}
 
 		if (packet_len < NATIVE_PAYLOAD_HEADER_SIZE) {
 			i += totalPacketSize;
@@ -401,15 +399,15 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 		if (dev->has_stored_header && dev->current_frame_len > 0 &&
 			dev->last_frame_id != current_frame_id) {
-			
+
 			dev->dbg_frames_found++;
 			size_t soiOffset = 0;
 			size_t eoiOffset = 0;
 			size_t j;
 			bool found_soi = false;
-			bool found_eoi = false; 
+			bool found_eoi = false;
 
-			for (j = 0; j + 1 < min((size_t)256, dev->current_frame_len); ++j) {
+			for (j = 0; j + 1 < min_t(size_t, 256, dev->current_frame_len); ++j) {
 				if (dev->current_frame[j] == 0xFF && dev->current_frame[j + 1] == 0xD8) {
 					soiOffset = j;
 					found_soi = true;
