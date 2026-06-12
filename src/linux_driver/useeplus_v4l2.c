@@ -110,8 +110,9 @@ static int useeplus_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
                 unsigned int *nplanes, unsigned int sizes[],
                 struct device *alloc_devs[])
 {
-    if (*nplanes)
+    if (*nplanes) {
         return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
+    }
     
     *nplanes = 1;
     sizes[0] = MAX_FRAME_SIZE; 
@@ -120,8 +121,9 @@ static int useeplus_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 
 static int useeplus_buf_prepare(struct vb2_buffer *vb)
 {
-    if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
+    if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE) {
         return -EINVAL;
+    }
     vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
     return 0;
 }
@@ -160,11 +162,13 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 
     spin_lock_irqsave(&dev->q_lock, flags);
     dev->vb_streaming = false;
+
     while (!list_empty(&dev->rdy_queue)) {
         buf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
         list_del(&buf->list);
         vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
     }
+
     spin_unlock_irqrestore(&dev->q_lock, flags);
 }
 
@@ -201,8 +205,8 @@ static const struct v4l2_file_operations useeplus_v4l2_fops = {
 static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 {
     struct usb_useeplus *dev = video_drvdata(file);
-    strscpy(cap->driver, "useeplus-dptl", sizeof(cap->driver));
-    strscpy(cap->card, "useeplus DPTL Borescope", sizeof(cap->card));
+    strscpy(cap->driver, "Useeplus", sizeof(cap->driver));
+    strscpy(cap->card, "Useeplus non-UVC Borescope", sizeof(cap->card));
     usb_make_path(dev->udev, cap->bus_info, sizeof(cap->bus_info));
     cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING | V4L2_CAP_DEVICE_CAPS;
     cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
@@ -223,16 +227,18 @@ static int useeplus_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l
 
 static int useeplus_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struct v4l2_fmtdesc *f)
 {
-    if (f->index > 0)
+    if (f->index > 0) {
         return -EINVAL;
+    }
     f->pixelformat = V4L2_PIX_FMT_MJPEG;
     return 0;
 }
 
 static int useeplus_vidioc_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 {
-    if (inp->index > 0)
+    if (inp->index > 0) {
         return -EINVAL;
+    }
     inp->type = V4L2_INPUT_TYPE_CAMERA;
     strscpy(inp->name, "Borescope Lens Channel 0", sizeof(inp->name));
     return 0;
@@ -251,8 +257,9 @@ static int useeplus_vidioc_s_input(struct file *file, void *priv, unsigned int i
 
 static int useeplus_vidioc_g_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
-    if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+    if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) {
         return -EINVAL;
+    }
     sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
     sp->parm.capture.timeperframe.numerator = 1;
     sp->parm.capture.timeperframe.denominator = 30; 
@@ -265,22 +272,22 @@ static int useeplus_vidioc_s_parm(struct file *file, void *priv, struct v4l2_str
 }
 
 static const struct v4l2_ioctl_ops useeplus_v4l2_ioctl_ops = {
-    .vidioc_querycap        = useeplus_vidioc_querycap,
-    .vidioc_g_fmt_vid_cap   = useeplus_vidioc_fmt_vid_cap,
-    .vidioc_s_fmt_vid_cap   = useeplus_vidioc_fmt_vid_cap,
-    .vidioc_try_fmt_vid_cap = useeplus_vidioc_fmt_vid_cap,
+    .vidioc_querycap         = useeplus_vidioc_querycap,
+    .vidioc_g_fmt_vid_cap    = useeplus_vidioc_fmt_vid_cap,
+    .vidioc_s_fmt_vid_cap    = useeplus_vidioc_fmt_vid_cap,
+    .vidioc_try_fmt_vid_cap  = useeplus_vidioc_fmt_vid_cap,
     .vidioc_enum_fmt_vid_cap = useeplus_vidioc_enum_fmt_vid_cap,
-    .vidioc_enum_input      = useeplus_vidioc_enum_input,
-    .vidioc_g_input         = useeplus_vidioc_g_input,
-    .vidioc_s_input         = useeplus_vidioc_s_input,
-    .vidioc_g_parm          = useeplus_vidioc_g_parm, 
-    .vidioc_s_parm          = useeplus_vidioc_s_parm, 
-    .vidioc_reqbufs         = vb2_ioctl_reqbufs,
-    .vidioc_querybuf        = vb2_ioctl_querybuf,
-    .vidioc_qbuf            = vb2_ioctl_qbuf,
-    .vidioc_dqbuf           = vb2_ioctl_dqbuf,
-    .vidioc_streamon        = vb2_ioctl_streamon,
-    .vidioc_streamoff       = vb2_ioctl_streamoff,
+    .vidioc_enum_input       = useeplus_vidioc_enum_input,
+    .vidioc_g_input          = useeplus_vidioc_g_input,
+    .vidioc_s_input          = useeplus_vidioc_s_input,
+    .vidioc_g_parm           = useeplus_vidioc_g_parm, 
+    .vidioc_s_parm           = useeplus_vidioc_s_parm, 
+    .vidioc_reqbufs          = vb2_ioctl_reqbufs,
+    .vidioc_querybuf         = vb2_ioctl_querybuf,
+    .vidioc_qbuf             = vb2_ioctl_qbuf,
+    .vidioc_dqbuf            = vb2_ioctl_dqbuf,
+    .vidioc_streamon         = vb2_ioctl_streamon,
+    .vidioc_streamoff        = vb2_ioctl_streamoff,
 };
 
 static int useeplus_write_msg(struct usb_useeplus *dev, u8 endpoint_addr, const u8 *tokens, size_t len)
@@ -290,8 +297,9 @@ static int useeplus_write_msg(struct usb_useeplus *dev, u8 endpoint_addr, const 
     u8 *dma_buffer;
 
     dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
-    if (!dma_buffer)
+    if (!dma_buffer) {
         return -ENOMEM;
+    }
 
     retval = usb_bulk_msg(dev->udev,
                   usb_sndbulkpipe(dev->udev, endpoint_addr),
@@ -304,7 +312,8 @@ static int useeplus_write_msg(struct usb_useeplus *dev, u8 endpoint_addr, const 
     return retval;
 }
 
-static void useeplus_read_bulk_callback(struct urb *urb) {
+static void useeplus_read_bulk_callback(struct urb *urb)
+{
     struct usb_useeplus *dev = urb->context;
     struct useeplus_buffer *vbuf;
     size_t i = 0;
@@ -312,9 +321,9 @@ static void useeplus_read_bulk_callback(struct urb *urb) {
     int retval;
 
     if (urb->status) {
-        if (urb->status == -ENOENT || urb->status == -ECONNRESET ||
-            urb->status == -ESHUTDOWN)
+        if (urb->status == -ENOENT || urb->status == -ECONNRESET || urb->status == -ESHUTDOWN) {
             return;
+        }
         goto resubmit;
     }
 
@@ -487,7 +496,8 @@ resubmit:
     }
 }
 
-static void useeplus_kill_urbs(struct usb_useeplus *dev) {
+static void useeplus_kill_urbs(struct usb_useeplus *dev)
+{
     int i;
     dev->streaming = false;
     for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
@@ -520,8 +530,9 @@ static int useeplus_probe(struct usb_interface *interface,
              "useeplus DPTL matching channel identified.\n");
              
     dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-    if (!dev)
+    if (!dev) {
         return -ENOMEM;
+    }
         
     dev->udev = udev;
     dev->interface = interface;
@@ -548,8 +559,9 @@ static int useeplus_probe(struct usb_interface *interface,
     }
 
     retval = v4l2_device_register(&interface->dev, &dev->v4l2_dev);
-    if (retval)
+    if (retval) {
         goto error;
+    }
         
     q = &dev->vb_vidq;
     q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -593,8 +605,9 @@ static int useeplus_probe(struct usb_interface *interface,
     kfree(drain_buffer);
     
     retval = usb_set_interface(udev, 1, 1);
-    if (retval)
+    if (retval) {
         goto error_unreg_v4l2;
+    }
         
     usb_clear_halt(udev, usb_rcvbulkpipe(udev, 0x81));
     
@@ -619,29 +632,31 @@ static int useeplus_probe(struct usb_interface *interface,
     
     usb_set_intfdata(interface, dev);
     
-    retval = useeplus_write_msg(dev, 0x02, initialization_tokens,
-                                sizeof(initialization_tokens));
-    if (retval)
+    retval = useeplus_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
+    if (retval) {
         goto error_sequence;
+    }
         
-    retval = useeplus_write_msg(dev, 0x01, start_stream_tokens,
-                                sizeof(start_stream_tokens));
-    if (retval)
+    retval = useeplus_write_msg(dev, 0x01, start_stream_tokens, sizeof(start_stream_tokens));
+    if (retval) {
         goto error_sequence;
+    }
         
     retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
-    if (retval)
+    if (retval) {
         goto error_sequence;
+    }
         
     dev_info(
         &interface->dev,
-        "Production virtualized 640x480 V4L2 device deployed successfully.\n");
+        "Useeplus protocol borescope connected successfully.\n");
         
     dev->streaming = true;
     for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
         retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
-        if (retval)
+        if (retval) {
             goto error_unreg_video;
+        }
     }
     return 0;
 
@@ -656,16 +671,19 @@ error_unreg_v4l2:
     v4l2_device_unregister(&dev->v4l2_dev);
 error:
     if (dev) {
-        if (dev->current_frame)
+        if (dev->current_frame) {
             vfree(dev->current_frame);
-        if (dev->parse_buffer)
+        }
+        if (dev->parse_buffer) {
             kfree(dev->parse_buffer);
+        }
         kfree(dev);
     }
     return retval;
 }
 
-static void useeplus_disconnect(struct usb_interface *interface) {
+static void useeplus_disconnect(struct usb_interface *interface)
+{
     struct usb_useeplus *dev = usb_get_intfdata(interface);
     usb_set_intfdata(interface, NULL);
     
@@ -674,13 +692,14 @@ static void useeplus_disconnect(struct usb_interface *interface) {
         video_unregister_device(&dev->vdev);
         v4l2_device_unregister(&dev->v4l2_dev);
         
-        if (dev->current_frame)
+        if (dev->current_frame) {
             vfree(dev->current_frame);
-        if (dev->parse_buffer)
+        }
+        if (dev->parse_buffer) {
             kfree(dev->parse_buffer);
+        }
             
-        dev_info(&interface->dev,
-                 "useeplus DPTL completely detached.\n");
+        dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
         kfree(dev);
     }
 }
