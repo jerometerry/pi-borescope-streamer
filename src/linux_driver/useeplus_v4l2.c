@@ -330,7 +330,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
     dev->dbg_urbs_processed++;
 
     if (dev->dbg_urbs_processed % 300 == 0) {
-        dev_info(&dev->interface->dev,
+        dev_dbg(&dev->interface->dev,
             "DIAGNOSTIC DUMP | URBs: %lu | Packets: %lu | Frames: %lu (Delivered: %lu | Drop SOI: %lu | Drop EOI: %lu | Drop Q: %lu | Ghosts: %lu)\n",
             dev->dbg_urbs_processed, dev->dbg_packets_found, dev->dbg_frames_found,
             dev->dbg_frames_delivered, dev->dbg_frames_dropped_soi, dev->dbg_frames_dropped_eoi, 
