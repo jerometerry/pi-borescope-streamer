@@ -40,6 +40,35 @@ sudo insmod ./supercamera.ko 2>/dev/null
 
 # Verify supercamera module is loaded
 lsmod | grep supercamera
+
+# Verify driver was loaded by viewing dmesg output
+dmesg | tail -n 20
+```
+
+## Verify Supercamera Registered with Video4Linux
+
+Plug in the Supercamera into a USB port on the Raspberry Pi. Run this command to confirm the Supercamera is listed
+
+```bash
+v4l2-ctl --list-devices
+```
+
+## Capturing Snapshots with FFMPEGs
+
+```bash
+ffmpeg -f v4l2 -i /dev/video0 -vframes 10 -update 1 snapshot.jpg
+```
+
+## Launch the uStreamer Server
+
+
+Start the MJPEG HTTP server, pointing it to the v4l2 device the supercamera was assigned ( e.g. `/dev/video0`). 
+Binding the host to `0.0.0.0` ensures the stream is accessible from any device on your local network:
+
+```bash
+ustreamer -d /dev/video0 -r 640x480 -f 30 -m MJPEG -p 8080 --host 0.0.0.0
+
+
 ```
 
 ## Unload Linux Driver 
