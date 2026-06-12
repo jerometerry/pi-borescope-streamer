@@ -1,4 +1,4 @@
-# Useeplush Linux Driver
+# Useeplus Linux Driver
 
 ## Prerequisites
 
