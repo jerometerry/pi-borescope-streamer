@@ -527,7 +527,7 @@ static int useeplus_probe(struct usb_interface *interface,
     }
 
     dev_info(&interface->dev,
-             "useeplus DPTL matching channel identified.\n");
+             "Useeplus borescope identified.\n");
              
     dev = kzalloc(sizeof(*dev), GFP_KERNEL);
     if (!dev) {
