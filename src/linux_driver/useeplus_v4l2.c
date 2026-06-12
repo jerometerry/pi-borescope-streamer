@@ -708,4 +708,6 @@ static struct usb_driver useeplus_driver = {
 	.disconnect = useeplus_disconnect,
 };
 
+#ifndef __CHECKER__
 module_usb_driver(useeplus_driver);
+#endif
