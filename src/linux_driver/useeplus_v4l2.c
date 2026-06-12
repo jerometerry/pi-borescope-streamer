@@ -369,7 +369,6 @@ static const struct v4l2_ioctl_ops useeplus_v4l2_ioctl_ops = {
 static void useeplus_read_bulk_callback(struct urb *urb)
 {
 	struct usb_useeplus *dev = urb->context;
-	struct useeplus_buffer *vbuf = NULL;
 	size_t i = 0;
 	unsigned long flags;
 	int retval;
@@ -716,8 +715,6 @@ static int useeplus_probe(struct usb_interface *interface,
 	dev_info(&interface->dev, "Useeplus protocol borescope connected successfully.\n");
 	return 0;
 
-error_clear_intfdata:
-	usb_set_intfdata(interface, NULL);
 error_clear_intfdata:
 	usb_set_intfdata(interface, NULL);
 error_unreg_v4l2:
