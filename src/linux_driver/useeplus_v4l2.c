@@ -185,11 +185,10 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->vb_streaming = true;
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 
-	if (test_bit(FLAG_STREAMING, &dev->flags)) {
-		return 0; 
-	}
+	if (test_bit(FLAG_STREAMING, &dev->flags))
+		return 0;
 
-	set_bit(USEEPLUS_FLAG_STREAMING, &dev->flags);
+	set_bit(FLAG_STREAMING, &dev->flags);
 	smp_mb();
 
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
