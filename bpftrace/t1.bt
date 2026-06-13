@@ -1,0 +1,60 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+    printf("Monitoring pi-borescope-streamer USB Kernel Subsystem... Hit Ctrl-C.\n");
+    printf("%-10s %-18s %-10s %-12s %s\n", "TIME", "COMM", "PID", "SYSCALL", "DETAIL / BYTES");
+}
+
+/* 1. Track Async URB Submissions from userspace */
+tracepoint:syscalls:sys_enter_ioctl
+/comm == "pi-borescope-st"/ {
+    $cmd = args->cmd;
+    // Common USBFS ioctl codes: 
+    // 0x802c550a -> USBDEVFS_SUBMITURB
+    // 0x4008550c -> USBDEVFS_REAPURB
+    if ($cmd == 0x802c550a) {
+        printf("%-10s %-18s %-10d %-12s %s\n", time("%H:%M:%S"), comm, pid, "SUBMIT_URB", "Submitting async transfer buffer");
+    }
+    if ($cmd == 0x4008550c) {
+        @reap_attempts++;
+    }
+}
+
+/* 2. Track Memory Copy operations between Kernel and Userspace inside USBFS */
+kprobe:usbdevfs_ioctl {
+    @in_usb_ioctl[tid] = 1;
+}
+
+kretprobe:usbdevfs_ioctl {
+    delete(@in_usb_ioctl[tid]);
+}
+
+// Track memory allocation or copies executed down the USB core path
+kprobe:copy_to_user,
+kprobe:copy_from_user 
+/comm == "pi-borescope-st" && @in_usb_ioctl[tid]/ {
+    // arg2 contains the byte length of the transfer buffer
+    @usb_shuttle_bytes_total += arg2;
+    @usb_shuttle_counts[arg2] = count();
+}
+
+/* 3. Report summaries every second */
+interval:s:1 {
+    if (@usb_shuttle_bytes_total > 0) {
+        $kb = @usb_shuttle_bytes_total / 1024;
+        time("%H:%M:%S    ");
+        printf("Kernel Shuttled: %d KB from USB subsystem (%d reap checks)\n", $kb, @reap_attempts);
+        @usb_shuttle_bytes_total = 0;
+        @reap_attempts = 0;
+    }
+}
+
+END {
+    printf("\n--- USB Memory Shuttle Buffer Sizes (Bytes) ---\n");
+    print(@usb_shuttle_counts);
+    clear(@in_usb_ioctl);
+    clear(@usb_shuttle_bytes_total);
+    clear(@reap_attempts);
+    clear(@usb_shuttle_counts);
+}
+

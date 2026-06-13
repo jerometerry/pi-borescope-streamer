@@ -1,0 +1,46 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+    printf("Monitoring pi-borescope-streamer USB Kernel Subsystem... Hit Ctrl-C to exit.\n");
+    printf("====================================================================================\n");
+    printf("%-10s %-15s %-12s %-15s %s\n", "TIME", "COMM", "PID", "EVENT", "URB POINTER / ID");
+    printf("====================================================================================\n");
+}
+
+/* 1. Catch when libusb hands an asynchronous URB to the kernel */
+tracepoint:usb:usb_submit_urb 
+/comm == "pi-borescope-st"/ {
+    time("%H:%M:%S    ");
+    printf("%-15s %-12d %-15s %p\n", comm, pid, "SUBMIT_URB", args->urb);
+    @urb_submissions++;
+}
+
+/* 2. Catch when the kernel completes the URB and hands it back to libusb */
+tracepoint:usb:usb_complete_urb
+/comm == "pi-borescope-st"/ {
+    time("%H:%M:%S    ");
+    // args->actual_length tells us the exact byte payload delivered by the camera hardware
+    printf("%-15s %-12d %-15s %p (%d bytes)\n", comm, pid, "COMPLETE_URB", args->urb, args->actual_length);
+    
+    @usb_bytes_per_sec += args->actual_length;
+    @urb_completions++;
+}
+
+/* 3. Provide a high-level throughput summary window every second */
+interval:s:1 {
+    if (@urb_submissions > 0 || @urb_completions > 0) {
+        $kb = @usb_bytes_per_sec / 1024;
+        printf("\n>>> KERNEL SUMMARY: Shuttled %d KB via USB | Submits/s: %d | Completes/s: %d <<<\n\n", 
+            $kb, @urb_submissions, @urb_completions);
+    }
+    @usb_bytes_per_sec = 0;
+    @urb_submissions = 0;
+    @urb_completions = 0;
+}
+
+END {
+    clear(@usb_bytes_per_sec);
+    clear(@urb_submissions);
+    clear(@urb_completions);
+}
+
