@@ -21,22 +21,13 @@ MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
-#define USB_TIMEOUT_MS			 1000
-#define BULK_TRANSFER_COUNT		4
+#define USB_TIMEOUT_MS					1000
+#define BULK_TRANSFER_COUNT				4
 
-#define BULK_TRANSFER_SIZE		 16384
-#define MAX_FRAME_SIZE			 (256 * 1024)
+#define BULK_TRANSFER_SIZE				16384
+#define MAX_FRAME_SIZE					(256 * 1024)
 
-#define NATIVE_PACKET_HEADER_SIZE  5
-#define NATIVE_PAYLOAD_HEADER_SIZE 7
-#define TOTAL_PROTOCOL_HEADER_SIZE (NATIVE_PACKET_HEADER_SIZE + NATIVE_PAYLOAD_HEADER_SIZE)
-#define MAX_SCAN_LIMIT			 160
-
-#define PROTO_FRAME_HEADER_MAGIC   0xBBAA
-#define PROTO_FRAME_HEADER_A	   0xAA
-#define PROTO_FRAME_HEADER_B	   0xBB
-#define PROTO_VIDEO_CAMERA_ID	  0x0B
-#define PROTO_GRAVITY_CAMERA_ID	0x07
+#define MAX_SCAN_LIMIT					160
 
 #define USB_PACKET_HEADER_SIZE			5
 #define USB_PAYLOAD_HEADER_SIZE			7
@@ -46,6 +37,7 @@ MODULE_VERSION("0.1.0");
 #define INTERFACE_A_NUMBER				0
 #define INTERFACE_B_NUMBER				1
 #define INTERFACE_B_ALTERNATE_SETTING	1
+
 #define IN_DIRECTION					0x80
 #define ENDPOINT_1						0x01
 #define ENDPOINT_2						0x02
@@ -68,7 +60,7 @@ MODULE_VERSION("0.1.0");
 #define RESOLUTION_HEIGHT				480
 #define DIAGNOSTIC_LOG_ITERATIONS		300
 
-#define FLAG_STREAMING 0
+#define FLAG_STREAMING					0
 
 static const u8 initialization_tokens[]  = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_stream_tokens[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
@@ -295,8 +287,8 @@ static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_c
 
 static int useeplus_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
-	f->fmt.pix.width		= 640;
-	f->fmt.pix.height		= 480;
+	f->fmt.pix.width		= RESOLUTION_WIDTH;
+	f->fmt.pix.height		= RESOLUTION_HEIGHT;
 	f->fmt.pix.pixelformat	= V4L2_PIX_FMT_MJPEG;
 	f->fmt.pix.field		= V4L2_FIELD_NONE;
 	f->fmt.pix.bytesperline	= 0;
@@ -427,7 +419,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 	dev->dbg_urbs_processed++;
 
-	if (dev->dbg_urbs_processed % 300 == 0) {
+	if (dev->dbg_urbs_processed % DIAGNOSTIC_LOG_ITERATIONS == 0) {
 		dev_dbg(&dev->interface->dev,
 			"DIAGNOSTIC DUMP | URBs: %lu | Packets: %lu | Frames: %lu (Delivered: %lu | Drop SOI: %lu | Drop EOI: %lu | Drop Q: %lu | Ghosts: %lu)\n",
 			dev->dbg_urbs_processed, dev->dbg_packets_found, dev->dbg_frames_found,
@@ -443,15 +435,15 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		dev->parse_len += urb->actual_length;
 	}
 
-	while (i + TOTAL_PROTOCOL_HEADER_SIZE <= dev->parse_len) {
+	while (i + TOTAL_USB_HEADER_SIZE <= dev->parse_len) {
 
 		uint16_t current_magic = get_unaligned_le16(dev->parse_buffer + i);
 		u8 current_camera_id = dev->parse_buffer[i + 2];
 		uint16_t packet_len = get_unaligned_le16(dev->parse_buffer + i + 3);
 
-		if (current_magic != PROTO_FRAME_HEADER_MAGIC ||
-			(current_camera_id != PROTO_VIDEO_CAMERA_ID &&
-			current_camera_id != PROTO_GRAVITY_CAMERA_ID)) {
+		if (current_magic != USB_FRAME_HEADER ||
+			(current_camera_id != VIDEO_CAMERA_ID &&
+			current_camera_id != GRAVITY_SENSOR_CAMERA_ID)) {
 			i++;
 			continue;
 		}
@@ -462,11 +454,11 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			size_t maxScan = min((size_t)MAX_SCAN_LIMIT, (size_t)(dev->parse_len - i - 3));
 			size_t d;
 
-			for (d = NATIVE_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
-				if (dev->parse_buffer[i + d] == PROTO_FRAME_HEADER_A &&
-					dev->parse_buffer[i + d + 1] == PROTO_FRAME_HEADER_B &&
-					(dev->parse_buffer[i + d + 2] == PROTO_VIDEO_CAMERA_ID ||
-					dev->parse_buffer[i + d + 2] == PROTO_GRAVITY_CAMERA_ID)) {
+			for (d = USB_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
+				if (dev->parse_buffer[i + d] == USB_FRAME_HEADER_A &&
+					dev->parse_buffer[i + d + 1] == USB_FRAME_HEADER_B &&
+					(dev->parse_buffer[i + d + 2] == VIDEO_CAMERA_ID ||
+					dev->parse_buffer[i + d + 2] == GRAVITY_SENSOR_CAMERA_ID)) {
 					isGhost = true;
 					nextHeaderOffset = d;
 					break;
@@ -481,17 +473,17 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		}
 
 		dev->dbg_packets_found++;
-		size_t totalPacketSize = NATIVE_PACKET_HEADER_SIZE + packet_len;
+		size_t totalPacketSize = USB_PACKET_HEADER_SIZE + packet_len;
 
 		if (i + totalPacketSize > dev->parse_len)
 			break;
 
-		if (packet_len < NATIVE_PAYLOAD_HEADER_SIZE) {
+		if (packet_len < USB_PAYLOAD_HEADER_SIZE) {
 			i += totalPacketSize;
 			continue;
 		}
 
-		size_t payload_offset = i + NATIVE_PACKET_HEADER_SIZE;
+		size_t payload_offset = i + USB_PACKET_HEADER_SIZE;
 		u8 current_frame_id = dev->parse_buffer[payload_offset];
 		u8 current_camera_number = dev->parse_buffer[payload_offset + 1];
 		u8 current_flags = dev->parse_buffer[payload_offset + 2];
@@ -507,7 +499,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			bool found_eoi = false;
 
 			for (j = 0; j + 1 < min((size_t)256, dev->current_frame_len); ++j) {
-				if (dev->current_frame[j] == 0xFF && dev->current_frame[j + 1] == 0xD8) {
+				if (dev->current_frame[j] == BOUNDARY_MARKER && dev->current_frame[j + 1] == START_MARKER) {
 					soiOffset = j;
 					found_soi = true;
 					break;
@@ -515,7 +507,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			}
 
 			for (j = dev->current_frame_len; j >= 2; --j) {
-				if (dev->current_frame[j - 2] == 0xFF && dev->current_frame[j - 1] == 0xD9) {
+				if (dev->current_frame[j - 2] == BOUNDARY_MARKER && dev->current_frame[j - 1] == END_MARKER) {
 					eoiOffset = j;
 					found_eoi = true;
 					break;
@@ -564,8 +556,8 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		uint8_t otherFlags = (current_flags >> 2) & 0x3F;
 
 		if (!hasGravitySensor && otherFlags == 0 && current_camera_number < 2) {
-			size_t payloadStart = i + TOTAL_PROTOCOL_HEADER_SIZE;
-			size_t payloadSize = totalPacketSize - TOTAL_PROTOCOL_HEADER_SIZE;
+			size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
+			size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
 
 			if (dev->current_frame_len + payloadSize <= MAX_FRAME_SIZE) {
 				memcpy(dev->current_frame + dev->current_frame_len,
