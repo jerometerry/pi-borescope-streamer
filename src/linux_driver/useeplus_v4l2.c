@@ -544,8 +544,9 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		}
 
 		size_t payload_offset = i + USB_PACKET_HEADER_SIZE;
+
 		payload = (struct usb_payload_header *)(dev->parse_buffer + payload_offset);
-		
+
 		u8 current_frame_id = payload->le_frame_id;
 		u8 current_camera_number = payload->le_camera_number;
 		u8 current_flags = payload->le_flags;
