@@ -191,7 +191,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	set_bit(FLAG_STREAMING, &dev->flags);
 	smp_mb();
 
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		int retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
 
 		if (retval) {
