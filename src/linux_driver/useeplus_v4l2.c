@@ -881,7 +881,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	drv_data->video_dev.lock = &drv_data->v4l2_lock;
 	drv_data->video_dev.queue = q;
 	drv_data->video_dev.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
-	video_set_drvdata(&drv_data->video_dev, dev);
+	video_set_drvdata(&drv_data->video_dev, drv_data);
 
 	/* Hardware Initialization (iAP Drain) */
 	iap_heartbeat_sink = kmalloc(HEARTBEAT_SINK_BUFFER_SIZE, GFP_KERNEL);
@@ -912,11 +912,11 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	if (retval)
 		dev_info(&interface->dev, "usb_clear_halt failed with error %d\n", retval);
 
-	retval = useeplus_alloc_urbs(dev);
+	retval = useeplus_alloc_urbs(drv_data);
 	if (retval)
 		goto error_urbs;
 
-	usb_set_intfdata(interface, dev);
+	usb_set_intfdata(interface, drv_data);
 
 	retval = video_register_device(&drv_data->video_dev, VFL_TYPE_VIDEO, -1);
 	if (retval) {
@@ -931,7 +931,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 /* Teardown: If V4L2 registered, let the release callback free memory. Otherwise, manually clean up. */
 error_urbs:
 	dev_dbg(&interface->dev, "Rolling back URBs\n");
-	useeplus_kill_urbs(dev);
+	useeplus_kill_urbs(drv_data);
 error_unreg_v4l2:
 	dev_dbg(&interface->dev, "Unregistering V4L2 device\n");
 	v4l2_device_unregister(&drv_data->v4l2_dev);
@@ -945,7 +945,7 @@ error_release_iap:
 
 	kfree(drv_data->parse_buffer);
 error_free_dev:
-	kfree(dev);
+	kfree(drv_data);
 	return retval;
 }
 
