@@ -759,9 +759,8 @@ static void useeplus_disconnect(struct usb_interface *interface)
 		useeplus_kill_urbs(dev);
 
 		/* Safely check if V4L2 actually registered before unregistering */
-		if (video_is_registered(&dev->vdev)) {
+		if (video_is_registered(&dev->vdev))
 			video_unregister_device(&dev->vdev);
-		}
 
 		v4l2_device_disconnect(&dev->v4l2_dev);
 		v4l2_device_put(&dev->v4l2_dev);
