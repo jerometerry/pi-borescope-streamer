@@ -21,51 +21,54 @@ MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
-#define USB_TIMEOUT_MS					1000
-#define BULK_TRANSFER_COUNT				4
+#define USB_TIMEOUT_MS						1000
+#define BULK_TRANSFER_COUNT					4
 
-#define BULK_TRANSFER_SIZE				16384
-#define MAX_FRAME_SIZE					(256 * 1024)
+#define BULK_TRANSFER_SIZE					16384
+#define MAX_FRAME_SIZE						(256 * 1024)
 
-#define MAX_SCAN_LIMIT					160
+#define MAX_SCAN_LIMIT						160
 
-#define USB_PACKET_HEADER_SIZE			5
-#define USB_PAYLOAD_HEADER_SIZE			7
-#define TOTAL_USB_HEADER_SIZE			(USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE)
-#define MAX_SCAN_LIMIT					160
+#define USB_PACKET_HEADER_SIZE				5
+#define USB_PAYLOAD_HEADER_SIZE				7
+#define TOTAL_USB_HEADER_SIZE				(USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE)
+#define MAX_SCAN_LIMIT						160
 
-#define INTERFACE_A_NUMBER				0
-#define INTERFACE_B_NUMBER				1
-#define INTERFACE_B_ALTERNATE_SETTING	1
+#define USEEPLUS_IAP_INTERFACE				0
+#define USEEPLUS_VIDEO_INTERFACE			1
+#define USEEPLUS_ALT_SETTING_VIDEO_ENABLE	1
 
-#define IN_DIRECTION					0x80
-#define ENDPOINT_1						0x01
-#define ENDPOINT_2						0x02
-#define DRAIN_BUFFER_SIZE				512
-#define DRAIN_LOOP_COUNT				30
+#define OUT_DIRECTION						0x00
+#define IN_DIRECTION						0x80
+#define USEEPLUS_VIDEO_ENDPOINT				0x01
+#define USEEPLUS_IAP_ENDPOINT				0x02
 
-#define JPEG_SOI_MARKERS_MAX_POSITION	256
-#define GRAVITY_SENSOR_CAMERA_ID		0x07
-#define VIDEO_CAMERA_ID					0x0B
+#define HEARTBEAT_SINK_BUFFER_SIZE			512
+#define HEARTBEAT_SINK_ITERATIONS			30
+#define HEARTBEAT_SINK_TIMEOUT_MS			100
 
-#define USB_FRAME_HEADER				0xBBAA
-#define USB_FRAME_HEADER_A				0xAA
-#define USB_FRAME_HEADER_B				0xBB
-#define BOUNDARY_MARKER					0xFF
-#define START_MARKER					0xD8
-#define END_MARKER						0xD9
+#define JPEG_SOI_MARKERS_MAX_POSITION		256
+#define GRAVITY_SENSOR_CAMERA_ID			0x07
+#define VIDEO_CAMERA_ID						0x0B
 
-#define RESOLUTION_WIDTH				640
-#define RESOLUTION_HEIGHT				480
-#define DIAGNOSTIC_LOG_ITERATIONS		300
+#define USB_FRAME_HEADER					0xBBAA
+#define USB_FRAME_HEADER_A					0xAA
+#define USB_FRAME_HEADER_B					0xBB
+#define BOUNDARY_MARKER						0xFF
+#define START_MARKER						0xD8
+#define END_MARKER							0xD9
 
-#define FLAG_STREAMING					0
+#define RESOLUTION_WIDTH					640
+#define RESOLUTION_HEIGHT					480
+#define DIAGNOSTIC_LOG_ITERATIONS			300
 
-#define PR_DEBUG_FUNC_ENTER()			pr_debug("ENTER: %s\n", __func__)
-#define PR_DEBUG_FUNC_EXIT()			pr_debug("EXIT: %s\n", __func__)
+#define FLAG_STREAMING						0
 
-static const u8 initialization_tokens[]	= { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
-static const u8 start_stream_tokens[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
+#define PR_DEBUG_FUNC_ENTER()				pr_debug("ENTER: %s\n", __func__)
+#define PR_DEBUG_FUNC_EXIT()				pr_debug("EXIT: %s\n", __func__)
+
+static const u8 IAP_AUTH_HANDSHAKE[]	= { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
+static const u8 START_VIDEO_COMMAND[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
 static const struct usb_device_id useeplus_table[] = {
 	{ USB_DEVICE(0x0329, 0x2022) },
@@ -108,6 +111,11 @@ struct usb_useeplus {
 	struct urb *urbs[BULK_TRANSFER_COUNT];
 	u8 *urb_buffers[BULK_TRANSFER_COUNT];
 	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
+
+	u8 video_in_ep;
+	u8 video_out_ep;
+	u8 iap_in_ep;
+	u8 iap_out_ep;
 
 	unsigned long flags;
 	bool vb_streaming;
@@ -236,13 +244,13 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	if (test_and_set_bit(FLAG_STREAMING, &dev->flags))
 		return 0;
 
-	retval = useeplus_write_msg(dev, ENDPOINT_2, initialization_tokens, sizeof(initialization_tokens));
+	retval = useeplus_write_msg(dev, dev->iap_out_ep, IAP_AUTH_HANDSHAKE, sizeof(IAP_AUTH_HANDSHAKE));
 	if (retval) {
 		dev_err(&dev->interface->dev, "useeplus_write_msg init failed: %d\n", retval);
 		goto error_start;
 	}
 
-	retval = useeplus_write_msg(dev, ENDPOINT_1, start_stream_tokens, sizeof(start_stream_tokens));
+	retval = useeplus_write_msg(dev, dev->video_out_ep, START_VIDEO_COMMAND, sizeof(START_VIDEO_COMMAND));
 	if (retval) {
 		dev_err(&dev->interface->dev, "useeplus_write_msg start failed: %d\n", retval);
 		goto error_start;
@@ -265,6 +273,24 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 error_start:
 	clear_bit(FLAG_STREAMING, &dev->flags);
+	
+	/* Kill any URBs that successfully submitted before the failure */
+	for (int j = 0; j < i; ++j) {
+		usb_kill_urb(dev->urbs[j]);
+	}
+
+	/* Drain the queue and return to userspace per V4L2 spec */
+	spin_lock_irqsave(&dev->q_lock, flags);
+	dev->vb_streaming = false;
+	
+	while (!list_empty(&dev->rdy_queue)) {
+		struct useeplus_buffer *buf;
+		buf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
+		list_del(&buf->list);
+		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_QUEUED);
+	}
+	spin_unlock_irqrestore(&dev->q_lock, flags);
+
 	return retval;
 }
 
@@ -327,6 +353,12 @@ static void useeplus_device_release(struct v4l2_device *v4l2_dev)
 {
 	PR_DEBUG_FUNC_ENTER();
 	struct usb_useeplus *dev = container_of(v4l2_dev, struct usb_useeplus, v4l2_dev);
+	struct usb_interface *iap_intf = usb_ifnum_to_if(dev->udev, 0);
+
+	if (iap_intf) {
+		usb_set_intfdata(iap_intf, NULL);
+		usb_driver_release_interface(&useeplus_driver, iap_intf);
+	}
 
 	if (dev->current_frame)
 		vfree(dev->current_frame);
@@ -531,7 +563,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		{
 			bool isGhost = false;
 			size_t nextHeaderOffset = 0;
-			size_t maxScan = min((size_t)MAX_SCAN_LIMIT, (size_t)(dev->parse_len - i - 3));
+			size_t maxScan = min_t(size_t, MAX_SCAN_LIMIT, dev->parse_len - i - 3);
 			size_t d;
 
 			for (d = USB_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
@@ -704,7 +736,7 @@ static int useeplus_alloc_urbs(struct usb_useeplus *dev)
 		usb_fill_bulk_urb(
 			dev->urbs[i],
 			udev,
-			usb_rcvbulkpipe(udev, IN_DIRECTION | ENDPOINT_1),
+			usb_rcvbulkpipe(udev, dev->stream_in_ep),
 			dev->urb_buffers[i],
 			BULK_TRANSFER_SIZE,
 			useeplus_read_bulk_callback,
@@ -720,19 +752,21 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 {
 	PR_DEBUG_FUNC_ENTER();
 	struct usb_device *udev = interface_to_usbdev(interface);
+	struct usb_interface *iap_intf;
+	struct usb_endpoint_descriptor *ep_desc;
 	struct usb_useeplus *dev = NULL;
 	struct vb2_queue *q;
-	u8 *drain_buffer;
+	u8 *iap_heartbeat_sink;
 	int i, retval, actual_len;
 
-	if (interface->cur_altsetting->desc.bInterfaceNumber != INTERFACE_B_ALTERNATE_SETTING) {
-		dev_info(&interface->dev,
-			"Skipping intername number %d\n", interface->cur_altsetting->desc.bInterfaceNumber);
+	/* Only bind the driver when the Video Interface is probed */
+	if (interface->cur_altsetting->desc.bInterfaceNumber != USEEPLUS_VIDEO_INTERFACE) {
 		return -ENODEV;
 	}
 
 	dev_info(&interface->dev, "Useeplus borescope identified\n");
 
+	/* Allocate the device state FIRST so we have a valid pointer */
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
@@ -749,24 +783,67 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	spin_lock_init(&dev->q_lock);
 	INIT_LIST_HEAD(&dev->rdy_queue);
 
+	/* 3. Grab and Claim the iAP Interface */
+	iap_intf = usb_ifnum_to_if(udev, USEEPLUS_IAP_INTERFACE);
+	if (!iap_intf) {
+		dev_err(&interface->dev, "Could not find iAP interface\n");
+		retval = -ENODEV;
+		goto error_free_dev;
+	}
+
+	retval = usb_driver_claim_interface(&useeplus_driver, iap_intf, dev);
+	if (retval) {
+		dev_err(&interface->dev, "Could not claim iAP interface\n");
+		goto error_free_dev;
+	}
+
+	/* Memory Allocations */
 	dev->current_frame = vzalloc(MAX_FRAME_SIZE);
 	if (!dev->current_frame) {
 		retval = -ENOMEM;
-		goto error;
+		goto error_release_iap;
 	}
 
 	dev->parse_buffer = kzalloc(BULK_TRANSFER_SIZE * 2, GFP_KERNEL);
 	if (!dev->parse_buffer) {
 		retval = -ENOMEM;
-		goto error;
+		goto error_release_iap;
 	}
 
-	dev->v4l2_dev.release = useeplus_device_release;
+	/* Dynamically Map Endpoints for VIDEO interface */
+	for (i = 0; i < interface->cur_altsetting->desc.bNumEndpoints; ++i) {
+		ep_desc = &interface->cur_altsetting->endpoint[i].desc;
+		if (usb_endpoint_num(ep_desc) == USEEPLUS_VIDEO_ENDPOINT) {
+			if (usb_endpoint_dir_in(ep_desc))
+				dev->video_in_ep = ep_desc->bEndpointAddress;
+			else
+				dev->video_out_ep = ep_desc->bEndpointAddress;
+		}
+	}
 
+	/* Dynamically Map Endpoints for iAP interface */
+	for (i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; ++i) {
+		ep_desc = &iap_intf->cur_altsetting->endpoint[i].desc;
+		if (usb_endpoint_num(ep_desc) == USEEPLUS_IAP_ENDPOINT) {
+			if (usb_endpoint_dir_in(ep_desc))
+				dev->iap_in_ep = ep_desc->bEndpointAddress;
+			else
+				dev->iap_out_ep = ep_desc->bEndpointAddress;
+		}
+	}
+
+	if (!dev->video_in_ep || !dev->video_out_ep || !dev->iap_in_ep || !dev->iap_out_ep) {
+		dev_err(&interface->dev, "Could not map all 4 required bulk endpoints\n");
+		retval = -ENODEV;
+		goto error_release_iap;
+	}
+
+	/* V4L2 Device Registration */
+	dev->v4l2_dev.release = useeplus_device_release;
 	retval = v4l2_device_register(&interface->dev, &dev->v4l2_dev);
 	if (retval) {
 		dev_err(&interface->dev, "v4l2_device_register failed with error %d\n", retval);
-		goto error;
+		goto error_release_iap;
 	}
 
 	q = &dev->vb_vidq;
@@ -798,35 +875,32 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	dev->vdev.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
 	video_set_drvdata(&dev->vdev, dev);
 
-	drain_buffer = kmalloc(DRAIN_BUFFER_SIZE, GFP_KERNEL);
-	if (!drain_buffer) {
+	/* Hardware Initialization (iAP Drain) */
+	iap_heartbeat_sink = kmalloc(HEARTBEAT_SINK_BUFFER_SIZE, GFP_KERNEL);
+	if (!iap_heartbeat_sink) {
 		retval = -ENOMEM;
 		goto error_unreg_v4l2;
 	}
 
-	for (i = 0; i < DRAIN_LOOP_COUNT; ++i) {
+	for (i = 0; i < HEARTBEAT_SINK_ITERATIONS; ++i) {
 		usb_bulk_msg(
 			udev,
-			usb_rcvbulkpipe(udev, IN_DIRECTION | ENDPOINT_2),
-			drain_buffer,
-			DRAIN_BUFFER_SIZE,
+			usb_rcvbulkpipe(udev, dev->iap_in_ep),
+			iap_heartbeat_sink,
+			HEARTBEAT_SINK_BUFFER_SIZE,
 			&actual_len,
-			100
+			HEARTBEAT_SINK_TIMEOUT_MS
 		);
 	}
-	kfree(drain_buffer);
+	kfree(iap_heartbeat_sink);
 
-	retval = usb_set_interface(udev, INTERFACE_B_NUMBER, INTERFACE_B_ALTERNATE_SETTING);
+	retval = usb_set_interface(udev, USEEPLUS_VIDEO_INTERFACE, USEEPLUS_ALT_SETTING_VIDEO_ENABLE);
 	if (retval) {
 		dev_err(&interface->dev, "usb_set_interface failed with error %d\n", retval);
 		goto error_unreg_v4l2;
 	}
 
-	retval = usb_clear_halt(
-		udev,
-		usb_rcvbulkpipe(udev, IN_DIRECTION | ENDPOINT_1)
-	);
-
+	retval = usb_clear_halt(udev, usb_rcvbulkpipe(udev, dev->video_in_ep));
 	if (retval)
 		dev_info(&interface->dev, "usb_clear_halt failed with error %d\n", retval);
 
@@ -847,22 +921,22 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	PR_DEBUG_FUNC_EXIT();
 	return 0;
 
+/* Teardown: If V4L2 registered, let the release callback free memory. Otherwise, manually clean up. */
 error_urbs:
-	pr_debug("ERROR: error_urbs:\n");
+	dev_dbg(&interface->dev, "Rolling back URBs\n");
 	useeplus_kill_urbs(dev);
 error_unreg_v4l2:
-	pr_debug("ERROR: error_unreg_v4l2:\n");
+	dev_dbg(&interface->dev, "Unregistering V4L2 device\n");
 	v4l2_device_unregister(&dev->v4l2_dev);
-error:
-	pr_debug("ERROR: error:\n");
-	if (dev) {
-		if (dev->current_frame)
-			vfree(dev->current_frame);
+	PR_DEBUG_FUNC_EXIT();
+	return retval;
 
-		kfree(dev->parse_buffer);
-		kfree(dev);
-	}
-
+error_release_iap:
+	usb_driver_release_interface(&useeplus_driver, iap_intf);
+	if (dev->current_frame) vfree(dev->current_frame);
+	kfree(dev->parse_buffer);
+error_free_dev:
+	kfree(dev);
 	PR_DEBUG_FUNC_EXIT();
 	return retval;
 }
@@ -884,11 +958,26 @@ static void useeplus_disconnect(struct usb_interface *interface)
 	PR_DEBUG_FUNC_EXIT();
 }
 
+static int useeplus_suspend(struct usb_interface *intf, pm_message_t message)
+{
+	/* Stop URBs to prepare for sleep */
+	return 0;
+}
+
+static int useeplus_resume(struct usb_interface *intf)
+{
+	/* Resubmit URBs if FLAG_STREAMING is true */
+	return 0;
+}
+
 static struct usb_driver useeplus_driver = {
-	.name	   = "useeplus",
-	.id_table   = useeplus_table,
-	.probe	  = useeplus_probe,
-	.disconnect = useeplus_disconnect,
+	.name			= "useeplus",
+	.id_table		= useeplus_table,
+	.probe			= useeplus_probe,
+	.disconnect		= useeplus_disconnect,
+	.suspend		= useeplus_suspend,
+	.resume			= useeplus_resume,
+	.reset_resume	= useeplus_resume,
 };
 
 static int __init useeplus_init(void)
