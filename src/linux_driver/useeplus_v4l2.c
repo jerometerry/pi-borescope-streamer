@@ -142,6 +142,37 @@ static void useeplus_buf_queue(struct vb2_buffer *vb)
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 }
 
+static void useeplus_kill_urbs(struct usb_useeplus *dev)
+{
+	int i;
+
+	// Instantly signal to all incoming callbacks to drop resubmission
+	clear_bit(FLAG_STREAMING, &dev->flags);
+	smp_mb(); // Memory barrier to force all CPU cores to see this write
+
+	// Kill ALL URBs first. This guarantees every callback is stopped 
+	// and no new ones can be submitted.
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		if (dev->urbs[i]) {
+			usb_kill_urb(dev->urbs[i]);
+		}
+	}
+
+	// Safe Zone: No callbacks can possibly be running now. 
+	// It is now 100% safe to free the memory structures.
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		if (dev->urbs[i]) {
+			if (dev->urb_buffers[i]) {
+				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE, 
+								  dev->urb_buffers[i], dev->urb_dma_addrs[i]);
+				dev->urb_buffers[i] = NULL;
+			}
+			usb_free_urb(dev->urbs[i]);
+			dev->urbs[i] = NULL;
+		}
+	}
+}
+
 static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
@@ -545,37 +576,6 @@ resubmit:
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval) {
 			dev_err(&dev->interface->dev, "Resubmit failed: %d\n", retval);
-		}
-	}
-}
-
-static void useeplus_kill_urbs(struct usb_useeplus *dev)
-{
-	int i;
-
-	// Instantly signal to all incoming callbacks to drop resubmission
-	clear_bit(FLAG_STREAMING, &dev->flags);
-	smp_mb(); // Memory barrier to force all CPU cores to see this write
-
-	// Kill ALL URBs first. This guarantees every callback is stopped 
-	// and no new ones can be submitted.
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		if (dev->urbs[i]) {
-			usb_kill_urb(dev->urbs[i]);
-		}
-	}
-
-	// Safe Zone: No callbacks can possibly be running now. 
-	// It is now 100% safe to free the memory structures.
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		if (dev->urbs[i]) {
-			if (dev->urb_buffers[i]) {
-				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE, 
-								  dev->urb_buffers[i], dev->urb_dma_addrs[i]);
-				dev->urb_buffers[i] = NULL;
-			}
-			usb_free_urb(dev->urbs[i]);
-			dev->urbs[i] = NULL;
 		}
 	}
 }
