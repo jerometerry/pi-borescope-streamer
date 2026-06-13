@@ -233,7 +233,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	PR_DEBUG_FUNC_ENTER();
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
 	unsigned long flags;
-	int retval;
+	int i, retval;
 
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->current_frame_len = 0;
@@ -260,7 +260,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	smp_mb__after_atomic();
 
 	/* Submit URBs to begin pulling the stream */
-	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
 		if (retval) {
 			dev_err(&dev->interface->dev, "Failed to submit URBs: %d\n", retval);
