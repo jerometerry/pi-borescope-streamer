@@ -63,6 +63,7 @@ If you want to use eBPF, for example to generate FlameGraphs, you'll need to ena
   - Select "Rely on the toolchain's implicit default DWARF version"
 - Enable "Kernel hacking -> Compile-time checks and compiler options -> Generate BTF typeinfo"
 - Enable "Kernel hacking -> Tracers -> Enable uprobes-based dynamic events"
+- Enable "Kernel Hacking -> Printk and logs -> Enable dynamic printk() support"
 
 If you want to run BPF / linux perf on custom applications you are building, ensure to add the following flags:
 -  `-g`:  Embeds your source code maps into the build

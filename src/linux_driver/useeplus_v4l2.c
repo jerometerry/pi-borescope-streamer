@@ -498,7 +498,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			bool found_soi = false;
 			bool found_eoi = false;
 
-			for (j = 0; j + 1 < min((size_t)256, dev->current_frame_len); ++j) {
+			for (j = 0; j + 1 < min_t(size_t, JPEG_SOI_MARKERS_MAX_POSITION, dev->current_frame_len); ++j) {
 				if (dev->current_frame[j] == BOUNDARY_MARKER && dev->current_frame[j + 1] == START_MARKER) {
 					soiOffset = j;
 					found_soi = true;
