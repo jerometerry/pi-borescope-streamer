@@ -349,26 +349,6 @@ static int useeplus_v4l2_release(struct file *file)
 	return retval;
 }
 
-static void useeplus_device_release(struct v4l2_device *v4l2_dev)
-{
-	PR_DEBUG_FUNC_ENTER();
-	struct usb_useeplus *dev = container_of(v4l2_dev, struct usb_useeplus, v4l2_dev);
-	struct usb_interface *iap_intf = usb_ifnum_to_if(dev->udev, 0);
-
-	if (iap_intf) {
-		usb_set_intfdata(iap_intf, NULL);
-		usb_driver_release_interface(&useeplus_driver, iap_intf);
-	}
-
-	if (dev->current_frame)
-		vfree(dev->current_frame);
-
-	kfree(dev->parse_buffer);
-	kfree(dev);
-
-	PR_DEBUG_FUNC_EXIT();
-}
-
 static const struct v4l2_file_operations useeplus_v4l2_fops = {
 	.owner			= THIS_MODULE,
 	.open			= useeplus_v4l2_open,
@@ -748,6 +728,50 @@ static int useeplus_alloc_urbs(struct usb_useeplus *dev)
 	return 0;
 }
 
+static int useeplus_suspend(struct usb_interface *intf, pm_message_t message)
+{
+	/* Stop URBs to prepare for sleep */
+	return 0;
+}
+
+static int useeplus_resume(struct usb_interface *intf)
+{
+	/* Resubmit URBs if FLAG_STREAMING is true */
+	return 0;
+}
+
+static int useeplus_probe(struct usb_interface *interface, const struct usb_device_id *id);
+
+static struct usb_driver useeplus_driver = {
+	.name			= "useeplus",
+	.id_table		= useeplus_table,
+	.probe			= useeplus_probe,
+	.disconnect		= useeplus_disconnect,
+	.suspend		= useeplus_suspend,
+	.resume			= useeplus_resume,
+	.reset_resume	= useeplus_resume,
+};
+
+static void useeplus_device_release(struct v4l2_device *v4l2_dev)
+{
+	PR_DEBUG_FUNC_ENTER();
+	struct usb_useeplus *dev = container_of(v4l2_dev, struct usb_useeplus, v4l2_dev);
+	struct usb_interface *iap_intf = usb_ifnum_to_if(dev->udev, 0);
+
+	if (iap_intf) {
+		usb_set_intfdata(iap_intf, NULL);
+		usb_driver_release_interface(&useeplus_driver, iap_intf);
+	}
+
+	if (dev->current_frame)
+		vfree(dev->current_frame);
+
+	kfree(dev->parse_buffer);
+	kfree(dev);
+
+	PR_DEBUG_FUNC_EXIT();
+}
+
 static int useeplus_probe(struct usb_interface *interface, const struct usb_device_id *id)
 {
 	PR_DEBUG_FUNC_ENTER();
@@ -959,28 +983,6 @@ static void useeplus_disconnect(struct usb_interface *interface)
 	}
 	PR_DEBUG_FUNC_EXIT();
 }
-
-static int useeplus_suspend(struct usb_interface *intf, pm_message_t message)
-{
-	/* Stop URBs to prepare for sleep */
-	return 0;
-}
-
-static int useeplus_resume(struct usb_interface *intf)
-{
-	/* Resubmit URBs if FLAG_STREAMING is true */
-	return 0;
-}
-
-static struct usb_driver useeplus_driver = {
-	.name			= "useeplus",
-	.id_table		= useeplus_table,
-	.probe			= useeplus_probe,
-	.disconnect		= useeplus_disconnect,
-	.suspend		= useeplus_suspend,
-	.resume			= useeplus_resume,
-	.reset_resume	= useeplus_resume,
-};
 
 static int __init useeplus_init(void)
 {
