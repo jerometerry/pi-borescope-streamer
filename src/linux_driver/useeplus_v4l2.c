@@ -479,7 +479,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			return;
 
 		case -EPROTO:
-			&dev->interface->dev->dbg_usb_errors++;
+			dev->dbg_usb_errors++;
 		case -EILSEQ:
 		case -ECOMM:
 			dev_dbg(&urb->dev->dev, "Transient CRC/timeout error: %d. Retrying...\n", urb->status);
