@@ -47,11 +47,17 @@ modinfo useeplus_v4l2.ko
 ## Load Linux Driver 
 
 ```bash
+# Watch dmesg in a separate terminal window
+dmesg -w
+
+# Check what's using the module
+sudo lsof /dev/video0
+
 # Verify no useeplus_v4l2 module is found
 lsmod | grep useeplus_v4l2
 
 # If there is, remove the existing useeplus_v4l2 module to deploy a new version
-sudo rmmod useeplus_v4l2 2>/dev/null
+sudo rmmod useeplus_v4l2
 
 # check if videobuf2_vmalloc module is loaded
 lsmod | grep videobuf2_vmalloc
@@ -60,7 +66,7 @@ lsmod | grep videobuf2_vmalloc
 sudo modprobe videobuf2_vmalloc
 
 # Load the new useeplus_v4l2 module
-sudo insmod ./useeplus_v4l2.ko 2>/dev/null
+sudo insmod ./useeplus_v4l2.ko
 
 # Verify useeplus_v4l2 module is loaded
 lsmod | grep useeplus_v4l2
@@ -68,6 +74,24 @@ lsmod | grep useeplus_v4l2
 # Verify driver was loaded by viewing dmesg output
 dmesg | tail -n 20
 ```
+
+## Changing Log Level 
+
+```bash
+# View current log levels
+cat /proc/sys/kernel/printk
+```
+
+```bash
+# Set to debug logging for testing
+sudo sysctl -w kernel.printk="8 4 1 3"
+```
+
+```bash
+# Restore default logging
+sudo sysctl -w kernel.printk="3 4 1 3"
+```
+
 
 ## Verify useeplus_v4l2 Registered with Video4Linux
 
