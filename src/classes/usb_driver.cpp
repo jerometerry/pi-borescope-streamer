@@ -97,7 +97,7 @@ void UsbDriver::loop(const UsbDeviceInfo& target) {
 			libusb_fill_bulk_transfer(
 				transfer,
 				camera_->getRawHandle(),
-				1 | LIBUSB_ENDPOINT_IN,
+				LIBUSB_ENDPOINT_IN | UsbProtocol::VIDEO_STREAM_INTERFACE,
 				dmaGuard.get() + (i * UsbConfig::BULK_TRANSFER_SIZE),
 				UsbConfig::BULK_TRANSFER_SIZE,
                 transferCallback,
