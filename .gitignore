@@ -1,24 +1,69 @@
-# Created by https://www.toptal.com/developers/gitignore/api/c++,macos,python,visualstudiocode,cmake
-# Edit at https://www.toptal.com/developers/gitignore?templates=c++,macos,python,visualstudiocode,cmake
+# Created by https://www.toptal.com/developers/gitignore/api/c,c++,cmake,macos,python,visualstudiocode
+# Edit at https://www.toptal.com/developers/gitignore?templates=c,c++,cmake,macos,python,visualstudiocode
 
-### C++ ###
+### C ###
 # Prerequisites
 *.d
 
-# Compiled Object files
-*.slo
-*.lo
+# Object files
 *.o
+*.ko
 *.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
 
 # Precompiled Headers
 *.gch
 *.pch
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
 *.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Kernel Module Compile Results
+*.mod*
+*.cmd
+.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+### C++ ###
+# Prerequisites
+
+# Compiled Object files
+*.slo
+
+# Precompiled Headers
+
+# Compiled Dynamic libraries
 
 # Fortran module files
 *.mod
@@ -26,14 +71,8 @@
 
 # Compiled Static libraries
 *.lai
-*.la
-*.a
-*.lib
 
 # Executables
-*.exe
-*.out
-*.app
 
 ### CMake ###
 CMakeLists.txt.user
@@ -126,7 +165,19 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
-coverage/
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
 
 # Translations
 *.mo
@@ -265,7 +316,4 @@ pyrightconfig.json
 .history
 .ionide
 
-# Binary Stream Capture Files
-*.bin
-
-# End of https://www.toptal.com/developers/gitignore/api/c++,macos,python,visualstudiocode,cmake
+# End of https://www.toptal.com/developers/gitignore/api/c,c++,cmake,macos,python,visualstudiocode
