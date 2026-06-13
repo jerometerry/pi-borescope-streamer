@@ -487,7 +487,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	while (current_parse_index + TOTAL_USB_HEADER_SIZE <= dev->parse_len) {
 		struct usb_payload_header *payload;
 		struct usb_packet_header *pkt = (struct usb_packet_header *)(dev->parse_buffer + current_parse_index);
-		uint16_t delimeter = le16_to_cpu(pkt->le_header);
+		uint16_t delimeter = le16_to_cpu(pkt->le_delimeter);
 		u8 camera_id = pkt->le_cameraId;
 		uint16_t packet_len = le16_to_cpu(pkt->le_length);
 
@@ -507,7 +507,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 				struct usb_packet_header *offset_pkt =
 					(struct usb_packet_header *)(dev->parse_buffer + current_parse_index + offset);
 
-				uint16_t offset_delimeter = le16_to_cpu(offset_pkt->le_header);
+				uint16_t offset_delimeter = le16_to_cpu(offset_pkt->le_delimeter);
 				u8 offset_camera_id = offset_pkt->le_cameraId;
 				uint16_t offset_packet_len = le16_to_cpu(offset_pkt->le_length);
 
