@@ -177,7 +177,6 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
 	unsigned long flags;
-	int i, retval;
 
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->current_frame_len = 0;
@@ -186,32 +185,23 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->vb_streaming = true;
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 
-	/* 1. Set the atomic bit flag for the URB callbacks */
-	set_bit(FLAG_STREAMING, &dev->flags);
-	smp_mb(); /* Force visibility across all CPU cores */
+	if (test_bit(USEEPLUS_FLAG_STREAMING, &dev->flags)) {
+		return 0; 
+	}
 
-	/* 2. Launch the URB pipeline */
+	set_bit(USEEPLUS_FLAG_STREAMING, &dev->flags);
+	smp_mb();
+
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
+		int retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
+
 		if (retval) {
-			dev_err(&dev->interface->dev, 
-					"Failed to submit URB %d on stream start: %d\n", i, retval);
-			goto error_submit;
+			dev_err(&dev->interface->dev, "Failed to resume URBs: %d\n", retval);
+			return retval;
 		}
 	}
 
 	return 0;
-
-error_submit:
-	/* If launching fails mid-way, cleanly shut down whatever URBs started */
-	useeplus_kill_urbs(dev);
-	
-	/* Turn off the V4L2 streaming state we just set */
-	spin_lock_irqsave(&dev->q_lock, flags);
-	dev->vb_streaming = false;
-	spin_unlock_irqrestore(&dev->q_lock, flags);
-	
-	return retval;
 }
 
 static void useeplus_stop_streaming(struct vb2_queue *vq)
@@ -220,10 +210,6 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 	struct useeplus_buffer *buf;
 	unsigned long flags;
 
-	/* 1. Stop and flush the USB pipeline FIRST (Safe to sleep here) */
-	useeplus_kill_urbs(dev);
-
-	/* 2. Lock to safely alter V4L2 states and flush the queue */
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->vb_streaming = false;
 
