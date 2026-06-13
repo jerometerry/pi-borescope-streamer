@@ -186,7 +186,7 @@ static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (drv_data->urbs[i]) {
 			if (drv_data->urb_buffers[i]) {
-				usb_free_coherent(ddrv_data->usb_dev, BULK_TRANSFER_SIZE,
+				usb_free_coherent(drv_data->usb_dev, BULK_TRANSFER_SIZE,
 								  drv_data->urb_buffers[i], drv_data->urb_dma_addrs[i]);
 				drv_data->urb_buffers[i] = NULL;
 			}
