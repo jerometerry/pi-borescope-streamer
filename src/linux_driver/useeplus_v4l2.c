@@ -682,7 +682,7 @@ static int useeplus_alloc_urbs(struct useeplus_drv_data *drv_data)
 			drv_data->urb_buffers[i],
 			BULK_TRANSFER_SIZE,
 			useeplus_read_bulk_callback,
-			dev
+			drv_data
 		);
 		drv_data->urbs[i]->transfer_dma = drv_data->urb_dma_addrs[i];
 		drv_data->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
@@ -769,7 +769,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 
 	/* Allocate the device state FIRST so we have a valid pointer */
 	drv_data = kzalloc(sizeof(*drv_data), GFP_KERNEL);
-	if (!dev)
+	if (!drv_data)
 		return -ENOMEM;
 
 	drv_data->usb_dev = usb_dev;
