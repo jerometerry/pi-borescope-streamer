@@ -148,7 +148,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->current_frame_len = 0;
 	dev->last_frame_id = -1;
 	dev->has_stored_header = false;
-	dev->vb_streaming = true; 
+	dev->vb_streaming = true;
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 	return 0;
 }
@@ -197,7 +197,7 @@ static const struct v4l2_file_operations useeplus_v4l2_fops = {
 	.release		= useeplus_v4l2_release,
 	.read		   = vb2_fop_read,
 	.poll		   = vb2_fop_poll,
-	.unlocked_ioctl = video_ioctl2, 
+	.unlocked_ioctl = video_ioctl2,
 };
 
 static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
@@ -260,7 +260,7 @@ static int useeplus_vidioc_g_parm(struct file *file, void *priv, struct v4l2_str
 
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
 	sp->parm.capture.timeperframe.numerator = 1;
-	sp->parm.capture.timeperframe.denominator = 30; 
+	sp->parm.capture.timeperframe.denominator = 30;
 	return 0;
 }
 
@@ -321,8 +321,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		if (urb->status == -ENOENT ||
 			urb->status == -ECONNRESET ||
 			urb->status == -ESHUTDOWN ||
-			urb->status == -ENODEV)
-		{
+			urb->status == -ENODEV) {
 			dev_dbg(&urb->dev->dev, "URB completed with status: %d\n", urb->status);
 			return;
 		}
@@ -335,7 +334,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		dev_dbg(&dev->interface->dev,
 			"DIAGNOSTIC DUMP | URBs: %lu | Packets: %lu | Frames: %lu (Delivered: %lu | Drop SOI: %lu | Drop EOI: %lu | Drop Q: %lu | Ghosts: %lu)\n",
 			dev->dbg_urbs_processed, dev->dbg_packets_found, dev->dbg_frames_found,
-			dev->dbg_frames_delivered, dev->dbg_frames_dropped_soi, dev->dbg_frames_dropped_eoi, 
+			dev->dbg_frames_delivered, dev->dbg_frames_dropped_soi, dev->dbg_frames_dropped_eoi,
 			dev->dbg_frames_dropped_queue, dev->dbg_ghost_headers);
 	}
 
@@ -408,15 +407,15 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			size_t eoiOffset = 0;
 			size_t j;
 			bool found_soi = false;
-			bool found_eoi = false; 
+			bool found_eoi = false;
 
-			for (j = 0; j + 1 < min((size_t)256, dev->current_frame_len); ++j) {
+			for (j = 0; j + 1 < min_t(size_t, 256, dev->current_frame_len); ++j) {
 				if (dev->current_frame[j] == 0xFF && dev->current_frame[j + 1] == 0xD8) {
 					soiOffset = j;
 					found_soi = true;
 					break;
 				}
-			} 
+			}
 
 			for (j = dev->current_frame_len; j >= 2; --j) {
 				if (dev->current_frame[j - 2] == 0xFF && dev->current_frame[j - 1] == 0xD9) {
@@ -432,6 +431,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 				dev->dbg_frames_dropped_eoi++;
 			} else {
 				size_t final_content_size = eoiOffset - soiOffset;
+
 				dev->frame_counter++;
 
 				spin_lock_irqsave(&dev->q_lock, flags);
@@ -439,6 +439,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 					vbuf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
 					list_del(&vbuf->list);
 					void *vaddr = vb2_plane_vaddr(&vbuf->vb.vb2_buf, 0);
+
 					if (vaddr) {
 						memcpy(vaddr, dev->current_frame + soiOffset, final_content_size);
 						vb2_set_plane_payload(&vbuf->vb.vb2_buf, 0, final_content_size);
@@ -468,7 +469,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		if (!hasGravitySensor && otherFlags == 0 && current_camera_number < 2) {
 			size_t payloadStart = i + TOTAL_PROTOCOL_HEADER_SIZE;
 			size_t payloadSize = totalPacketSize - TOTAL_PROTOCOL_HEADER_SIZE;
-			
+
 			if (dev->current_frame_len + payloadSize <= MAX_FRAME_SIZE) {
 				memcpy(dev->current_frame + dev->current_frame_len,
 					   dev->parse_buffer + payloadStart, payloadSize);
@@ -481,6 +482,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 	if (i < dev->parse_len) {
 		size_t remaining = dev->parse_len - i;
+
 		memmove(dev->parse_buffer, dev->parse_buffer + i, remaining);
 		dev->parse_len = remaining;
 	} else {
@@ -531,7 +533,7 @@ static int useeplus_probe(struct usb_interface *interface,
 
 	dev_info(&interface->dev,
 			 "Useeplus borescope identified.\n");
-			 
+
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
@@ -635,7 +637,7 @@ static int useeplus_probe(struct usb_interface *interface,
 	retval = useeplus_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
 	if (retval)
 		goto error_sequence;
-		
+
 	retval = useeplus_write_msg(dev, 0x01, start_stream_tokens, sizeof(start_stream_tokens));
 	if (retval)
 		goto error_sequence;
@@ -651,9 +653,8 @@ static int useeplus_probe(struct usb_interface *interface,
 	dev->streaming = true;
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
-		if (retval) {
+		if (retval)
 			goto error_unreg_video;
-		}
 	}
 	return 0;
 
@@ -680,16 +681,16 @@ error:
 static void useeplus_disconnect(struct usb_interface *interface)
 {
 	struct usb_useeplus *dev = usb_get_intfdata(interface);
+
 	usb_set_intfdata(interface, NULL);
-	
+
 	if (dev) {
 		useeplus_kill_urbs(dev);
 		video_unregister_device(&dev->vdev);
 		v4l2_device_unregister(&dev->v4l2_dev);
 		
-		if (dev->current_frame) {
+		if (dev->current_frame)
 			vfree(dev->current_frame);
-		}
 
 		kfree(dev->parse_buffer);
 
