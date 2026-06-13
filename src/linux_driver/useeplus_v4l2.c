@@ -480,6 +480,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 		case -EPROTO:
 			dev->dbg_usb_errors++;
+			goto resubmit;
 		case -EILSEQ:
 		case -ECOMM:
 			dev_dbg(&urb->dev->dev, "Transient CRC/timeout error: %d. Retrying...\n", urb->status);
@@ -677,7 +678,7 @@ resubmit:
 
 static int useeplus_alloc_urbs(struct usb_useeplus *dev)
 {
-	int i, retval;
+	int i;
 	struct usb_device *udev = dev->udev;
 	struct usb_interface *interface = dev->interface;
 
