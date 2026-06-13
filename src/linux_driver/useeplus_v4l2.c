@@ -560,7 +560,13 @@ resubmit:
 	if (test_bit(FLAG_STREAMING, &dev->flags)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval) {
-			dev_err(&dev->interface->dev, "Resubmit failed: %d\n", retval);
+			if (retval != -ENODEV && retval != -ESHUTDOWN && retval != -ENOENT) {
+				dev_err(&dev->interface->dev,
+						"Asynchronous URB resubmission failed with error %d\n", retval);
+			} else {
+				dev_dbg(&dev->interface->dev, 
+						"URB resubmit bypassed: device disconnected (%d)\n", retval);
+			}
 		}
 	}
 }
