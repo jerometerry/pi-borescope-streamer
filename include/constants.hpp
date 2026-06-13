@@ -14,31 +14,36 @@ namespace UsbProtocol {
     /**
      * @brief The primary control interface of the USB device.
      */
-    inline constexpr int INTERFACE_A_NUMBER = 0;
+    inline constexpr int IAP_CONTROL_INTERFACE = 0;
 
     /**
      * @brief The secondary data interface of the USB device.
      */
-    inline constexpr int INTERFACE_B_NUMBER = 1;
+    inline constexpr int VIDEO_STREAM_INTERFACE = 1;
 
     /**
      * @brief The alternate setting required to activate the video stream on Interface B.
      */
-    inline constexpr int INTERFACE_B_ALTERNATE_SETTING = 1;
+    inline constexpr int ALT_SETTING_VIDEO_ENABLE = 1;
 
     /**
      * @brief The primary USB channel where the heavy video data flows in.
      */
-    inline constexpr unsigned char ENDPOINT_1 = 1;
+    inline constexpr unsigned char VIDEO_ENDPOINT = 1;
 
     /**
      * @brief A secondary USB channel used for camera state or hardware button presses.
      */
-    inline constexpr unsigned char ENDPOINT_2 = 2;
+    inline constexpr unsigned char IAP_ENDPOINT = 2;
 
-    inline constexpr uint8_t INITIALIZATION_TOKENS[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
+	/**
+     * @brief How long (in ms) we will wait for the USB hardware to respond before assuming it disconnected.
+     */
+    inline constexpr unsigned int HEARTBEAT_SINK_USB_TIMEOUT = 100;
 
-    inline constexpr uint8_t START_STREAM_TOKENS[] = {0xBB, 0xAA, 5, 0, 0};
+    inline constexpr uint8_t IAP_AUTH_HANDSHAKE[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
+
+    inline constexpr uint8_t START_VIDEO_COMMAND[] = {0xBB, 0xAA, 5, 0, 0};
 
     /** 
      * @brief The universal mathematical signature (Start of Image) that begins every valid JPEG file.

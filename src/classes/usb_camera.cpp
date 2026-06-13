@@ -21,44 +21,53 @@ UsbCamera::UsbCamera(const UsbDeviceInfo& target) {
         throw std::runtime_error("Specified Borescope hardware device not found on USB bus");
     }
 
-    for (int iface : {UsbProtocol::INTERFACE_A_NUMBER, UsbProtocol::INTERFACE_B_NUMBER}) {
+    for (int iface : {UsbProtocol::IAP_CONTROL_INTERFACE, UsbProtocol::VIDEO_STREAM_INTERFACE}) {
         if (libusb_kernel_driver_active(deviceHandle_, iface) == 1) {
             libusb_detach_kernel_driver(deviceHandle_, iface);
         }
     }
 
-    if (libusb_claim_interface(deviceHandle_, UsbProtocol::INTERFACE_A_NUMBER) < 0 ||
-        libusb_claim_interface(deviceHandle_, UsbProtocol::INTERFACE_B_NUMBER) < 0) {
+    if (libusb_claim_interface(deviceHandle_, UsbProtocol::IAP_CONTROL_INTERFACE) < 0 ||
+        libusb_claim_interface(deviceHandle_, UsbProtocol::VIDEO_STREAM_INTERFACE) < 0) {
         throw std::runtime_error("Failed to claim USB hardware interfaces");
     }
 
     // Loop 30 times with a rapid 100ms timeout to clear out pending heartbeat data 
     // from the iAP interface before we attempt to stream.
-    int drainBytes = 0;
-    unsigned char drainBuf[512];
+    int heartbeatSinkBytes = 0;
+    unsigned char iApHeartbeatSink[512];
     for (int i = 0; i < 30; ++i) {
-        // 0x02 is the iAP IN endpoint (LIBUSB_ENDPOINT_IN adds the 0x80 bit to make it 0x82)
-        libusb_bulk_transfer(deviceHandle_, LIBUSB_ENDPOINT_IN | 0x02, drainBuf, sizeof(drainBuf), &drainBytes, 100);
+        libusb_bulk_transfer(
+			deviceHandle_, 
+			LIBUSB_ENDPOINT_IN | UsbProtocol::IAP_ENDPOINT, 
+			iApHeartbeatSink, 
+			sizeof(iApHeartbeatSink), 
+			&heartbeatSinkBytes, 
+			UsbProtocol::HEARTBEAT_SINK_USB_TIMEOUT
+		);
     }
 
-    if (libusb_set_interface_alt_setting(deviceHandle_, UsbProtocol::INTERFACE_B_NUMBER, UsbProtocol::INTERFACE_B_ALTERNATE_SETTING) < 0) {
+    if (libusb_set_interface_alt_setting(
+		deviceHandle_, 
+		UsbProtocol::VIDEO_STREAM_INTERFACE, 
+		UsbProtocol::ALT_SETTING_VIDEO_ENABLE) < 0) {
         throw std::runtime_error("libusb_set_interface_alt_setting failed");
     }
 
-    libusb_clear_halt(deviceHandle_, UsbProtocol::ENDPOINT_1);
+    libusb_clear_halt(deviceHandle_, LIBUSB_ENDPOINT_IN | UsbProtocol::VIDEO_ENDPOINT);
 
     int numBytes = 0;
     write(
-        UsbProtocol::ENDPOINT_2, 
-        UsbProtocol::INITIALIZATION_TOKENS, 
-        sizeof(UsbProtocol::INITIALIZATION_TOKENS), 
+        UsbProtocol::IAP_ENDPOINT, 
+        UsbProtocol::IAP_AUTH_HANDSHAKE, 
+        sizeof(UsbProtocol::IAP_AUTH_HANDSHAKE), 
         numBytes
     );
 
     write(
-        UsbProtocol::ENDPOINT_1, 
-        UsbProtocol::START_STREAM_TOKENS, 
-        sizeof(UsbProtocol::START_STREAM_TOKENS), 
+        UsbProtocol::VIDEO_ENDPOINT, 
+        UsbProtocol::START_VIDEO_COMMAND, 
+        sizeof(UsbProtocol::START_VIDEO_COMMAND), 
         numBytes
     );
 }
@@ -166,11 +175,11 @@ std::vector<UsbDeviceInfo> UsbCamera::listCameras() {
 
 int UsbCamera::read(std::vector<uint8_t> &buffer) {
     int numBytes = 0;
-    return read(UsbProtocol::ENDPOINT_1, buffer, Units::FOUR_KILOBYTES, numBytes);
+    return read(UsbProtocol::VIDEO_ENDPOINT, buffer, Units::FOUR_KILOBYTES, numBytes);
 }
 
 int UsbCamera::read(uint8_t* buffer, size_t maxSize, int& numBytes) {
-    return read(UsbProtocol::ENDPOINT_1, buffer, maxSize, numBytes);
+    return read(UsbProtocol::VIDEO_ENDPOINT, buffer, maxSize, numBytes);
 }
 
 int UsbCamera::read(unsigned char endpoint, uint8_t* buffer, size_t maxSize, int& numBytes) {
