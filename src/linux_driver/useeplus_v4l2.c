@@ -73,7 +73,7 @@ static const struct usb_device_id useeplus_table[] = {
 MODULE_DEVICE_TABLE(usb, useeplus_table);
 
 struct usb_packet_header {
-	__le16 le_header;
+	__le16 le_delimeter;
 	u8 le_cameraId;
 	__le16 le_length;
 } __packed;
@@ -172,20 +172,18 @@ static void useeplus_buf_queue(struct vb2_buffer *vb)
 
 static void useeplus_kill_urbs(struct usb_useeplus *dev)
 {
-	int i;
-
 	clear_bit(FLAG_STREAMING, &dev->flags);
 
 	// Kill ALL URBs first. This guarantees every callback is stopped
 	// and no new ones can be submitted.
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (dev->urbs[i])
 			usb_kill_urb(dev->urbs[i]);
 	}
 
 	// Safe Zone: No callbacks can possibly be running now.
 	// It is now 100% safe to free the memory structures.
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (dev->urbs[i]) {
 			if (dev->urb_buffers[i]) {
 				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE,
@@ -223,7 +221,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
 	unsigned long flags;
-	int i, retval;
+	int urbs_submitted, retval;
 
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->current_frame_len = 0;
@@ -250,8 +248,8 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	smp_mb__after_atomic();
 
 	/* Submit URBs to begin pulling the stream */
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
+	for (urbs_submitted = 0; urbs_submitted < BULK_TRANSFER_COUNT; ++urbs_submitted) {
+		retval = usb_submit_urb(dev->urbs[urbs_submitted], GFP_KERNEL);
 		if (retval) {
 			dev_err(&dev->interface->dev, "Failed to submit URBs: %d\n", retval);
 			goto error_start;
@@ -264,8 +262,8 @@ error_start:
 	clear_bit(FLAG_STREAMING, &dev->flags);
 
 	/* Kill any URBs that successfully submitted before the failure */
-	for (int j = 0; j < i; ++j)
-		usb_kill_urb(dev->urbs[j]);
+	for (int i = 0; i < urbs_submitted; ++i)
+		usb_kill_urb(dev->urbs[i]);
 
 	/* Drain the queue and return to userspace per V4L2 spec */
 	spin_lock_irqsave(&dev->q_lock, flags);
@@ -436,7 +434,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 {
 	struct usb_useeplus *dev = urb->context;
 	struct useeplus_buffer *vbuf;
-	size_t i = 0;
+	size_t current_parse_index = 0;
 	unsigned long flags;
 	int retval;
 
@@ -486,40 +484,45 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		dev->parse_len += urb->actual_length;
 	}
 
-	while (i + TOTAL_USB_HEADER_SIZE <= dev->parse_len) {
-		struct usb_packet_header *pkt = (struct usb_packet_header *)(dev->parse_buffer + i);
+	while (current_parse_index + TOTAL_USB_HEADER_SIZE <= dev->parse_len) {
 		struct usb_payload_header *payload;
+		struct usb_packet_header *pkt = (struct usb_packet_header *)(dev->parse_buffer + current_parse_index);
 		uint16_t delimeter = le16_to_cpu(pkt->le_header);
-		u8 current_camera_id = pkt->le_cameraId;
+		u8 camera_id = pkt->le_cameraId;
 		uint16_t packet_len = le16_to_cpu(pkt->le_length);
 
 		if (delimeter != USB_PACKET_DELIMETER ||
-			(current_camera_id != VIDEO_CAMERA_ID &&
-			current_camera_id != GRAVITY_SENSOR_CAMERA_ID)) {
-			i++;
+			(camera_id != VIDEO_CAMERA_ID &&
+			 camera_id != GRAVITY_SENSOR_CAMERA_ID)) {
+			current_parse_index++;
 			continue;
 		}
 
 		{
 			bool is_ghost = false;
-			size_t next_header_offset = 0;
-			size_t max_scan = min_t(size_t, MAX_SCAN_LIMIT, dev->parse_len - i - 3);
-			size_t d;
+			size_t header_offset = 0;
+			size_t max_scan = min_t(size_t, MAX_SCAN_LIMIT, dev->parse_len - current_parse_index - 3);
 
-			for (d = USB_PACKET_HEADER_SIZE; d <= max_scan; ++d) {
-				if (dev->parse_buffer[i + d] == USB_PACKET_DELIMETER_A &&
-					dev->parse_buffer[i + d + 1] == USB_PACKET_DELIMETER_B &&
-					(dev->parse_buffer[i + d + 2] == VIDEO_CAMERA_ID ||
-					dev->parse_buffer[i + d + 2] == GRAVITY_SENSOR_CAMERA_ID)) {
+			for (size_t offset = USB_PACKET_HEADER_SIZE; offset <= max_scan; ++offset) {
+				struct usb_packet_header *offset_pkt = 
+					(struct usb_packet_header *)(dev->parse_buffer + current_parse_index + offset);
+
+				uint16_t offset_delimeter = le16_to_cpu(offset_pkt->le_header);
+				u8 offset_camera_id = offset_pkt->le_cameraId;
+				uint16_t offset_packet_len = le16_to_cpu(offset_pkt->le_length);
+
+				if (offset_delimeter == USB_PACKET_DELIMETER &&
+					(offset_camera_id == VIDEO_CAMERA_ID ||
+					 offset_camera_id == GRAVITY_SENSOR_CAMERA_ID)) {
 					is_ghost = true;
-					next_header_offset = d;
+					header_offset = offset;
 					break;
 				}
 			}
 
 			if (is_ghost) {
 				dev->dbg_ghost_headers++;
-				i += next_header_offset;
+				current_parse_index += header_offset;
 				continue;
 			}
 		}
@@ -529,19 +532,19 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 		if (total_packet_size > (BULK_TRANSFER_SIZE * 2)) {
 			dev_dbg(&dev->interface->dev, "Corrupted packet_len %u, skipping byte\n", packet_len);
-			i++;
+			current_parse_index++;
 			continue;
 		}
 
-		if (i + total_packet_size > dev->parse_len)
+		if (current_parse_indexi + total_packet_size > dev->parse_len)
 			break;
 
 		if (packet_len < USB_PAYLOAD_HEADER_SIZE) {
-			i += total_packet_size;
+			current_parse_index += total_packet_size;
 			continue;
 		}
 
-		size_t payload_offset = i + USB_PACKET_HEADER_SIZE;
+		size_t payload_offset = current_parse_index + USB_PACKET_HEADER_SIZE;
 
 		payload = (struct usb_payload_header *)(dev->parse_buffer + payload_offset);
 
@@ -555,11 +558,10 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			dev->dbg_frames_found++;
 			size_t soi_offset = 0;
 			size_t eoi_offset = 0;
-			size_t j;
 			bool found_soi = false;
 			bool found_eoi = false;
 
-			for (j = 0; j + 1 < min_t(size_t, JPEG_SOI_MARKERS_MAX_POSITION, dev->current_frame_len); ++j) {
+			for (size_t j = 0; j + 1 < min_t(size_t, JPEG_SOI_MARKERS_MAX_POSITION, dev->current_frame_len); ++j) {
 				if (dev->current_frame[j] == BOUNDARY_MARKER && dev->current_frame[j + 1] == START_MARKER) {
 					soi_offset = j;
 					found_soi = true;
@@ -567,7 +569,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 				}
 			}
 
-			for (j = dev->current_frame_len; j >= 2; --j) {
+			for (size_t j = dev->current_frame_len; j >= 2; --j) {
 				if (dev->current_frame[j - 2] == BOUNDARY_MARKER && dev->current_frame[j - 1] == END_MARKER) {
 					eoi_offset = j;
 					found_eoi = true;
@@ -617,7 +619,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		uint8_t other_flags = (current_flags >> 2) & 0x3F;
 
 		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
-			size_t payload_start = i + TOTAL_USB_HEADER_SIZE;
+			size_t payload_start = current_parse_index + TOTAL_USB_HEADER_SIZE;
 			size_t payload_size = total_packet_size - TOTAL_USB_HEADER_SIZE;
 
 			if (dev->current_frame_len + payload_size <= MAX_FRAME_SIZE) {
@@ -627,13 +629,13 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			}
 		}
 
-		i += total_packet_size;
+		current_parse_index += total_packet_size;
 	}
 
-	if (i < dev->parse_len) {
-		size_t remaining = dev->parse_len - i;
+	if (current_parse_index < dev->parse_len) {
+		size_t remaining = dev->parse_len - current_parse_index;
 
-		memmove(dev->parse_buffer, dev->parse_buffer + i, remaining);
+		memmove(dev->parse_buffer, dev->parse_buffer + current_parse_index, remaining);
 		dev->parse_len = remaining;
 	} else {
 		dev->parse_len = 0;
@@ -653,11 +655,10 @@ resubmit:
 
 static int useeplus_alloc_urbs(struct usb_useeplus *dev)
 {
-	int i;
 	struct usb_device *udev = dev->udev;
 	struct usb_interface *interface = dev->interface;
 
-	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
 		if (!dev->urbs[i]) {
 			dev_err(&interface->dev, "usb_alloc_urb failed\n");
