@@ -44,6 +44,7 @@ MODULE_VERSION("0.1.0");
 
 #define IN_ENDPOINT						0x81
 #define OUT_ENDPOINT					0x82
+#define DRAIN_BUFFER_SIZE				512
 
 #define JPEG_SOI_MARKERS_MAX_POSITION	256
 #define GRAVITY_SENSOR_CAMERA_ID		0x07
@@ -62,7 +63,7 @@ MODULE_VERSION("0.1.0");
 
 #define FLAG_STREAMING					0
 
-static const u8 initialization_tokens[]  = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
+static const u8 initialization_tokens[]	= { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_stream_tokens[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
 static const struct usb_device_id useeplus_table[] = {
@@ -168,24 +169,21 @@ static void useeplus_kill_urbs(struct usb_useeplus *dev)
 {
 	int i;
 
-	// Instantly signal to all incoming callbacks to drop resubmission
 	clear_bit(FLAG_STREAMING, &dev->flags);
-	smp_mb(); // Memory barrier to force all CPU cores to see this write
 
-	// Kill ALL URBs first. This guarantees every callback is stopped 
+	// Kill ALL URBs first. This guarantees every callback is stopped
 	// and no new ones can be submitted.
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		if (dev->urbs[i]) {
+		if (dev->urbs[i])
 			usb_kill_urb(dev->urbs[i]);
-		}
 	}
 
-	// Safe Zone: No callbacks can possibly be running now. 
+	// Safe Zone: No callbacks can possibly be running now.
 	// It is now 100% safe to free the memory structures.
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (dev->urbs[i]) {
 			if (dev->urb_buffers[i]) {
-				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE, 
+				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE,
 								  dev->urb_buffers[i], dev->urb_dma_addrs[i]);
 				dev->urb_buffers[i] = NULL;
 			}
@@ -207,11 +205,13 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->vb_streaming = true;
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 
-	if (test_bit(FLAG_STREAMING, &dev->flags))
+	/*
+	 * Atomically check and set FLAG_STREAMING to prevent a race condition.
+	 * Returns true if already streaming. This operation implies a full
+	 * memory barrier, ensuring visibility to useeplus_read_bulk_callback().
+	 */
+	if (test_and_set_bit(FLAG_STREAMING, &dev->flags))
 		return 0;
-
-	set_bit(FLAG_STREAMING, &dev->flags);
-	smp_mb();
 
 	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		int retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
@@ -409,7 +409,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		case -EPIPE:
 			dev_err(&urb->dev->dev, "Endpoint stalled. Clear halt required.\n");
 			// Optional: Schedule a workqueue to call usb_clear_halt()
-			return; 
+			return;
 
 		default:
 			dev_err(&urb->dev->dev, "Uncaught URB error: %d. Aborting stream.\n", urb->status);
@@ -586,7 +586,7 @@ resubmit:
 				dev_err(&dev->interface->dev,
 						"Asynchronous URB resubmission failed with error %d\n", retval);
 			} else {
-				dev_dbg(&dev->interface->dev, 
+				dev_dbg(&dev->interface->dev,
 						"URB resubmit bypassed: device disconnected (%d)\n", retval);
 			}
 		}
@@ -602,11 +602,13 @@ static int useeplus_probe(struct usb_interface *interface,
 	u8 *drain_buffer;
 	int i, retval, actual_len;
 
-	if (interface->cur_altsetting->desc.bInterfaceNumber != 1)
+	if (interface->cur_altsetting->desc.bInterfaceNumber != 1) {
+		dev_info(&interface->dev,
+			"Skipping intername number %d\n", interface->cur_altsetting->desc.bInterfaceNumber);
 		return -ENODEV;
+	}
 
-	dev_info(&interface->dev,
-			 "Useeplus borescope identified.\n");
+	dev_info(&interface->dev, "Useeplus borescope identified\n");
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
@@ -637,8 +639,10 @@ static int useeplus_probe(struct usb_interface *interface,
 	}
 
 	retval = v4l2_device_register(&interface->dev, &dev->v4l2_dev);
-	if (retval)
+	if (retval) {
+		dev_err(&interface->dev, "v4l2_device_register failed with error %d\n", retval);
 		goto error;
+	}
 
 	q = &dev->vb_vidq;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -669,39 +673,68 @@ static int useeplus_probe(struct usb_interface *interface,
 	dev->vdev.device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
 	video_set_drvdata(&dev->vdev, dev);
 
-	drain_buffer = kmalloc(512, GFP_KERNEL);
+	drain_buffer = kmalloc(DRAIN_BUFFER_SIZE, GFP_KERNEL);
 	if (!drain_buffer) {
 		retval = -ENOMEM;
 		goto error_unreg_v4l2;
 	}
 
 	for (i = 0; i < 30; ++i) {
-		usb_bulk_msg(udev, usb_rcvbulkpipe(udev, 0x82), drain_buffer, 512,
-					 &actual_len, 100);
+		usb_bulk_msg(
+			udev,
+			usb_rcvbulkpipe(udev, 0x82),
+			drain_buffer,
+			DRAIN_BUFFER_SIZE,
+			&actual_len,
+			100
+		);
 	}
 	kfree(drain_buffer);
 
 	retval = usb_set_interface(udev, 1, 1);
-	if (retval)
+	if (retval) {
+		dev_err(&interface->dev, "usb_set_interface failed with error %d\n", retval);
 		goto error_unreg_v4l2;
+	}
 
-	usb_clear_halt(udev, usb_rcvbulkpipe(udev, 0x81));
+	retval = usb_clear_halt(
+		udev,
+		usb_rcvbulkpipe(udev, 0x81)
+	);
+	if (retval)
+		dev_info(&interface->dev, "usb_clear_halt failed with error %d\n", retval);
 
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
+
 		if (!dev->urbs[i]) {
+			dev_err(&interface->dev, "usb_alloc_urb failed with error %d\n", retval);
 			retval = -ENOMEM;
 			goto error_urbs;
 		}
+
 		dev->urb_buffers[i] = usb_alloc_coherent(
-			udev, BULK_TRANSFER_SIZE, GFP_KERNEL, &dev->urb_dma_addrs[i]);
+			udev,
+			BULK_TRANSFER_SIZE,
+			GFP_KERNEL,
+			&dev->urb_dma_addrs[i]
+		);
+
 		if (!dev->urb_buffers[i]) {
+			dev_err(&interface->dev, "usb_alloc_coherent failed to initialize dev->urb_buffers[%d]\n", i);
 			retval = -ENOMEM;
 			goto error_urbs;
 		}
-		usb_fill_bulk_urb(dev->urbs[i], udev, usb_rcvbulkpipe(udev, 0x81),
-						  dev->urb_buffers[i], BULK_TRANSFER_SIZE,
-						  useeplus_read_bulk_callback, dev);
+
+		usb_fill_bulk_urb(
+			dev->urbs[i],
+			udev,
+			usb_rcvbulkpipe(udev, 0x81),
+			dev->urb_buffers[i],
+			BULK_TRANSFER_SIZE,
+			useeplus_read_bulk_callback,
+			dev
+		);
 		dev->urbs[i]->transfer_dma = dev->urb_dma_addrs[i];
 		dev->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	}
@@ -709,31 +742,41 @@ static int useeplus_probe(struct usb_interface *interface,
 	usb_set_intfdata(interface, dev);
 
 	retval = useeplus_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
-	if (retval)
+	if (retval) {
+		dev_err(&interface->dev, "useeplus_write_msg failed with error %d\n", retval);
 		goto error_sequence;
+	}
 
 	retval = useeplus_write_msg(dev, 0x01, start_stream_tokens, sizeof(start_stream_tokens));
-	if (retval)
+	if (retval) {
+		dev_err(&interface->dev, "useeplus_write_msg failed with error %d\n", retval);
 		goto error_sequence;
+	}
 
 	retval = video_register_device(&dev->vdev, VFL_TYPE_VIDEO, -1);
-	if (retval)
+	if (retval) {
+		dev_err(&interface->dev, "video_register_device failed with error %d\n", retval);
 		goto error_sequence;
+	}
 
-	dev_info(
-		&interface->dev,
-		"Useeplus protocol borescope connected successfully.\n");
+	dev_info(&interface->dev, "Useeplus protocol borescope connected successfully.\n");
 
-	/* Atomically set the streaming bit to true */
-    set_bit(FLAG_STREAMING, &dev->flags);
-    
-    /* Force all CPU cores to immediately see this flag change */
-    smp_mb(); 
+	set_bit(FLAG_STREAMING, &dev->flags);
+
+	/*
+	 * Order the flag write before submitting URBs to hardware.
+	 * This ensures useeplus_read_bulk_callback() recognizes that
+	 * streaming is active when the first URB completions fire.
+	 */
+	smp_mb__after_atomic();
 
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
-		if (retval)
+		if (retval) {
+			dev_err(&interface->dev, "Submit URB failed with error %d\n", retval);
+			clear_bit(FLAG_STREAMING, &dev->flags);
 			goto error_unreg_video;
+		}
 	}
 	return 0;
 
