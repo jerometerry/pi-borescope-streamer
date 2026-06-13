@@ -534,7 +534,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			continue;
 		}
 
-		if (current_parse_indexi + total_packet_size > dev->parse_len)
+		if (current_parse_index + total_packet_size > dev->parse_len)
 			break;
 
 		if (packet_len < USB_PAYLOAD_HEADER_SIZE) {
