@@ -162,7 +162,7 @@ static void useeplus_buf_queue(struct vb2_buffer *vb)
 {
 	struct useeplus_drv_data *drv_data = vb2_get_drv_priv(vb->vb2_queue);
 	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
-	struct useeplus_buffer *buf = container_of(v4l2_buf, struct useeplus_buffer, vb);
+	struct useeplus_buffer *buf = container_of(v4l2_buf, struct useeplus_buffer, vb2_buffer);
 	unsigned long flags;
 
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
