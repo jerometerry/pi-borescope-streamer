@@ -38,6 +38,8 @@ MODULE_VERSION("0.1.0");
 #define PROTO_VIDEO_CAMERA_ID	  0x0B
 #define PROTO_GRAVITY_CAMERA_ID	0x07
 
+#define FLAG_STREAMING 0
+
 static const u8 initialization_tokens[]  = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_stream_tokens[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
@@ -82,7 +84,8 @@ struct usb_useeplus {
 	struct urb *urbs[BULK_TRANSFER_COUNT];
 	u8 *urb_buffers[BULK_TRANSFER_COUNT];
 	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
-	bool streaming;
+
+	unsigned long flags;
 	bool vb_streaming;
 
 	u8 *current_frame;
@@ -143,6 +146,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
 	unsigned long flags;
+	int i, retval;
 
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->current_frame_len = 0;
@@ -150,7 +154,33 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->has_stored_header = false;
 	dev->vb_streaming = true;
 	spin_unlock_irqrestore(&dev->q_lock, flags);
+
+	/* 1. Set the atomic bit flag for the URB callbacks */
+	set_bit(USEEPLUS_FLAG_STREAMING, &dev->flags);
+	smp_mb(); /* Force visibility across all CPU cores */
+
+	/* 2. Launch the URB pipeline */
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
+		if (retval) {
+			dev_err(&dev->interface->dev, 
+					"Failed to submit URB %d on stream start: %d\n", i, retval);
+			goto error_submit;
+		}
+	}
+
 	return 0;
+
+error_submit:
+	/* If launching fails mid-way, cleanly shut down whatever URBs started */
+	useeplus_kill_urbs(dev);
+	
+	/* Turn off the V4L2 streaming state we just set */
+	spin_lock_irqsave(&dev->q_lock, flags);
+	dev->vb_streaming = false;
+	spin_unlock_irqrestore(&dev->q_lock, flags);
+	
+	return retval;
 }
 
 static void useeplus_stop_streaming(struct vb2_queue *vq)
@@ -159,6 +189,10 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 	struct useeplus_buffer *buf;
 	unsigned long flags;
 
+	/* 1. Stop and flush the USB pipeline FIRST (Safe to sleep here) */
+	useeplus_kill_urbs(dev);
+
+	/* 2. Lock to safely alter V4L2 states and flush the queue */
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->vb_streaming = false;
 
@@ -320,14 +354,29 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	int retval;
 
 	if (urb->status) {
-		if (urb->status == -ENOENT ||
-			urb->status == -ECONNRESET ||
-			urb->status == -ESHUTDOWN ||
-			urb->status == -ENODEV) {
-			dev_dbg(&urb->dev->dev, "URB completed with status: %d\n", urb->status);
+		switch (urb->status) {
+		case -ENOENT:
+		case -ECONNRESET:
+		case -ESHUTDOWN:
+		case -ENODEV:
+			dev_dbg(&urb->dev->dev, "URB stopped cleanly: %d\n", urb->status);
+			return;
+
+		case -EPROTO:
+		case -EILSEQ:
+		case -ECOMM:
+			dev_dbg(&urb->dev->dev, "Transient CRC/timeout error: %d. Retrying...\n", urb->status);
+			goto resubmit;
+
+		case -EPIPE:
+			dev_err(&urb->dev->dev, "Endpoint stalled. Clear halt required.\n");
+			// Optional: Schedule a workqueue to call usb_clear_halt()
+			return; 
+
+		default:
+			dev_err(&urb->dev->dev, "Uncaught URB error: %d. Aborting stream.\n", urb->status);
 			return;
 		}
-		goto resubmit;
 	}
 
 	dev->dbg_urbs_processed++;
@@ -492,11 +541,10 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	}
 
 resubmit:
-	if (dev->streaming) {
+	if (test_bit(FLAG_STREAMING, &dev->flags)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
-		if (retval && retval != -EPIPE) {
-			dev_err(&dev->interface->dev,
-					"Asynchronous URB resubmission failed with error %d\n", retval);
+		if (retval) {
+			dev_err(&dev->interface->dev, "Resubmit failed: %d\n", retval);
 		}
 	}
 }
@@ -505,14 +553,25 @@ static void useeplus_kill_urbs(struct usb_useeplus *dev)
 {
 	int i;
 
-	dev->streaming = false;
+	// Instantly signal to all incoming callbacks to drop resubmission
+	clear_bit(FLAG_STREAMING, &dev->flags);
+	smp_mb(); // Memory barrier to force all CPU cores to see this write
 
+	// Kill ALL URBs first. This guarantees every callback is stopped 
+	// and no new ones can be submitted.
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (dev->urbs[i]) {
 			usb_kill_urb(dev->urbs[i]);
+		}
+	}
+
+	// Safe Zone: No callbacks can possibly be running now. 
+	// It is now 100% safe to free the memory structures.
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		if (dev->urbs[i]) {
 			if (dev->urb_buffers[i]) {
-				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE, dev->urb_buffers[i],
-								  dev->urb_dma_addrs[i]);
+				usb_free_coherent(dev->udev, BULK_TRANSFER_SIZE, 
+								  dev->urb_buffers[i], dev->urb_dma_addrs[i]);
 				dev->urb_buffers[i] = NULL;
 			}
 			usb_free_urb(dev->urbs[i]);
@@ -652,7 +711,12 @@ static int useeplus_probe(struct usb_interface *interface,
 		&interface->dev,
 		"Useeplus protocol borescope connected successfully.\n");
 
-	dev->streaming = true;
+	/* Atomically set the streaming bit to true */
+    set_bit(FLAG_STREAMING, &dev->flags);
+    
+    /* Force all CPU cores to immediately see this flag change */
+    smp_mb(); 
+
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		retval = usb_submit_urb(dev->urbs[i], GFP_KERNEL);
 		if (retval)
