@@ -792,7 +792,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 		goto error_free_dev;
 	}
 
-	retval = usb_driver_claim_interface(&useeplus_driver, iap_intf, dev);
+	retval = usb_driver_claim_interface(&useeplus_driver, iap_intf, drv_data);
 	if (retval) {
 		dev_err(&interface->dev, "Could not claim iAP interface\n");
 		goto error_free_dev;
