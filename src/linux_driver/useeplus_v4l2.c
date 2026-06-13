@@ -747,7 +747,7 @@ static void useeplus_disconnect(struct usb_interface *interface)
 
 	usb_set_intfdata(interface, NULL);
 
-	/* * Ignore the iAP interface disconnect. 
+	/* * Ignore the iAP interface disconnect.
 	 * The Video Interface disconnect handles the full device teardown.
 	 */
 	if (interface->cur_altsetting->desc.bInterfaceNumber == USEEPLUS_IAP_INTERFACE) {
@@ -757,12 +757,12 @@ static void useeplus_disconnect(struct usb_interface *interface)
 
 	if (dev) {
 		useeplus_kill_urbs(dev);
-		
+
 		/* Safely check if V4L2 actually registered before unregistering */
 		if (video_is_registered(&dev->vdev)) {
 			video_unregister_device(&dev->vdev);
 		}
-		
+
 		v4l2_device_disconnect(&dev->v4l2_dev);
 		v4l2_device_put(&dev->v4l2_dev);
 		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
