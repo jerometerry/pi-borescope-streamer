@@ -270,29 +270,29 @@ error_start:
 
 static void useeplus_stop_streaming(struct vb2_queue *vq)
 {
-    PR_DEBUG_FUNC_ENTER();
-    struct usb_useeplus *dev = vb2_get_drv_priv(vq);
-    struct useeplus_buffer *buf;
-    unsigned long flags;
+	PR_DEBUG_FUNC_ENTER();
+	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
+	struct useeplus_buffer *buf;
+	unsigned long flags;
 
-    clear_bit(FLAG_STREAMING, &dev->flags);
+	clear_bit(FLAG_STREAMING, &dev->flags);
 
-    for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-        if (dev->urbs[i])
-            usb_kill_urb(dev->urbs[i]);
-    }
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+		if (dev->urbs[i])
+			usb_kill_urb(dev->urbs[i]);
+	}
 
-    spin_lock_irqsave(&dev->q_lock, flags);
-    dev->vb_streaming = false;
+	spin_lock_irqsave(&dev->q_lock, flags);
+	dev->vb_streaming = false;
 
-    while (!list_empty(&dev->rdy_queue)) {
-        buf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
-        list_del(&buf->list);
-        vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
-    }
+	while (!list_empty(&dev->rdy_queue)) {
+		buf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
+		list_del(&buf->list);
+		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_ERROR);
+	}
 
-    spin_unlock_irqrestore(&dev->q_lock, flags);
-    PR_DEBUG_FUNC_EXIT();
+	spin_unlock_irqrestore(&dev->q_lock, flags);
+	PR_DEBUG_FUNC_EXIT();
 }
 
 static const struct vb2_ops useeplus_vb2_ops = {
