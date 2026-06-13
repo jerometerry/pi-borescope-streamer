@@ -716,7 +716,7 @@ static int useeplus_alloc_urbs(struct usb_useeplus *dev)
 		usb_fill_bulk_urb(
 			dev->urbs[i],
 			udev,
-			usb_rcvbulkpipe(udev, dev->stream_in_ep),
+			usb_rcvbulkpipe(udev, dev->video_in_ep),
 			dev->urb_buffers[i],
 			BULK_TRANSFER_SIZE,
 			useeplus_read_bulk_callback,
@@ -738,6 +738,23 @@ static int useeplus_resume(struct usb_interface *intf)
 {
 	/* Resubmit URBs if FLAG_STREAMING is true */
 	return 0;
+}
+
+static void useeplus_disconnect(struct usb_interface *interface)
+{
+	PR_DEBUG_FUNC_ENTER();
+	struct usb_useeplus *dev = usb_get_intfdata(interface);
+
+	usb_set_intfdata(interface, NULL);
+
+	if (dev) {
+		useeplus_kill_urbs(dev);
+		video_unregister_device(&dev->vdev);
+		v4l2_device_disconnect(&dev->v4l2_dev);
+		v4l2_device_put(&dev->v4l2_dev);
+		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
+	}
+	PR_DEBUG_FUNC_EXIT();
 }
 
 static int useeplus_probe(struct usb_interface *interface, const struct usb_device_id *id);
@@ -965,23 +982,6 @@ error_free_dev:
 	kfree(dev);
 	PR_DEBUG_FUNC_EXIT();
 	return retval;
-}
-
-static void useeplus_disconnect(struct usb_interface *interface)
-{
-	PR_DEBUG_FUNC_ENTER();
-	struct usb_useeplus *dev = usb_get_intfdata(interface);
-
-	usb_set_intfdata(interface, NULL);
-
-	if (dev) {
-		useeplus_kill_urbs(dev);
-		video_unregister_device(&dev->vdev);
-		v4l2_device_disconnect(&dev->v4l2_dev);
-		v4l2_device_put(&dev->v4l2_dev);
-		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
-	}
-	PR_DEBUG_FUNC_EXIT();
 }
 
 static int __init useeplus_init(void)
