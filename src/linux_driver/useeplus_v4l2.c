@@ -504,7 +504,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			size_t max_scan = min_t(size_t, MAX_SCAN_LIMIT, dev->parse_len - current_parse_index - 3);
 
 			for (size_t offset = USB_PACKET_HEADER_SIZE; offset <= max_scan; ++offset) {
-				struct usb_packet_header *offset_pkt = 
+				struct usb_packet_header *offset_pkt =
 					(struct usb_packet_header *)(dev->parse_buffer + current_parse_index + offset);
 
 				uint16_t offset_delimeter = le16_to_cpu(offset_pkt->le_header);
