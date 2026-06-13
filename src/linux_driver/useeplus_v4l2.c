@@ -192,12 +192,13 @@ static int useeplus_v4l2_release(struct file *file)
 }
 
 static const struct v4l2_file_operations useeplus_v4l2_fops = {
-	.owner		  = THIS_MODULE,
-	.open		   = useeplus_v4l2_open,
+	.owner			= THIS_MODULE,
+	.open			= useeplus_v4l2_open,
 	.release		= useeplus_v4l2_release,
-	.read		   = vb2_fop_read,
-	.poll		   = vb2_fop_poll,
-	.unlocked_ioctl = video_ioctl2,
+	.read			= vb2_fop_read,
+	.poll			= vb2_fop_poll,
+	.mmap			= vb2_fop_mmap,
+	.unlocked_ioctl	= video_ioctl2,
 };
 
 static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
@@ -410,7 +411,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			bool found_soi = false;
 			bool found_eoi = false;
 
-			for (j = 0; j + 1 < min_t(size_t, 256, dev->current_frame_len); ++j) {
+			for (j = 0; j + 1 < min((size_t)256, dev->current_frame_len); ++j) {
 				if (dev->current_frame[j] == 0xFF && dev->current_frame[j + 1] == 0xD8) {
 					soiOffset = j;
 					found_soi = true;

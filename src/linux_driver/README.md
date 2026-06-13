@@ -9,6 +9,10 @@ sudo apt install build-essential linux-headers-$(uname -r)
 
 ## Linux Kernel Style Check
 
+https://docs.kernel.org/driver-api/index.html
+
+https://docs.kernel.org/driver-api/usb/writing_usb_driver.html
+
 The Linux Kernel has it's own style checker. It's good practice when writing kernel drivers to stick with the 
 Linux Kernel requirements.
 
@@ -48,7 +52,7 @@ modinfo useeplus_v4l2.ko
 
 ```bash
 # Watch dmesg in a separate terminal window
-dmesg -w
+sudo dmesg -w
 
 # Check what's using the module
 sudo lsof /dev/video0
