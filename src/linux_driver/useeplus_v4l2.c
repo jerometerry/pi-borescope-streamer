@@ -232,13 +232,13 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	if (test_and_set_bit(FLAG_STREAMING, &drv_data->flags))
 		return 0;
 
-	retval = useeplus_write_msg(dev, drv_data->iap_out_ep, IAP_AUTH_HANDSHAKE, sizeof(IAP_AUTH_HANDSHAKE));
+	retval = useeplus_write_msg(drv_data, drv_data->iap_out_ep, IAP_AUTH_HANDSHAKE, sizeof(IAP_AUTH_HANDSHAKE));
 	if (retval) {
 		dev_err(&drv_data->interface->dev, "useeplus_write_msg init failed: %d\n", retval);
 		goto error_start;
 	}
 
-	retval = useeplus_write_msg(dev, drv_data->video_out_ep, START_VIDEO_COMMAND, sizeof(START_VIDEO_COMMAND));
+	retval = useeplus_write_msg(drv_data, drv_data->video_out_ep, START_VIDEO_COMMAND, sizeof(START_VIDEO_COMMAND));
 	if (retval) {
 		dev_err(&drv_data->interface->dev, "useeplus_write_msg start failed: %d\n", retval);
 		goto error_start;
@@ -714,8 +714,8 @@ static void useeplus_disconnect(struct usb_interface *interface)
 	if (interface->cur_altsetting->desc.bInterfaceNumber == USEEPLUS_IAP_INTERFACE)
 		return;
 
-	if (dev) {
-		useeplus_kill_urbs(dev);
+	if (drv_data) {
+		useeplus_kill_urbs(drv_data);
 
 		/* Safely check if V4L2 actually registered before unregistering */
 		if (video_is_registered(&drv_data->video_dev))
@@ -747,7 +747,7 @@ static void useeplus_device_release(struct v4l2_device *v4l2_dev)
 		vfree(drv_data->current_frame);
 
 	kfree(drv_data->parse_buffer);
-	kfree(dev);
+	kfree(drv_data);
 }
 
 static int useeplus_probe(struct usb_interface *interface, const struct usb_device_id *id)
@@ -768,7 +768,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	dev_info(&interface->dev, "Useeplus borescope identified\n");
 
 	/* Allocate the device state FIRST so we have a valid pointer */
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	drv_data = kzalloc(sizeof(*drv_data), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
