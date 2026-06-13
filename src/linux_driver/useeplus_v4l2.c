@@ -747,9 +747,22 @@ static void useeplus_disconnect(struct usb_interface *interface)
 
 	usb_set_intfdata(interface, NULL);
 
+	/* * Ignore the iAP interface disconnect. 
+	 * The Video Interface disconnect handles the full device teardown.
+	 */
+	if (interface->cur_altsetting->desc.bInterfaceNumber == USEEPLUS_IAP_INTERFACE) {
+		PR_DEBUG_FUNC_EXIT();
+		return;
+	}
+
 	if (dev) {
 		useeplus_kill_urbs(dev);
-		video_unregister_device(&dev->vdev);
+		
+		/* Safely check if V4L2 actually registered before unregistering */
+		if (video_is_registered(&dev->vdev)) {
+			video_unregister_device(&dev->vdev);
+		}
+		
 		v4l2_device_disconnect(&dev->v4l2_dev);
 		v4l2_device_put(&dev->v4l2_dev);
 		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
@@ -795,6 +808,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	struct usb_device *udev = interface_to_usbdev(interface);
 	struct usb_interface *iap_intf;
 	struct usb_endpoint_descriptor *ep_desc;
+	struct usb_host_interface *video_alt;
 	struct usb_useeplus *dev = NULL;
 	struct vb2_queue *q;
 	u8 *iap_heartbeat_sink;
@@ -850,9 +864,16 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 		goto error_release_iap;
 	}
 
-	/* Dynamically Map Endpoints for VIDEO interface */
-	for (i = 0; i < interface->cur_altsetting->desc.bNumEndpoints; ++i) {
-		ep_desc = &interface->cur_altsetting->endpoint[i].desc;
+	/* Dynamically Map Endpoints for VIDEO interface (Must look at Altsetting 1) */
+	video_alt = usb_altnum_to_altsetting(interface, USEEPLUS_ALT_SETTING_VIDEO_ENABLE);
+	if (!video_alt) {
+		dev_err(&interface->dev, "Could not find Video Altsetting\n");
+		retval = -ENODEV;
+		goto error_release_iap;
+	}
+
+	for (i = 0; i < video_alt->desc.bNumEndpoints; ++i) {
+		ep_desc = &video_alt->endpoint[i].desc;
 		if (usb_endpoint_num(ep_desc) == USEEPLUS_VIDEO_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
 				dev->video_in_ep = ep_desc->bEndpointAddress;
