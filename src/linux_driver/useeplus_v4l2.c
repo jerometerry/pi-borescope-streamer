@@ -156,7 +156,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 
 	/* 1. Set the atomic bit flag for the URB callbacks */
-	set_bit(USEEPLUS_FLAG_STREAMING, &dev->flags);
+	set_bit(FLAG_STREAMING, &dev->flags);
 	smp_mb(); /* Force visibility across all CPU cores */
 
 	/* 2. Launch the URB pipeline */
