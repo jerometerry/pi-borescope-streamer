@@ -41,10 +41,8 @@ MODULE_VERSION("0.1.0");
 #define IN_DIRECTION					0x80
 #define ENDPOINT_1						0x01
 #define ENDPOINT_2						0x02
-
-#define IN_ENDPOINT						0x81
-#define OUT_ENDPOINT					0x82
 #define DRAIN_BUFFER_SIZE				512
+#define DRAIN_LOOP_COUNT				30
 
 #define JPEG_SOI_MARKERS_MAX_POSITION	256
 #define GRAVITY_SENSOR_CAMERA_ID		0x07
@@ -227,6 +225,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 static void useeplus_stop_streaming(struct vb2_queue *vq)
 {
+	pr_debug("useeplus_stop_streaming...\n");
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
 	struct useeplus_buffer *buf;
 	unsigned long flags;
@@ -255,12 +254,28 @@ static const struct vb2_ops useeplus_vb2_ops = {
 
 static int useeplus_v4l2_open(struct file *file)
 {
+	pr_debug("useeplus_v4l2_open...\n");
 	return v4l2_fh_open(file);
 }
 
 static int useeplus_v4l2_release(struct file *file)
 {
+	pr_debug("useeplus_v4l2_release...\n");
 	return _vb2_fop_release(file, NULL);
+}
+
+static void useeplus_device_release(struct v4l2_device *v4l2_dev)
+{
+	pr_debug("useeplus_device_release...\n");
+	struct usb_useeplus *dev = container_of(v4l2_dev, struct usb_useeplus, v4l2_dev);
+
+	if (dev->current_frame)
+		vfree(dev->current_frame);
+
+	kfree(dev->parse_buffer);
+	kfree(dev);
+
+	pr_debug("Useeplus protocol borescope released.\n");
 }
 
 static const struct v4l2_file_operations useeplus_v4l2_fops = {
@@ -593,8 +608,7 @@ resubmit:
 	}
 }
 
-static int useeplus_probe(struct usb_interface *interface,
-						  const struct usb_device_id *id)
+static int useeplus_probe(struct usb_interface *interface, const struct usb_device_id *id)
 {
 	struct usb_device *udev = interface_to_usbdev(interface);
 	struct usb_useeplus *dev = NULL;
@@ -602,7 +616,7 @@ static int useeplus_probe(struct usb_interface *interface,
 	u8 *drain_buffer;
 	int i, retval, actual_len;
 
-	if (interface->cur_altsetting->desc.bInterfaceNumber != 1) {
+	if (interface->cur_altsetting->desc.bInterfaceNumber != INTERFACE_B_ALTERNATE_SETTING) {
 		dev_info(&interface->dev,
 			"Skipping intername number %d\n", interface->cur_altsetting->desc.bInterfaceNumber);
 		return -ENODEV;
@@ -637,6 +651,8 @@ static int useeplus_probe(struct usb_interface *interface,
 		retval = -ENOMEM;
 		goto error;
 	}
+
+	dev->v4l2_dev.release = useeplus_device_release;
 
 	retval = v4l2_device_register(&interface->dev, &dev->v4l2_dev);
 	if (retval) {
@@ -679,10 +695,10 @@ static int useeplus_probe(struct usb_interface *interface,
 		goto error_unreg_v4l2;
 	}
 
-	for (i = 0; i < 30; ++i) {
+	for (i = 0; i < DRAIN_LOOP_COUNT; ++i) {
 		usb_bulk_msg(
 			udev,
-			usb_rcvbulkpipe(udev, 0x82),
+			usb_rcvbulkpipe(udev, IN_DIRECTION | ENDPOINT_2),
 			drain_buffer,
 			DRAIN_BUFFER_SIZE,
 			&actual_len,
@@ -691,7 +707,7 @@ static int useeplus_probe(struct usb_interface *interface,
 	}
 	kfree(drain_buffer);
 
-	retval = usb_set_interface(udev, 1, 1);
+	retval = usb_set_interface(udev, INTERFACE_B_NUMBER, INTERFACE_B_ALTERNATE_SETTING);
 	if (retval) {
 		dev_err(&interface->dev, "usb_set_interface failed with error %d\n", retval);
 		goto error_unreg_v4l2;
@@ -699,7 +715,7 @@ static int useeplus_probe(struct usb_interface *interface,
 
 	retval = usb_clear_halt(
 		udev,
-		usb_rcvbulkpipe(udev, 0x81)
+		usb_rcvbulkpipe(udev, IN_DIRECTION | ENDPOINT_1)
 	);
 	if (retval)
 		dev_info(&interface->dev, "usb_clear_halt failed with error %d\n", retval);
@@ -729,7 +745,7 @@ static int useeplus_probe(struct usb_interface *interface,
 		usb_fill_bulk_urb(
 			dev->urbs[i],
 			udev,
-			usb_rcvbulkpipe(udev, 0x81),
+			usb_rcvbulkpipe(udev, IN_DIRECTION | ENDPOINT_1),
 			dev->urb_buffers[i],
 			BULK_TRANSFER_SIZE,
 			useeplus_read_bulk_callback,
@@ -741,13 +757,13 @@ static int useeplus_probe(struct usb_interface *interface,
 
 	usb_set_intfdata(interface, dev);
 
-	retval = useeplus_write_msg(dev, 0x02, initialization_tokens, sizeof(initialization_tokens));
+	retval = useeplus_write_msg(dev, ENDPOINT_2, initialization_tokens, sizeof(initialization_tokens));
 	if (retval) {
 		dev_err(&interface->dev, "useeplus_write_msg failed with error %d\n", retval);
 		goto error_sequence;
 	}
 
-	retval = useeplus_write_msg(dev, 0x01, start_stream_tokens, sizeof(start_stream_tokens));
+	retval = useeplus_write_msg(dev, ENDPOINT_1, start_stream_tokens, sizeof(start_stream_tokens));
 	if (retval) {
 		dev_err(&interface->dev, "useeplus_write_msg failed with error %d\n", retval);
 		goto error_sequence;
@@ -808,16 +824,13 @@ static void useeplus_disconnect(struct usb_interface *interface)
 
 	if (dev) {
 		useeplus_kill_urbs(dev);
+
 		video_unregister_device(&dev->vdev);
-		v4l2_device_unregister(&dev->v4l2_dev);
+		v4l2_device_disconnect(&dev->v4l2_dev);
 
-		if (dev->current_frame)
-			vfree(dev->current_frame);
-
-		kfree(dev->parse_buffer);
-
+		v4l2_device_put(&dev->v4l2_dev);
+		
 		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
-		kfree(dev);
 	}
 }
 
