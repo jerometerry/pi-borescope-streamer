@@ -203,6 +203,7 @@ static const struct v4l2_file_operations useeplus_v4l2_fops = {
 static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 {
 	struct usb_useeplus *dev = video_drvdata(file);
+
 	strscpy(cap->driver, "Useeplus", sizeof(cap->driver));
 	strscpy(cap->card, "Useeplus non-UVC Borescope", sizeof(cap->card));
 	usb_make_path(dev->udev, cap->bus_info, sizeof(cap->bus_info));
@@ -688,7 +689,7 @@ static void useeplus_disconnect(struct usb_interface *interface)
 		useeplus_kill_urbs(dev);
 		video_unregister_device(&dev->vdev);
 		v4l2_device_unregister(&dev->v4l2_dev);
-		
+
 		if (dev->current_frame)
 			vfree(dev->current_frame);
 
