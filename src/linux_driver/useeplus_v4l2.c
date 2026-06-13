@@ -857,7 +857,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	q = &drv_data->video_queue;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_READ;
-	q->drv_priv = dev;
+	q->drv_priv = drv_data;
 	q->buf_struct_size = sizeof(struct useeplus_buffer);
 	q->ops = &useeplus_vb2_ops;
 	q->mem_ops = &vb2_vmalloc_memops;
