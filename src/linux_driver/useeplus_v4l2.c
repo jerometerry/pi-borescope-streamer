@@ -61,6 +61,9 @@ MODULE_VERSION("0.1.0");
 
 #define FLAG_STREAMING					0
 
+#define PR_DEBUG_FUNC_ENTER()			pr_debug("ENTER: %s\n", __func__)
+#define PR_DEBUG_FUNC_EXIT()			pr_debug("EXIT: %s\n", __func__)
+
 static const u8 initialization_tokens[]	= { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_stream_tokens[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
@@ -134,11 +137,13 @@ static int useeplus_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 				unsigned int *nplanes, unsigned int sizes[],
 				struct device *alloc_devs[])
 {
+	PR_DEBUG_FUNC_ENTER();
 	if (*nplanes)
 		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
 
 	*nplanes = 1;
 	sizes[0] = MAX_FRAME_SIZE;
+	PR_DEBUG_FUNC_EXIT();
 	return 0;
 }
 
@@ -165,6 +170,7 @@ static void useeplus_buf_queue(struct vb2_buffer *vb)
 
 static void useeplus_kill_urbs(struct usb_useeplus *dev)
 {
+	PR_DEBUG_FUNC_ENTER();
 	int i;
 
 	clear_bit(FLAG_STREAMING, &dev->flags);
@@ -189,10 +195,12 @@ static void useeplus_kill_urbs(struct usb_useeplus *dev)
 			dev->urbs[i] = NULL;
 		}
 	}
+	PR_DEBUG_FUNC_EXIT();
 }
 
 static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
+	PR_DEBUG_FUNC_ENTER();
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
 	unsigned long flags;
 
@@ -220,12 +228,14 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 		}
 	}
 
+	PR_DEBUG_FUNC_EXIT();
+
 	return 0;
 }
 
 static void useeplus_stop_streaming(struct vb2_queue *vq)
 {
-	pr_debug("useeplus_stop_streaming...\n");
+	PR_DEBUG_FUNC_ENTER();
 	struct usb_useeplus *dev = vb2_get_drv_priv(vq);
 	struct useeplus_buffer *buf;
 	unsigned long flags;
@@ -240,6 +250,7 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 	}
 
 	spin_unlock_irqrestore(&dev->q_lock, flags);
+	PR_DEBUG_FUNC_EXIT();
 }
 
 static const struct vb2_ops useeplus_vb2_ops = {
@@ -254,19 +265,25 @@ static const struct vb2_ops useeplus_vb2_ops = {
 
 static int useeplus_v4l2_open(struct file *file)
 {
-	pr_debug("useeplus_v4l2_open...\n");
-	return v4l2_fh_open(file);
+	PR_DEBUG_FUNC_ENTER();
+	int retval = v4l2_fh_open(file);
+
+	PR_DEBUG_FUNC_EXIT();
+	return retval;
 }
 
 static int useeplus_v4l2_release(struct file *file)
 {
-	pr_debug("useeplus_v4l2_release...\n");
-	return _vb2_fop_release(file, NULL);
+	PR_DEBUG_FUNC_ENTER();
+	int retval = _vb2_fop_release(file, NULL);
+
+	PR_DEBUG_FUNC_EXIT();
+	return retval;
 }
 
 static void useeplus_device_release(struct v4l2_device *v4l2_dev)
 {
-	pr_debug("useeplus_device_release...\n");
+	PR_DEBUG_FUNC_ENTER();
 	struct usb_useeplus *dev = container_of(v4l2_dev, struct usb_useeplus, v4l2_dev);
 
 	if (dev->current_frame)
@@ -275,7 +292,7 @@ static void useeplus_device_release(struct v4l2_device *v4l2_dev)
 	kfree(dev->parse_buffer);
 	kfree(dev);
 
-	pr_debug("Useeplus protocol borescope released.\n");
+	PR_DEBUG_FUNC_EXIT();
 }
 
 static const struct v4l2_file_operations useeplus_v4l2_fops = {
@@ -290,6 +307,7 @@ static const struct v4l2_file_operations useeplus_v4l2_fops = {
 
 static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 {
+	PR_DEBUG_FUNC_ENTER();
 	struct usb_useeplus *dev = video_drvdata(file);
 
 	strscpy(cap->driver, "Useeplus", sizeof(cap->driver));
@@ -297,11 +315,14 @@ static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_c
 	usb_make_path(dev->udev, cap->bus_info, sizeof(cap->bus_info));
 	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING | V4L2_CAP_DEVICE_CAPS;
 	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+
+	PR_DEBUG_FUNC_EXIT();
 	return 0;
 }
 
 static int useeplus_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
+	PR_DEBUG_FUNC_ENTER();
 	f->fmt.pix.width		= RESOLUTION_WIDTH;
 	f->fmt.pix.height		= RESOLUTION_HEIGHT;
 	f->fmt.pix.pixelformat	= V4L2_PIX_FMT_MJPEG;
@@ -309,53 +330,74 @@ static int useeplus_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l
 	f->fmt.pix.bytesperline	= 0;
 	f->fmt.pix.sizeimage	= MAX_FRAME_SIZE;
 	f->fmt.pix.colorspace	= V4L2_COLORSPACE_SRGB;
+
+	PR_DEBUG_FUNC_EXIT();
 	return 0;
 }
 
 static int useeplus_vidioc_enum_fmt_vid_cap(struct file *file, void *priv, struct v4l2_fmtdesc *f)
 {
+	PR_DEBUG_FUNC_ENTER();
 	if (f->index > 0)
 		return -EINVAL;
 
 	f->pixelformat = V4L2_PIX_FMT_MJPEG;
+
+	PR_DEBUG_FUNC_EXIT();
 	return 0;
 }
 
 static int useeplus_vidioc_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 {
+	PR_DEBUG_FUNC_ENTER();
 	if (inp->index > 0)
 		return -EINVAL;
 
 	inp->type = V4L2_INPUT_TYPE_CAMERA;
 	strscpy(inp->name, "Borescope Lens Channel 0", sizeof(inp->name));
+
+	PR_DEBUG_FUNC_EXIT();
 	return 0;
 }
 
 static int useeplus_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
 {
+	PR_DEBUG_FUNC_ENTER();
 	*i = 0;
+	PR_DEBUG_FUNC_EXIT();
 	return 0;
 }
 
 static int useeplus_vidioc_s_input(struct file *file, void *priv, unsigned int i)
 {
-	return i == 0 ? 0 : -EINVAL;
+	PR_DEBUG_FUNC_ENTER();
+	int retval = (i == 0 ? 0 : -EINVAL);
+
+	PR_DEBUG_FUNC_EXIT();
+	return retval;
 }
 
 static int useeplus_vidioc_g_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
+	PR_DEBUG_FUNC_ENTER();
 	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
 	sp->parm.capture.timeperframe.numerator = 1;
 	sp->parm.capture.timeperframe.denominator = 30;
+
+	PR_DEBUG_FUNC_EXIT();
 	return 0;
 }
 
 static int useeplus_vidioc_s_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
-	return useeplus_vidioc_g_parm(file, priv, sp);
+	PR_DEBUG_FUNC_ENTER();
+	int retval = useeplus_vidioc_g_parm(file, priv, sp);
+
+	PR_DEBUG_FUNC_EXIT();
+	return retval;
 }
 
 static const struct v4l2_ioctl_ops useeplus_v4l2_ioctl_ops = {
@@ -597,19 +639,17 @@ resubmit:
 	if (test_bit(FLAG_STREAMING, &dev->flags)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval) {
-			if (retval != -ENODEV && retval != -ESHUTDOWN && retval != -ENOENT) {
-				dev_err(&dev->interface->dev,
-						"Asynchronous URB resubmission failed with error %d\n", retval);
-			} else {
-				dev_dbg(&dev->interface->dev,
-						"URB resubmit bypassed: device disconnected (%d)\n", retval);
-			}
+			if (retval != -ENODEV && retval != -ESHUTDOWN && retval != -ENOENT)
+				dev_err(&dev->interface->dev, "usb_submit_urb failed with error %d\n", retval);
+			else
+				dev_warn(&dev->interface->dev, "usb_submit_urb failed returned %d\n", retval);
 		}
 	}
 }
 
 static int useeplus_probe(struct usb_interface *interface, const struct usb_device_id *id)
 {
+	PR_DEBUG_FUNC_ENTER();
 	struct usb_device *udev = interface_to_usbdev(interface);
 	struct usb_useeplus *dev = NULL;
 	struct vb2_queue *q;
@@ -717,6 +757,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 		udev,
 		usb_rcvbulkpipe(udev, IN_DIRECTION | ENDPOINT_1)
 	);
+
 	if (retval)
 		dev_info(&interface->dev, "usb_clear_halt failed with error %d\n", retval);
 
@@ -794,18 +835,26 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 			goto error_unreg_video;
 		}
 	}
+
+	PR_DEBUG_FUNC_EXIT();
+
 	return 0;
 
 error_unreg_video:
+	pr_debug("ERROR: error_unreg_video:\n");
 	video_unregister_device(&dev->vdev);
 error_sequence:
+	pr_debug("ERROR: error_sequence:\n");
 	useeplus_kill_urbs(dev);
 	usb_set_intfdata(interface, NULL);
 error_urbs:
+	pr_debug("ERROR: error_urbs:\n");
 	useeplus_kill_urbs(dev);
 error_unreg_v4l2:
+	pr_debug("ERROR: error_unreg_v4l2:\n");
 	v4l2_device_unregister(&dev->v4l2_dev);
 error:
+	pr_debug("ERROR: error:\n");
 	if (dev) {
 		if (dev->current_frame)
 			vfree(dev->current_frame);
@@ -813,25 +862,26 @@ error:
 		kfree(dev->parse_buffer);
 		kfree(dev);
 	}
+
+	PR_DEBUG_FUNC_EXIT();
 	return retval;
 }
 
 static void useeplus_disconnect(struct usb_interface *interface)
 {
+	PR_DEBUG_FUNC_ENTER();
 	struct usb_useeplus *dev = usb_get_intfdata(interface);
 
 	usb_set_intfdata(interface, NULL);
 
 	if (dev) {
 		useeplus_kill_urbs(dev);
-
 		video_unregister_device(&dev->vdev);
 		v4l2_device_disconnect(&dev->v4l2_dev);
-
 		v4l2_device_put(&dev->v4l2_dev);
-		
 		dev_info(&interface->dev, "Useeplus protocol borescope detached.\n");
 	}
+	PR_DEBUG_FUNC_EXIT();
 }
 
 static struct usb_driver useeplus_driver = {
