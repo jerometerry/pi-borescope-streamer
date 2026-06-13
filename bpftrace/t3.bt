@@ -1,0 +1,37 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+    printf("Monitoring pi-borescope-streamer Kernel IOCTL boundary... Hit Ctrl-C to exit.\n");
+    printf("====================================================================================\n");
+    printf("%-10s %-15s %-12s %-16s %s\n", "TIME", "COMM", "PID", "IOCTL_CMD (HEX)", "CALLS/sec");
+    printf("====================================================================================\n");
+}
+
+/* 1. Capture every time your app communicates with a device file (/dev/bus/usb/...) */
+tracepoint:syscalls:sys_enter_ioctl
+/comm == "pi-borescope-st"/ {
+    // Record the specific ioctl command ID being passed from userspace
+    @ioctl_types[args->cmd]++;
+    @total_ioctls++;
+}
+
+/* 2. Aggregate the counts to display active thrumming every second */
+interval:s:1 {
+    if (@total_ioctls > 0) {
+        time("%H:%M:%S    ");
+        printf("Application executed %d kernel ioctl transactions this second.\n", @total_ioctls);
+        @total_ioctls = 0;
+    }
+}
+
+END {
+    printf("\n--- Detailed Breakdown of Executed USB Driver Command Codes ---\n");
+    printf("Check these codes against the kernel's usbdevice_fs.h header definitions.\n\n");
+    
+    // Prints out: [0xCOMMAND_HEX]: Total_Invocations_During_Session
+    print(@ioctl_types);
+    
+    clear(@ioctl_types);
+    clear(@total_ioctls);
+}
+
