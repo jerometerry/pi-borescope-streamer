@@ -185,7 +185,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	dev->vb_streaming = true;
 	spin_unlock_irqrestore(&dev->q_lock, flags);
 
-	if (test_bit(USEEPLUS_FLAG_STREAMING, &dev->flags)) {
+	if (test_bit(FLAG_STREAMING, &dev->flags)) {
 		return 0; 
 	}
 
