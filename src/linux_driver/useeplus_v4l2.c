@@ -273,18 +273,18 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 error_start:
 	clear_bit(FLAG_STREAMING, &dev->flags);
-	
+
 	/* Kill any URBs that successfully submitted before the failure */
-	for (int j = 0; j < i; ++j) {
+	for (int j = 0; j < i; ++j)
 		usb_kill_urb(dev->urbs[j]);
-	}
 
 	/* Drain the queue and return to userspace per V4L2 spec */
 	spin_lock_irqsave(&dev->q_lock, flags);
 	dev->vb_streaming = false;
-	
+
 	while (!list_empty(&dev->rdy_queue)) {
 		struct useeplus_buffer *buf;
+
 		buf = list_first_entry(&dev->rdy_queue, struct useeplus_buffer, list);
 		list_del(&buf->list);
 		vb2_buffer_done(&buf->vb.vb2_buf, VB2_BUF_STATE_QUEUED);
@@ -760,9 +760,8 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	int i, retval, actual_len;
 
 	/* Only bind the driver when the Video Interface is probed */
-	if (interface->cur_altsetting->desc.bInterfaceNumber != USEEPLUS_VIDEO_INTERFACE) {
+	if (interface->cur_altsetting->desc.bInterfaceNumber != USEEPLUS_VIDEO_INTERFACE)
 		return -ENODEV;
-	}
 
 	dev_info(&interface->dev, "Useeplus borescope identified\n");
 
@@ -933,7 +932,10 @@ error_unreg_v4l2:
 
 error_release_iap:
 	usb_driver_release_interface(&useeplus_driver, iap_intf);
-	if (dev->current_frame) vfree(dev->current_frame);
+
+	if (dev->current_frame)
+		vfree(dev->current_frame);
+
 	kfree(dev->parse_buffer);
 error_free_dev:
 	kfree(dev);
