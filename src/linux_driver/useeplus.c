@@ -9,59 +9,56 @@
 
 #include "useeplus.h"
 
-static bool useeplus_is_valid_header(struct usb_packet_header *pkt)
+static bool up_is_valid_header(struct up_pkt_hdr *pkt)
 {
-	uint16_t delimiter = le16_to_cpu(pkt->le_delimeter);
-	u8 camera_id = pkt->le_device_id;
+	uint16_t del = le16_to_cpu(pkt->le_delimeter);
+	u8 dev_id = pkt->le_device_id;
 
-	return (delimiter == USB_PACKET_DELIMITER &&
-		(camera_id == VIDEO_CAMERA_ID || camera_id == GRAVITY_SENSOR_ID));
+	return (del == UP_PKT_DEL && (dev_id == VIDEO_CAMERA_ID || dev_id == GRAVITY_SENSOR_ID));
 }
 
-static bool useeplus_check_ghost_header(struct useeplus_drv_data *drv_data,
-					struct useeplus_parse_ctx *ctx,
-					size_t *header_offset)
+static bool up_check_ghost_header(struct up_drv_data *drv_data, struct up_parse_ctx *ctx,
+				  size_t *hdr_off)
 {
 	size_t buf_len = drv_data->decode_buf_len;
 	size_t last_index = buf_len - ctx->index - 3;
 	size_t ghost_limit = min_t(size_t, MAX_GHOST_HEADER_OFFSET, last_index);
-	size_t hdr_sz = USB_PACKET_HEADER_SIZE;
+	size_t hdr_sz = UP_PKT_HDR_SIZE;
 	size_t offset;
 
 	for (offset = hdr_sz; offset <= ghost_limit; ++offset) {
 		u8 *offset_hdr_ptr = drv_data->decode_buf + ctx->index + offset;
-		struct usb_packet_header *offset_pkt = (struct usb_packet_header *)offset_hdr_ptr;
+		struct up_pkt_hdr *offset_pkt = (struct up_pkt_hdr *)offset_hdr_ptr;
 
-		if (useeplus_is_valid_header(offset_pkt)) {
-			*header_offset = offset;
+		if (up_is_valid_header(offset_pkt)) {
+			*hdr_off = offset;
 			return true;
 		}
 	}
 	return false;
 }
 
-static void useeplus_find_jpeg_boundaries(struct useeplus_drv_data *drv_data,
-					  size_t *soi_offset, size_t *eoi_offset,
-					  bool *building_frame, bool *found_eoi)
+static void up_find_jpeg_boundaries(struct up_drv_data *drv_data, size_t *soi_offset,
+				    size_t *eoi_offset, bool *building_frame, bool *found_eoi)
 {
 	long j;
-	size_t max_pos = min_t(size_t, JPEG_SOI_MARKERS_MAX_POSITION, drv_data->frame_len);
+	size_t max_pos = min_t(size_t, JPEG_SOI_MAX_POS, drv_data->frame_len);
+	u8 *f_buf = drv_data->frame_buf;
+	size_t f_len = drv_data->frame_len;
 
 	*building_frame = false;
 	*found_eoi = false;
 
 	for (j = 0; j + 1 < max_pos; ++j) {
-		if (drv_data->frame_buf[j] == JPEG_MARKER_BOUNDARY &&
-		    drv_data->frame_buf[j + 1] == JPEG_MARKER_SOI) {
+		if (f_buf[j] == JPEG_DEL && f_buf[j + 1] == JPEG_SOI) {
 			*soi_offset = j;
 			*building_frame = true;
 			break;
 		}
 	}
 
-	for (j = drv_data->frame_len; j >= 2; --j) {
-		if (drv_data->frame_buf[j - 2] == JPEG_MARKER_BOUNDARY &&
-		    drv_data->frame_buf[j - 1] == JPEG_MARKER_EOI) {
+	for (j = f_len; j >= 2; --j) {
+		if (f_buf[j - 2] == JPEG_DEL && f_buf[j - 1] == JPEG_EOI) {
 			*eoi_offset = j;
 			*found_eoi = true;
 			break;
@@ -69,10 +66,9 @@ static void useeplus_find_jpeg_boundaries(struct useeplus_drv_data *drv_data,
 	}
 }
 
-static void useeplus_deliver_frame_to_client(struct useeplus_drv_data *drv_data,
-					     struct useeplus_parse_ctx *ctx)
+static void up_deliver_frame_to_client(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 {
-	struct useeplus_buffer *vbuf;
+	struct up_buffer *vbuf;
 	size_t soi_offset = 0;
 	size_t eoi_offset = 0;
 	bool building_frame;
@@ -80,23 +76,23 @@ static void useeplus_deliver_frame_to_client(struct useeplus_drv_data *drv_data,
 
 	drv_data->dbg_frames_found++;
 
-	useeplus_find_jpeg_boundaries(drv_data, &soi_offset, &eoi_offset, &building_frame, &found_eoi);
+	up_find_jpeg_boundaries(drv_data, &soi_offset, &eoi_offset, &building_frame, &found_eoi);
 
 	if (building_frame && found_eoi && soi_offset < eoi_offset) {
-		size_t final_content_size = eoi_offset - soi_offset;
+		size_t img_size = eoi_offset - soi_offset;
 
 		drv_data->frame_counter++;
 
 		spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
 		if (!list_empty(&drv_data->ready_queue)) {
-			vbuf = list_first_entry(&drv_data->ready_queue, struct useeplus_buffer, list);
+			vbuf = list_first_entry(&drv_data->ready_queue, struct up_buffer, list);
 			list_del(&vbuf->list);
 
 			void *vaddr = vb2_plane_vaddr(&vbuf->vb2_buffer.vb2_buf, 0);
 
 			if (vaddr) {
-				memcpy(vaddr, drv_data->frame_buf + soi_offset, final_content_size);
-				vb2_set_plane_payload(&vbuf->vb2_buffer.vb2_buf, 0, final_content_size);
+				memcpy(vaddr, drv_data->frame_buf + soi_offset, img_size);
+				vb2_set_plane_payload(&vbuf->vb2_buffer.vb2_buf, 0, img_size);
 
 				vbuf->vb2_buffer.vb2_buf.timestamp = ktime_get_ns();
 				vbuf->vb2_buffer.sequence = drv_data->sequence++;
@@ -121,47 +117,45 @@ static void useeplus_deliver_frame_to_client(struct useeplus_drv_data *drv_data,
 	drv_data->frame_len = 0;
 }
 
-void useeplus_decode_packets(struct useeplus_drv_data *drv_data,
-			     struct useeplus_parse_ctx *ctx)
+void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 {
 	while (ctx->index + TOTAL_USB_HEADER_SIZE <= drv_data->decode_buf_len) {
 		u8 *hdr_ptr = drv_data->decode_buf + ctx->index;
-		struct usb_packet_header *pkt = (struct usb_packet_header *)(hdr_ptr);
-		uint16_t packet_len = le16_to_cpu(pkt->le_length);
-		size_t total_packet_size = USB_PACKET_HEADER_SIZE + packet_len;
-		size_t header_offset = 0;
+		struct up_pkt_hdr *pkt = (struct up_pkt_hdr *)(hdr_ptr);
+		uint16_t pkt_len = le16_to_cpu(pkt->le_length);
+		size_t pkt_size = UP_PKT_HDR_SIZE + pkt_len;
+		size_t hdr_off = 0;
 
-		if (!useeplus_is_valid_header(pkt)) {
+		if (!up_is_valid_header(pkt)) {
 			ctx->index++;
 			continue;
 		}
 
-		if (useeplus_check_ghost_header(drv_data, ctx, &header_offset)) {
+		if (up_check_ghost_header(drv_data, ctx, &hdr_off)) {
 			drv_data->dbg_ghost_headers++;
-			ctx->index += header_offset;
+			ctx->index += hdr_off;
 			continue;
 		}
 
 		drv_data->dbg_packets_found++;
 
-		if (total_packet_size > (BULK_TRANSFER_SIZE * 2)) {
-			dev_dbg(&drv_data->interface->dev,
-				"Corrupted packet_len %u, skipping byte\n", packet_len);
+		if (pkt_size > (BULK_TRANSFER_SIZE * 2)) {
+			dev_dbg(&drv_data->itf->dev,
+				"Corrupted pkt_len %u, skipping byte\n", pkt_len);
 			ctx->index++;
 			continue;
 		}
 
-		if (ctx->index + total_packet_size > drv_data->decode_buf_len)
+		if (ctx->index + pkt_size > drv_data->decode_buf_len)
 			break;
 
-		if (packet_len < USB_PAYLOAD_HEADER_SIZE) {
-			ctx->index += total_packet_size;
+		if (pkt_len < UP_PL_HDR_SIZE) {
+			ctx->index += pkt_size;
 			continue;
 		}
 
-		size_t payload_offset = ctx->index + USB_PACKET_HEADER_SIZE;
-		struct usb_payload_header *payload =
-			(struct usb_payload_header *)(drv_data->decode_buf + payload_offset);
+		size_t pl_off = ctx->index + UP_PKT_HDR_SIZE;
+		struct up_pl_hdr *payload = (struct up_pl_hdr *)(drv_data->decode_buf + pl_off);
 
 		u8 current_frame_id = payload->le_frame_id;
 		u8 current_camera_number = payload->le_camera_number;
@@ -170,7 +164,7 @@ void useeplus_decode_packets(struct useeplus_drv_data *drv_data,
 		if (drv_data->building_frame &&
 		    drv_data->frame_len > 0 &&
 		    drv_data->frame_id != current_frame_id) {
-			useeplus_deliver_frame_to_client(drv_data, ctx);
+			up_deliver_frame_to_client(drv_data, ctx);
 		}
 
 		drv_data->frame_id = current_frame_id;
@@ -181,7 +175,7 @@ void useeplus_decode_packets(struct useeplus_drv_data *drv_data,
 
 		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
 			size_t payload_start = ctx->index + TOTAL_USB_HEADER_SIZE;
-			size_t payload_size = total_packet_size - TOTAL_USB_HEADER_SIZE;
+			size_t payload_size = pkt_size - TOTAL_USB_HEADER_SIZE;
 			size_t combined_len = drv_data->frame_len + payload_size;
 
 			if (combined_len <= MAX_FRAME_SIZE) {
@@ -193,6 +187,6 @@ void useeplus_decode_packets(struct useeplus_drv_data *drv_data,
 			}
 		}
 
-		ctx->index += total_packet_size;
+		ctx->index += pkt_size;
 	}
 }
