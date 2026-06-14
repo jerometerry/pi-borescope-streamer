@@ -700,7 +700,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	// Dynamically Map Endpoints for VIDEO interface (Must look at Altsetting 1)
 	video_alt = usb_altnum_to_altsetting(
 		interface,
-		useeplus_alt_setting_video_enable
+		USEEPLUS_ALT_VIDEO_ENABLE
 	);
 
 	if (!video_alt) {
