@@ -1,7 +1,6 @@
-.PHONY: default smatch coccicheck clean \
-        install install-debug install-without-deps \
-        remove uninstall check-status insert \
-        check-deps check-stack check-patch check-includes
+.PHONY: default smatch coccicheck clean install install-debug install-without-deps remove \
+	uninstall check-status insert check-deps check-stack check-patch check-includes \
+	check-format fix-format
 
 obj-m += useeplus_v4l2.o
 useeplus_v4l2-y := useeplus_v4l2_core.o useeplus.o
@@ -99,6 +98,12 @@ check-stack: default
 check-patch:
 	@$(KDIR)/scripts/checkpatch.pl --strict --no-tree --root=$$(pwd) --file \
 	useeplus_v4l2_core.c useeplus.c ./include/useeplus.h
+
+check-format:
+	@clang-format --dry-run --Werror useeplus_v4l2_core.c useeplus.c
+
+fix-format:
+	@clang-format -i useeplus_v4l2_core.c useeplus.c
 
 check-includes:
 	$(KDIR)/scripts/checkincludes.pl *.c ./*.h
