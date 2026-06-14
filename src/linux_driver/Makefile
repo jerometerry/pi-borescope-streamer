@@ -56,8 +56,8 @@ check:
 		-I$(KDIR)/arch/arm64/include/uapi \
 		useeplus_v4l2_core.c useeplus.c
 
-check-stack:
-	$(KDIR)/scripts/checkstack.pl --file ./*.c ./*.h
+check-stack: clean default
+	objdump -d useeplus_v4l2.ko | $(KDIR)/scripts/checkpatch.pl aarch64
 
 check-patch:
 	$(KDIR)/scripts/checkpatch.pl --file ./*.c ./*.h
