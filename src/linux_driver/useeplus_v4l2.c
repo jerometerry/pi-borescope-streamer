@@ -21,6 +21,8 @@ MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
+#define BULK_TRANSFER_COUNT					4
+
 #define USEEPLUS_IAP_INTERFACE				0
 #define USEEPLUS_VIDEO_INTERFACE			1
 #define USEEPLUS_ALT_SETTING_VIDEO_ENABLE	1
@@ -44,11 +46,10 @@ MODULE_VERSION("0.1.0");
 
 static const u32 resolution_width = 640;
 static const u32 resolution_height = 480;
-static const int DIAGNOSTIC_LOG_ITERATIONS = 300;
+static const int diagnostic_log_iterations = 300;
 
 static const long flag_streaming = 0;
 static const int usb_timeout_ms = 1000;
-static const int bulk_transfer_count = 4;
 
 static const unsigned int max_frame_size = (256 * 1024);
 
@@ -104,9 +105,9 @@ struct useeplus_drv_data {
 	spinlock_t ready_queue_lock;
 	u64 sequence;
 
-	struct urb *urbs[bulk_transfer_count];
-	u8 *urb_buffers[bulk_transfer_count];
-	dma_addr_t urb_dma_addrs[bulk_transfer_count];
+	struct urb *urbs[BULK_TRANSFER_COUNT];
+	u8 *urb_buffers[BULK_TRANSFER_COUNT];
+	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
 
 	unsigned long flags;
 	bool streaming_video;
@@ -172,14 +173,14 @@ static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 
 	// Kill ALL URBs first. This guarantees every callback is stopped
 	// and no new ones can be submitted.
-	for (int i = 0; i < bulk_transfer_count; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (drv_data->urbs[i])
 			usb_kill_urb(drv_data->urbs[i]);
 	}
 
 	// Safe Zone: No callbacks can possibly be running now.
 	// It is now 100% safe to free the memory structures.
-	for (int i = 0; i < bulk_transfer_count; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (drv_data->urbs[i]) {
 			if (drv_data->urb_buffers[i]) {
 				usb_free_coherent(
@@ -252,7 +253,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	smp_mb__after_atomic();
 
 	/* Submit URBs to begin pulling the stream */
-	for (urbs_submitted = 0; urbs_submitted < bulk_transfer_count; ++urbs_submitted) {
+	for (urbs_submitted = 0; urbs_submitted < BULK_TRANSFER_COUNT; ++urbs_submitted) {
 		retval = usb_submit_urb(drv_data->urbs[urbs_submitted], GFP_KERNEL);
 		if (retval) {
 			dev_err(&drv_data->interface->dev, "Failed to submit URBs: %d\n", retval);
@@ -293,7 +294,7 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 
 	clear_bit(flag_streaming, &drv_data->flags);
 
-	for (int i = 0; i < bulk_transfer_count; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (drv_data->urbs[i])
 			usb_kill_urb(drv_data->urbs[i]);
 	}
@@ -472,7 +473,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 	drv_data->dbg_urbs_processed++;
 
-	if (drv_data->dbg_urbs_processed % DIAGNOSTIC_LOG_ITERATIONS == 0) {
+	if (drv_data->dbg_urbs_processed % diagnostic_log_iterations == 0) {
 		dev_dbg(&drv_data->interface->dev,
 			"DIAGNOSTIC DUMP | URBs: %lu | USB Errors: %lu| Packets: %lu | Frames: %lu (Delivered: %lu | Drop SOI: %lu | Drop EOI: %lu | Drop Q: %lu | Ghosts: %lu)\n",
 			drv_data->dbg_urbs_processed, drv_data->dbg_usb_errors, drv_data->dbg_packets_found, drv_data->dbg_frames_found,
@@ -666,7 +667,7 @@ static int useeplus_alloc_urbs(struct useeplus_drv_data *drv_data)
 	struct usb_device *usb_dev = drv_data->usb_dev;
 	struct usb_interface *interface = drv_data->interface;
 
-	for (int i = 0; i < bulk_transfer_count; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		drv_data->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
 		if (!drv_data->urbs[i]) {
 			dev_err(&interface->dev, "usb_alloc_urb failed\n");
