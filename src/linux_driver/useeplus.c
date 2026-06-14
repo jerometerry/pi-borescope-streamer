@@ -11,7 +11,7 @@
 
 static bool up_is_valid_header(struct up_pkt_hdr *pkt)
 {
-	uint16_t del = le16_to_cpu(pkt->le_delimeter);
+	u16 del = le16_to_cpu(pkt->le_delimeter);
 	u8 dev_id = pkt->le_device_id;
 
 	return (del == UP_PKT_DEL && (dev_id == VIDEO_CAMERA_ID || dev_id == GRAVITY_SENSOR_ID));
@@ -122,7 +122,7 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 	while (ctx->index + TOTAL_USB_HEADER_SIZE <= drv_data->decode_buf_len) {
 		u8 *hdr_ptr = drv_data->decode_buf + ctx->index;
 		struct up_pkt_hdr *pkt = (struct up_pkt_hdr *)(hdr_ptr);
-		uint16_t pkt_len = le16_to_cpu(pkt->le_length);
+		u16 pkt_len = le16_to_cpu(pkt->le_length);
 		size_t pkt_size = UP_PKT_HDR_SIZE + pkt_len;
 		size_t hdr_off = 0;
 
@@ -171,7 +171,7 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		drv_data->building_frame = true;
 
 		bool has_gravity_sensor = (current_flags & 0x01) != 0;
-		uint8_t other_flags = (current_flags >> 2) & 0x3F;
+		u8 other_flags = (current_flags >> 2) & 0x3F;
 
 		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
 			size_t payload_start = ctx->index + TOTAL_USB_HEADER_SIZE;

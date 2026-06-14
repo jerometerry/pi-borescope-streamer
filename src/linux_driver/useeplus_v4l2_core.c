@@ -92,12 +92,9 @@ static void up_kill_urbs(struct up_drv_data *drv_data)
 	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (drv_data->urbs[i]) {
 			if (drv_data->urb_buffers[i]) {
-				usb_free_coherent(
-					drv_data->usb_dev,
-					BULK_TRANSFER_SIZE,
-					drv_data->urb_buffers[i],
-					drv_data->urb_dma_addrs[i]
-				);
+				usb_free_coherent(drv_data->usb_dev, BULK_TRANSFER_SIZE,
+						  drv_data->urb_buffers[i],
+						  drv_data->urb_dma_addrs[i]);
 				drv_data->urb_buffers[i] = NULL;
 			}
 			usb_free_urb(drv_data->urbs[i]);
@@ -463,12 +460,9 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 			return -ENOMEM;
 		}
 
-		drv_data->urb_buffers[i] = usb_alloc_coherent(
-			usb_dev,
-			BULK_TRANSFER_SIZE,
-			GFP_KERNEL,
-			&drv_data->urb_dma_addrs[i]
-		);
+		drv_data->urb_buffers[i] = usb_alloc_coherent(usb_dev, BULK_TRANSFER_SIZE,
+							      GFP_KERNEL,
+							      &drv_data->urb_dma_addrs[i]);
 
 		if (!drv_data->urb_buffers[i]) {
 			dev_err(&interface->dev, "usb_alloc_coherent failed\n");
@@ -688,7 +682,7 @@ static int up_probe(struct usb_interface *interface, const struct usb_device_id 
 	for (int i = 0; i < HEARTBEAT_SINK_ITERATIONS; ++i) {
 		usb_bulk_msg(usb_dev, usb_rcvbulkpipe(usb_dev, drv_data->iap_in_ep),
 			     iap_heartbeat_sink, HEARTBEAT_SINK_BUFFER_SIZE, &actual_len,
-			     HEARTBEAT_SINK_TIMEOUT_MS );
+			     HEARTBEAT_SINK_TIMEOUT_MS);
 	}
 	kfree(iap_heartbeat_sink);
 
