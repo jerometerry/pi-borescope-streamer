@@ -63,7 +63,8 @@ uninstall:
 	echo "Module $(MODULE_NAME) not loaded or not found."
 
 rmmod:
-	sudo rmmod $(MODULE_NAME)
+	@-sudo rmmod $(MODULE_NAME) || \
+	echo "Module $(MODULE_NAME) not loaded or not found."
 
 lsmod:
 	lsmod | grep $(MODULE_NAME)
