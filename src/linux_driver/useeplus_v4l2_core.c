@@ -62,19 +62,19 @@ static int useeplus_queue_setup(
 	struct device *alloc_devs[])
 {
 	if (*nplanes)
-		return sizes[0] < max_frame_size ? -EINVAL : 0;
+		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
 
 	*nplanes = 1;
-	sizes[0] = max_frame_size;
+	sizes[0] = MAX_FRAME_SIZE;
 	return 0;
 }
 
 static int useeplus_buf_prepare(struct vb2_buffer *vb)
 {
-	if (vb2_plane_size(vb, 0) < max_frame_size)
+	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
 		return -EINVAL;
 
-	vb2_set_plane_payload(vb, 0, max_frame_size);
+	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
 	return 0;
 }
 
@@ -112,7 +112,7 @@ static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 			if (drv_data->urb_buffers[i]) {
 				usb_free_coherent(
 					drv_data->usb_dev,
-					bulk_transfer_size,
+					BULK_TRANSFER_SIZE,
 					drv_data->urb_buffers[i],
 					drv_data->urb_dma_addrs[i]
 				);
@@ -354,7 +354,7 @@ static int useeplus_vidioc_fmt_vid_cap(
 	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
 	f->fmt.pix.field = V4L2_FIELD_NONE;
 	f->fmt.pix.bytesperline	= 0;
-	f->fmt.pix.sizeimage = max_frame_size;
+	f->fmt.pix.sizeimage = MAX_FRAME_SIZE;
 	f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
 
 	return 0;
@@ -496,7 +496,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	}
 
 	// Append incoming block to decoding workspace
-	if (drv_data->decode_buf_len + urb->actual_length <= bulk_transfer_size * 2) {
+	if (drv_data->decode_buf_len + urb->actual_length <= BULK_TRANSFER_SIZE * 2) {
 		memcpy(drv_data->decode_buf + drv_data->decode_buf_len,
 		       urb->transfer_buffer, urb->actual_length);
 		drv_data->decode_buf_len += urb->actual_length;
@@ -546,7 +546,7 @@ static int useeplus_alloc_urbs(struct useeplus_drv_data *drv_data)
 
 		drv_data->urb_buffers[i] = usb_alloc_coherent(
 			usb_dev,
-			bulk_transfer_size,
+			BULK_TRANSFER_SIZE,
 			GFP_KERNEL,
 			&drv_data->urb_dma_addrs[i]
 		);
@@ -561,7 +561,7 @@ static int useeplus_alloc_urbs(struct useeplus_drv_data *drv_data)
 			usb_dev,
 			usb_rcvbulkpipe(usb_dev, drv_data->video_in_ep),
 			drv_data->urb_buffers[i],
-			bulk_transfer_size,
+			BULK_TRANSFER_SIZE,
 			useeplus_read_bulk_callback,
 			drv_data
 		);
@@ -685,13 +685,13 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	}
 
 	/* Memory Allocations */
-	drv_data->frame_buf = vzalloc(max_frame_size);
+	drv_data->frame_buf = vzalloc(MAX_FRAME_SIZE);
 	if (!drv_data->frame_buf) {
 		retval = -ENOMEM;
 		goto error_release_iap;
 	}
 
-	drv_data->decode_buf = kzalloc(bulk_transfer_size * 2, GFP_KERNEL);
+	drv_data->decode_buf = kzalloc(BULK_TRANSFER_SIZE * 2, GFP_KERNEL);
 	if (!drv_data->decode_buf) {
 		retval = -ENOMEM;
 		goto error_release_iap;
