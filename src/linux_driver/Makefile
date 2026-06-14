@@ -97,7 +97,7 @@ check-stack: default
 	objdump -d useeplus_v4l2.ko | $(KDIR)/scripts/checkstack.pl aarch64
 
 check-patch:
-	$(KDIR)/scripts/checkpatch.pl --strict --file ./*.c ./*.h
+	$(KDIR)/scripts/checkpatch.pl --strict --no-tree --file ./*.c ./*.h
 
 check-includes:
 	$(KDIR)/scripts/checkincludes.pl *.c *.h
