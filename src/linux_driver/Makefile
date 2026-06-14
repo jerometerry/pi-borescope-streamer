@@ -1,5 +1,5 @@
 .PHONY: default smatch coccicheck clean \
-        install install-debug install-with-deps \
+        install install-debug install-without-deps \
         remove uninstall check-status insert \
         check-deps check-stack check-patch check-includes
 
@@ -32,7 +32,7 @@ coccicheck:
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
 
-install: clean default
+install-without-deps: clean default
 	@echo "=== Unloading existing module ==="
 	-sudo rmmod $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
 	@echo "=== Loading New Module ==="
@@ -43,9 +43,9 @@ install: clean default
 	@dmesg | tail -n 5
 
 install-debug:
-	$(MAKE) install DEBUG=1
+	$(MAKE) install-with-deps DEBUG=1
 
-install-with-deps: clean default
+install: clean default
 	@echo "=== Unloading existing module ==="
 	-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
 	@echo "=== Copying to Kernel Tree ==="
@@ -82,7 +82,8 @@ check-deps: default
 		echo "Dependencies found: $$deps"; \
 		echo "--- Status ---"; \
 		echo "$$deps" | tr ',' '\n' | while read dep; do \
-			if lsmod | grep -q "^$$dep"; then \
+			dep_us=$$(echo "$$dep" | tr '-' '_'); \
+			if lsmod | grep -q "^$$dep_us"; then \
 				echo "  [OK]      $$dep is currently loaded."; \
 			else \
 				echo "  [MISSING] $$dep is NOT loaded!"; \
