@@ -68,6 +68,7 @@ static void up_buf_queue(struct vb2_buffer *vb)
 	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
 	struct up_buffer *buf = container_of(v4l2_buf, struct up_buffer, vb2_buffer);
 	unsigned long flags;
+
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
 	list_add_tail(&buf->list, &drv_data->ready_queue);
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
@@ -76,6 +77,7 @@ static void up_buf_queue(struct vb2_buffer *vb)
 static void up_kill_urbs(struct up_drv_data *drv_data)
 {
 	int i;
+
 	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
 	// Kill ALL URBs first. This guarantees every callback is stopped
@@ -103,6 +105,7 @@ static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens, 
 	int retval;
 	int actual_length;
 	u8 *dma_buffer;
+
 	dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
 	if (!dma_buffer)
 		return -ENOMEM;
@@ -119,6 +122,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	unsigned long flags;
 	int urbs_submitted = 0;
 	int i, retval;
+
 	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->streaming))
 		return 0;
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
@@ -239,6 +243,7 @@ static const struct v4l2_file_operations up_v4l2_fops = {
 static int up_vidioc_querycap(struct file *file, void *priv, struct v4l2_capability *cap)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
+
 	strscpy(cap->driver, CAP_DRIVER, sizeof(cap->driver));
 	strscpy(cap->card, CAP_CARD, sizeof(cap->card));
 	usb_make_path(drv_data->usb_dev, cap->bus_info, sizeof(cap->bus_info));
@@ -250,6 +255,7 @@ static int up_vidioc_querycap(struct file *file, void *priv, struct v4l2_capabil
 static int up_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
+
 	f->fmt.pix.width = drv_data->width;
 	f->fmt.pix.height = drv_data->height;
 	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
@@ -295,7 +301,6 @@ static int up_vidioc_g_parm(struct file *file, void *priv, struct v4l2_streampar
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
 	sp->parm.capture.timeperframe.numerator = 1;
 	sp->parm.capture.timeperframe.denominator = 30;
-
 	return 0;
 }
 
@@ -401,6 +406,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 	struct usb_device *usb_dev = drv_data->usb_dev;
 	struct usb_interface *interface = drv_data->itf;
 	int i;
+
 	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		drv_data->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
 		if (!drv_data->urbs[i]) {
@@ -437,6 +443,7 @@ static int up_resume(struct usb_interface *intf)
 static void up_disconnect(struct usb_interface *interface)
 {
 	struct up_drv_data *drv_data = usb_get_intfdata(interface);
+
 	usb_set_intfdata(interface, NULL);
 	// Ignore the iAP interface disconnect.
 	// The Video Interface disconnect handles the full device teardown.
@@ -468,6 +475,7 @@ static struct usb_driver up_driver = {
 static void up_device_release(struct v4l2_device *v4l2_dev)
 {
 	struct up_drv_data *drv_data = container_of(v4l2_dev, struct up_drv_data, v4l2_dev);
+
 	vfree(drv_data->frame_buf);
 	kfree(drv_data->decode_buf);
 	kfree(drv_data);
