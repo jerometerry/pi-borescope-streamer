@@ -17,6 +17,9 @@ endif
 default:
 	$(MAKE) C=1 -C $(KDIR) M=$(PWD) W=1 modules
 
+coccicheck:
+	$(MAKE) -C $(KDIR) M=$(PWD) W=1 coccicheck
+
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
 
