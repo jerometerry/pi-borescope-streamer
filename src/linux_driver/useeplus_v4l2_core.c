@@ -456,9 +456,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 			dev_err(&interface->dev, "usb_alloc_urb failed\n");
 			return -ENOMEM;
 		}
-		drv_data->urb_buffers[i] = usb_alloc_coherent(
-			usb_dev, BULK_TRANSFER_SIZE, GFP_KERNEL,
-			&drv_data->urb_dma_addrs[i]);
+		drv_data->urb_buffers[i] = usb_alloc_coherent(usb_dev, BULK_TRANSFER_SIZE, GFP_KERNEL, &drv_data->urb_dma_addrs[i]);
 
 		if (!drv_data->urb_buffers[i]) {
 			dev_err(&interface->dev, "usb_alloc_coherent failed\n");
@@ -595,11 +593,9 @@ static int up_probe(struct usb_interface *interface,
 		ep_desc = &video_alt->endpoint[i].desc;
 		if (usb_endpoint_num(ep_desc) == UP_VIDEO_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
-				drv_data->video_in_ep =
-					ep_desc->bEndpointAddress;
+				drv_data->video_in_ep = ep_desc->bEndpointAddress;
 			else
-				drv_data->video_out_ep =
-					ep_desc->bEndpointAddress;
+				drv_data->video_out_ep = ep_desc->bEndpointAddress;
 		}
 	}
 	/* Dynamically Map Endpoints for iAP interface */
@@ -676,8 +672,7 @@ static int up_probe(struct usb_interface *interface,
 			"usb_set_interface failed with error %d\n", retval);
 		goto error_unreg_v4l2;
 	}
-	retval = usb_clear_halt(
-		usb_dev, usb_rcvbulkpipe(usb_dev, drv_data->video_in_ep));
+	retval = usb_clear_halt(usb_dev, usb_rcvbulkpipe(usb_dev, drv_data->video_in_ep));
 	if (retval)
 		dev_info(&interface->dev,
 			 "usb_clear_halt failed with error %d\n", retval);
