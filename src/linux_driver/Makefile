@@ -15,7 +15,7 @@ ccflags-y += -DDEBUG
 endif
 
 default:
-	$(MAKE) -C $(KDIR) M=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) W=1 modules
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
