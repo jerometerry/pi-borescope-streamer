@@ -522,8 +522,12 @@ resubmit:
 	// Safe Pipeline Resubmission check
 	if (test_bit(STREAM_CLIENT_READY, &drv_data->streaming)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
-		if (retval && retval != -ENODEV && retval != -ESHUTDOWN && retval != -ENOENT) {
-			dev_err(&drv_data->interface->dev, "usb_submit_urb failed: %d\n", retval);
+		if (retval &&
+			retval != -ENODEV &&
+			retval != -ESHUTDOWN &&
+			retval != -ENOENT) {
+			dev_err(&drv_data->interface->dev,
+				"usb_submit_urb failed: %d\n", retval);
 		}
 	}
 }
