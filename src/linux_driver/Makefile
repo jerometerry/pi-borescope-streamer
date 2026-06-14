@@ -59,11 +59,11 @@ check:
 check-stack: clean default
 	objdump -d useeplus_v4l2.ko | $(KDIR)/scripts/checkstack.pl aarch64
 
-check-patch:
+check-patch: clean
 	$(KDIR)/scripts/checkpatch.pl --file ./*.c ./*.h
 
 check-includes:
-	$(KDIR)/scripts/checkincludes.pl --file ./*.c ./*.h
+	$(KDIR)/scripts/checkincludes.pl
 
 check-legal:
 	$(KDIR)/scripts/spdxcheck.py --file ./*.c ./*.h
