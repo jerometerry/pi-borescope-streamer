@@ -27,7 +27,7 @@ smatch:
 	$(MAKE) CHECK=$(SMATCH) C=1 -C $(KDIR) M=$(PWD) modules
 
 coccicheck:
-	$(MAKE) -C $(KDIR) M=$(PWD) W=1 V=0 coccicheck MODE=report
+	$(MAKE) -C $(KDIR) M=$(PWD) W=1 coccicheck VERBOSE=0 MODE=report
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
