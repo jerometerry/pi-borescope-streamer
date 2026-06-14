@@ -6,8 +6,7 @@
 #include <asm/byteorder.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
-
-#include "useeplus.h"
+#include "include/useeplus.h"
 
 static bool up_is_valid_header(struct up_pkt_hdr *pkt)
 {

@@ -15,7 +15,7 @@
 #include <media/v4l2-fh.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
-#include "useeplus.h"
+#include "include/useeplus.h"
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("Jerome Terry");

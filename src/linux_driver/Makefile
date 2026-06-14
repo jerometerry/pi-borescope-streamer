@@ -96,8 +96,9 @@ check-deps: default
 check-stack: default
 	objdump -d useeplus_v4l2.ko | $(KDIR)/scripts/checkstack.pl aarch64
 
-makefilecheck-patch:
-	@mkdir -p .tmp_checkpatch/include; @export SRCTREE=$$(pwd)/.tmp_checkpatch; $(KDIR)/scripts/checkpatch.pl --strict --no-tree --file useeplus_v4l2_core.c useeplus.c useeplus.h; rm -rf .tmp_checkpatch
+check-patch:
+	@$(KDIR)/scripts/checkpatch.pl --strict --no-tree --root=$$(pwd) --file useeplus_v4l2_core.c useeplus.c ./include/useeplus.h
+
 
 check-includes:
-	$(KDIR)/scripts/checkincludes.pl *.c *.h
+	$(KDIR)/scripts/checkincludes.pl *.c ./*.h
