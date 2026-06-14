@@ -42,15 +42,15 @@ MODULE_VERSION("0.1.0");
 #define JPEG_START_OF_IMG_MARKER			0xD8
 #define JPEG_END_OF_IMG_MARKER				0xD9
 
-#define RESOLUTION_WIDTH					640
-#define RESOLUTION_HEIGHT					480
-#define DIAGNOSTIC_LOG_ITERATIONS			300
+static const u32 resolution_width = 640;
+static const u32 resolution_height = 480;
+static const int DIAGNOSTIC_LOG_ITERATIONS = 300;
 
-#define FLAG_STREAMING						0
-#define USB_TIMEOUT_MS						1000
-#define BULK_TRANSFER_COUNT					4
+static const long flag_streaming = 0;
+static const int usb_timeout_ms = 1000;
+static const int bulk_transfer_count = 4;
 
-#define MAX_FRAME_SIZE						(256 * 1024)
+static const unsigned int max_frame_size = (256 * 1024);
 
 static const size_t bulk_transfer_size = 16384;
 
@@ -104,9 +104,9 @@ struct useeplus_drv_data {
 	spinlock_t ready_queue_lock;
 	u64 sequence;
 
-	struct urb *urbs[BULK_TRANSFER_COUNT];
-	u8 *urb_buffers[BULK_TRANSFER_COUNT];
-	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
+	struct urb *urbs[bulk_transfer_count];
+	u8 *urb_buffers[bulk_transfer_count];
+	dma_addr_t urb_dma_addrs[bulk_transfer_count];
 
 	unsigned long flags;
 	bool streaming_video;
@@ -138,19 +138,19 @@ static int useeplus_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 				struct device *alloc_devs[])
 {
 	if (*nplanes)
-		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
+		return sizes[0] < max_frame_size ? -EINVAL : 0;
 
 	*nplanes = 1;
-	sizes[0] = MAX_FRAME_SIZE;
+	sizes[0] = max_frame_size;
 	return 0;
 }
 
 static int useeplus_buf_prepare(struct vb2_buffer *vb)
 {
-	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
+	if (vb2_plane_size(vb, 0) < max_frame_size)
 		return -EINVAL;
 
-	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
+	vb2_set_plane_payload(vb, 0, max_frame_size);
 	return 0;
 }
 
@@ -168,18 +168,18 @@ static void useeplus_buf_queue(struct vb2_buffer *vb)
 
 static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 {
-	clear_bit(FLAG_STREAMING, &drv_data->flags);
+	clear_bit(flag_streaming, &drv_data->flags);
 
 	// Kill ALL URBs first. This guarantees every callback is stopped
 	// and no new ones can be submitted.
-	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < bulk_transfer_count; ++i) {
 		if (drv_data->urbs[i])
 			usb_kill_urb(drv_data->urbs[i]);
 	}
 
 	// Safe Zone: No callbacks can possibly be running now.
 	// It is now 100% safe to free the memory structures.
-	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < bulk_transfer_count; ++i) {
 		if (drv_data->urbs[i]) {
 			if (drv_data->urb_buffers[i]) {
 				usb_free_coherent(
@@ -213,7 +213,7 @@ static int useeplus_write_msg(struct useeplus_drv_data *drv_data, u8 endpoint_ad
 		dma_buffer,
 		len,
 		&actual_length,
-		USB_TIMEOUT_MS
+		usb_timeout_ms
 	);
 
 	kfree(dma_buffer);
@@ -233,7 +233,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	drv_data->streaming_video = true;
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 
-	if (test_and_set_bit(FLAG_STREAMING, &drv_data->flags))
+	if (test_and_set_bit(flag_streaming, &drv_data->flags))
 		return 0;
 
 	retval = useeplus_write_msg(drv_data, drv_data->iap_out_ep, iap_auth_handshake, sizeof(iap_auth_handshake));
@@ -252,7 +252,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	smp_mb__after_atomic();
 
 	/* Submit URBs to begin pulling the stream */
-	for (urbs_submitted = 0; urbs_submitted < BULK_TRANSFER_COUNT; ++urbs_submitted) {
+	for (urbs_submitted = 0; urbs_submitted < bulk_transfer_count; ++urbs_submitted) {
 		retval = usb_submit_urb(drv_data->urbs[urbs_submitted], GFP_KERNEL);
 		if (retval) {
 			dev_err(&drv_data->interface->dev, "Failed to submit URBs: %d\n", retval);
@@ -263,7 +263,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	return 0;
 
 error_start:
-	clear_bit(FLAG_STREAMING, &drv_data->flags);
+	clear_bit(flag_streaming, &drv_data->flags);
 
 	/* Kill any URBs that successfully submitted before the failure */
 	for (int i = 0; i < urbs_submitted; ++i)
@@ -291,9 +291,9 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 	struct useeplus_buffer *buf;
 	unsigned long flags;
 
-	clear_bit(FLAG_STREAMING, &drv_data->flags);
+	clear_bit(flag_streaming, &drv_data->flags);
 
-	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < bulk_transfer_count; ++i) {
 		if (drv_data->urbs[i])
 			usb_kill_urb(drv_data->urbs[i]);
 	}
@@ -355,12 +355,12 @@ static int useeplus_vidioc_querycap(struct file *file, void *priv, struct v4l2_c
 
 static int useeplus_vidioc_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
-	f->fmt.pix.width		= RESOLUTION_WIDTH;
-	f->fmt.pix.height		= RESOLUTION_HEIGHT;
+	f->fmt.pix.width		= resolution_width;
+	f->fmt.pix.height		= resolution_height;
 	f->fmt.pix.pixelformat	= V4L2_PIX_FMT_MJPEG;
 	f->fmt.pix.field		= V4L2_FIELD_NONE;
 	f->fmt.pix.bytesperline	= 0;
-	f->fmt.pix.sizeimage	= MAX_FRAME_SIZE;
+	f->fmt.pix.sizeimage	= max_frame_size;
 	f->fmt.pix.colorspace	= V4L2_COLORSPACE_SRGB;
 
 	return 0;
@@ -630,7 +630,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			size_t payload_start = current_parse_index + total_usb_header_size;
 			size_t payload_size = total_packet_size - total_usb_header_size;
 
-			if (drv_data->current_frame_len + payload_size <= MAX_FRAME_SIZE) {
+			if (drv_data->current_frame_len + payload_size <= max_frame_size) {
 				memcpy(drv_data->current_frame + drv_data->current_frame_len,
 					   drv_data->parse_buffer + payload_start, payload_size);
 				drv_data->current_frame_len += payload_size;
@@ -650,7 +650,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	}
 
 resubmit:
-	if (test_bit(FLAG_STREAMING, &drv_data->flags)) {
+	if (test_bit(flag_streaming, &drv_data->flags)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval) {
 			if (retval != -ENODEV && retval != -ESHUTDOWN && retval != -ENOENT)
@@ -666,7 +666,7 @@ static int useeplus_alloc_urbs(struct useeplus_drv_data *drv_data)
 	struct usb_device *usb_dev = drv_data->usb_dev;
 	struct usb_interface *interface = drv_data->interface;
 
-	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < bulk_transfer_count; ++i) {
 		drv_data->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
 		if (!drv_data->urbs[i]) {
 			dev_err(&interface->dev, "usb_alloc_urb failed\n");
@@ -708,7 +708,7 @@ static int useeplus_suspend(struct usb_interface *intf, pm_message_t message)
 
 static int useeplus_resume(struct usb_interface *intf)
 {
-	/* Resubmit URBs if FLAG_STREAMING is true */
+	/* Resubmit URBs if flag_streaming is true */
 	return 0;
 }
 
@@ -809,7 +809,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	}
 
 	/* Memory Allocations */
-	drv_data->current_frame = vzalloc(MAX_FRAME_SIZE);
+	drv_data->current_frame = vzalloc(max_frame_size);
 	if (!drv_data->current_frame) {
 		retval = -ENOMEM;
 		goto error_release_iap;
