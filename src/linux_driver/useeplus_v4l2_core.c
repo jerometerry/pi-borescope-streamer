@@ -795,7 +795,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	}
 	kfree(iap_heartbeat_sink);
 
-	retval = usb_set_interface(usb_dev, USEEPLUS_VIDEO_INTERFACE, useeplus_alt_setting_video_enable);
+	retval = usb_set_interface(usb_dev, USEEPLUS_VIDEO_INTERFACE, USEEPLUS_ALT_VIDEO_ENABLE);
 	if (retval) {
 		dev_err(&interface->dev, "usb_set_interface failed with error %d\n", retval);
 		goto error_unreg_v4l2;
