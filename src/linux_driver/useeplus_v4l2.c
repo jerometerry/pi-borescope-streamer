@@ -33,14 +33,15 @@ MODULE_VERSION("0.1.0");
 
 #define HEARTBEAT_SINK_BUFFER_SIZE			512
 #define HEARTBEAT_SINK_ITERATIONS			30
-#define HEARTBEAT_SINK_TIMEOUT_MS			100
+static const int HEARTBEAT_SINK_TIMEOUT_MS = 100;
 
 static const u16 USB_PACKET_DELIMETER = 0xBBAA;
 static const u8 VIDEO_CAMERA_ID = 0x0B;
 static const u8 GRAVITY_SENSOR_ID = 0x07;
 
 static const size_t MAX_SCAN_LIMIT = 160;
-static const u8 JPEG_SOI_MARKERS_MAX_POSITION = 256;
+static const size_t JPEG_SOI_MARKERS_MAX_POSITION = 256;
+
 static const u8 JPEG_BOUNDARY_MARKER = 0xFF;
 static const u8 JPEG_START_OF_IMG_MARKER = 0xD8;
 static const u8 JPEG_END_OF_IMG_MARKER = 0xD9;
@@ -770,7 +771,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	struct useeplus_drv_data *drv_data = NULL;
 	struct vb2_queue *q;
 	u8 *iap_heartbeat_sink;
-	int i, retval, actual_len;
+	int retval, actual_len;
 
 	/* Only bind the driver when the Video Interface is probed */
 	if (interface->cur_altsetting->desc.bInterfaceNumber != USEEPLUS_VIDEO_INTERFACE)
@@ -830,7 +831,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 		goto error_release_iap;
 	}
 
-	for (i = 0; i < video_alt->desc.bNumEndpoints; ++i) {
+	for (int i = 0; i < video_alt->desc.bNumEndpoints; ++i) {
 		ep_desc = &video_alt->endpoint[i].desc;
 		if (usb_endpoint_num(ep_desc) == USEEPLUS_VIDEO_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
@@ -841,7 +842,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	}
 
 	/* Dynamically Map Endpoints for iAP interface */
-	for (i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; ++i) {
+	for (int i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; ++i) {
 		ep_desc = &iap_intf->cur_altsetting->endpoint[i].desc;
 		if (usb_endpoint_num(ep_desc) == USEEPLUS_IAP_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
@@ -901,7 +902,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 		goto error_unreg_v4l2;
 	}
 
-	for (i = 0; i < HEARTBEAT_SINK_ITERATIONS; ++i) {
+	for (int i = 0; i < HEARTBEAT_SINK_ITERATIONS; ++i) {
 		usb_bulk_msg(
 			usb_dev,
 			usb_rcvbulkpipe(usb_dev, drv_data->iap_in_ep),
