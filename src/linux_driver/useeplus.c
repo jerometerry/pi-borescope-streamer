@@ -13,6 +13,7 @@ static bool up_is_valid_header(struct up_pkt_hdr *pkt)
 {
 	u16 del = le16_to_cpu(pkt->le_delimeter);
 	u8 dev_id = pkt->le_device_id;
+
 	return (del == UP_PKT_DEL && (dev_id == VIDEO_CAMERA_ID || dev_id == GRAVITY_SENSOR_ID));
 }
 
@@ -24,6 +25,7 @@ static bool up_check_ghost_header(struct up_drv_data *drv_data, struct up_parse_
 	size_t ghost_limit = min_t(size_t, MAX_GHOST_HEADER_OFFSET, last_index);
 	size_t hdr_sz = UP_PKT_HDR_SIZE;
 	size_t offset;
+
 	for (offset = hdr_sz; offset <= ghost_limit; ++offset) {
 		u8 *offset_hdr_ptr = drv_data->decode_buf + ctx->index + offset;
 		struct up_pkt_hdr *offset_pkt = (struct up_pkt_hdr *)offset_hdr_ptr;
@@ -64,20 +66,20 @@ static void up_find_jpeg_boundaries(struct up_drv_data *drv_data, size_t *soi_of
 static void up_deliver_frame_to_client(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 {
 	struct up_buffer *vbuf;
-	size_t soi_offset = 0;
-	size_t eoi_offset = 0;
-	bool building_frame;
-	bool found_eoi;
+	size_t soi_offset, eoi_offset, img_size;
+	bool building_frame, found_eoi;
+	void *vaddr;
+
 	drv_data->dbg_frames_found++;
 	up_find_jpeg_boundaries(drv_data, &soi_offset, &eoi_offset, &building_frame, &found_eoi);
 	if (building_frame && found_eoi && soi_offset < eoi_offset) {
-		size_t img_size = eoi_offset - soi_offset;
+		img_size = eoi_offset - soi_offset;
 		drv_data->frame_counter++;
 		spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
 		if (!list_empty(&drv_data->ready_queue)) {
 			vbuf = list_first_entry(&drv_data->ready_queue, struct up_buffer, list);
 			list_del(&vbuf->list);
-			void *vaddr = vb2_plane_vaddr(&vbuf->vb2_buffer.vb2_buf, 0);
+			vaddr = vb2_plane_vaddr(&vbuf->vb2_buffer.vb2_buf, 0);
 			if (vaddr) {
 				memcpy(vaddr, drv_data->frame_buf + soi_offset, img_size);
 				vb2_set_plane_payload(&vbuf->vb2_buffer.vb2_buf, 0, img_size);
@@ -113,6 +115,7 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 	struct up_pkt_hdr *pkt;
 	struct up_pl_hdr *payload;
 	bool has_gravity_sensor;
+
 	while (ctx->index + TOTAL_USB_HEADER_SIZE <= drv_data->decode_buf_len) {
 		hdr_ptr = drv_data->decode_buf + ctx->index;
 		pkt = (struct up_pkt_hdr *)(hdr_ptr);
