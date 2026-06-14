@@ -119,12 +119,21 @@ static void up_deliver_frame_to_client(struct up_drv_data *drv_data, struct up_p
 
 void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 {
+	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off;
+	u8 current_frame_id, current_camera_number, current_flags, other_flags;
+	u16 pkt_len;
+	u8 *hdr_ptr;
+	struct up_pkt_hdr *pkt;
+	struct up_pl_hdr *payload;
+
+	bool has_gravity_sensor;
+
 	while (ctx->index + TOTAL_USB_HEADER_SIZE <= drv_data->decode_buf_len) {
-		u8 *hdr_ptr = drv_data->decode_buf + ctx->index;
-		struct up_pkt_hdr *pkt = (struct up_pkt_hdr *)(hdr_ptr);
-		u16 pkt_len = le16_to_cpu(pkt->le_length);
-		size_t pkt_size = UP_PKT_HDR_SIZE + pkt_len;
-		size_t hdr_off = 0;
+		hdr_ptr = drv_data->decode_buf + ctx->index;
+		pkt = (struct up_pkt_hdr *)(hdr_ptr);
+		pkt_len = le16_to_cpu(pkt->le_length);
+		pkt_size = UP_PKT_HDR_SIZE + pkt_len;
+		hdr_off = 0;
 
 		if (!up_is_valid_header(pkt)) {
 			ctx->index++;
@@ -139,7 +148,7 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 
 		drv_data->dbg_packets_found++;
 
-		if (pkt_size > (BULK_TRANSFER_SIZE * 2)) {
+		if (pkt_len > (BULK_TRANSFER_SIZE * 2)) {
 			dev_dbg(&drv_data->itf->dev,
 				"Corrupted pkt_len %u, skipping byte\n", pkt_len);
 			ctx->index++;
@@ -154,12 +163,12 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 			continue;
 		}
 
-		size_t pl_off = ctx->index + UP_PKT_HDR_SIZE;
-		struct up_pl_hdr *payload = (struct up_pl_hdr *)(drv_data->decode_buf + pl_off);
+		pl_off = ctx->index + UP_PKT_HDR_SIZE;
+		payload = (struct up_pl_hdr *)(drv_data->decode_buf + pl_off);
 
-		u8 current_frame_id = payload->le_frame_id;
-		u8 current_camera_number = payload->le_camera_number;
-		u8 current_flags = payload->le_flags;
+		current_frame_id = payload->le_frame_id;
+		current_camera_number = payload->le_camera_number;
+		current_flags = payload->le_flags;
 
 		if (drv_data->building_frame &&
 		    drv_data->frame_len > 0 &&
@@ -170,23 +179,18 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		drv_data->frame_id = current_frame_id;
 		drv_data->building_frame = true;
 
-		bool has_gravity_sensor = (current_flags & 0x01) != 0;
-		u8 other_flags = (current_flags >> 2) & 0x3F;
+		has_gravity_sensor = (current_flags & 0x01) != 0;
+		other_flags = (current_flags >> 2) & 0x3F;
 
 		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
-			size_t payload_start = ctx->index + TOTAL_USB_HEADER_SIZE;
-			size_t payload_size = pkt_size - TOTAL_USB_HEADER_SIZE;
-			size_t combined_len = drv_data->frame_len + payload_size;
-
-			if (combined_len <= MAX_FRAME_SIZE) {
-				u8 *jpg_ptr = drv_data->frame_buf + drv_data->frame_len;
-				u8 *decode_ptr = drv_data->decode_buf + payload_start;
-
-				memcpy(jpg_ptr, decode_ptr, payload_size);
-				drv_data->frame_len += payload_size;
+			pl_start = ctx->index + TOTAL_USB_HEADER_SIZE;
+			pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
+			if ((drv_data->frame_len + pl_size) <= MAX_FRAME_SIZE) {
+				memcpy(drv_data->frame_buf + drv_data->frame_len,
+				       drv_data->decode_buf + pl_start, pl_size);
+				drv_data->frame_len += pl_size;
 			}
 		}
-
 		ctx->index += pkt_size;
 	}
 }
