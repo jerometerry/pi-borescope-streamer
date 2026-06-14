@@ -56,5 +56,14 @@ check:
 		-I$(KDIR)/arch/arm64/include/uapi \
 		useeplus_v4l2_core.c useeplus.c
 
-style:
+check-stack:
+	$(KDIR)/scripts/checkstack.pl --file ./*.c ./*.h
+
+check-patch:
 	$(KDIR)/scripts/checkpatch.pl --file ./*.c ./*.h
+
+check-includes:
+	$(KDIR)/scripts/checkincludes.pl --file ./*.c ./*.h
+
+check-legal:
+	$(KDIR)/scripts/spdxcheck.py --file ./*.c ./*.h
