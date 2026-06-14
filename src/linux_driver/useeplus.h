@@ -20,7 +20,7 @@
 #define USEEPLUS_DEF_HEIGHT	480
 
 #define JPEG_SOI_MARKERS_MAX_POSITION  256
-#define MAX_GHOST_HEADER_OFFSET        32
+#define MAX_GHOST_HEADER_OFFSET        160
 
 /* Structural Protocol Sizing Expressions */
 #define USB_PACKET_HEADER_SIZE         (sizeof(struct usb_packet_header))
