@@ -1,4 +1,5 @@
 obj-m += useeplus_v4l2.o
+useeplus_v4l2-y := useeplus_v4l2_core.o useeplus.o
 
 MODULE_NAME := useeplus_v4l2
 GIT_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "no-git")
@@ -45,7 +46,7 @@ check:
 		-I$(KDIR)/include/generated \
 		-I$(KDIR)/include/uapi \
 		-I$(KDIR)/arch/arm64/include/uapi \
-		$(MODULE_NAME).c
+		useeplus_v4l2_core.c useeplus.c
 
 style:
-	$(KDIR)/scripts/checkpatch.pl --file ./$(MODULE_NAME).c
+	$(KDIR)/scripts/checkpatch.pl --file ./*.c ./*.h

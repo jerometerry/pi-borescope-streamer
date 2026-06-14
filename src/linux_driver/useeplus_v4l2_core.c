@@ -15,23 +15,19 @@
 #include <media/v4l2-fh.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
+#include "useeplus.h"
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
-#define BULK_TRANSFER_COUNT 4
 #define USEEPLUS_IAP_INTERFACE 0
 #define USEEPLUS_VIDEO_INTERFACE 1
 
 #define CAP_DRIVER "Useeplus"
 #define CAP_CARD "Useeplus non-UVC Borescope"
 #define V4L2_INPUT_NAME "Borescope Lens Channel 0"
-
-#define DIAG_DATA_FORMAT "| URBs: %lu | USB Errors: %lu | Packets: %lu " \
-			 "| Frames: %lu | Delivered: %lu | Drop SOI: %lu " \
-			 "| Drop EOI: %lu | Drop Q: %lu | Ghosts: %lu |\n"
 
 static const unsigned int useeplus_alt_setting_video_enable = 1;
 
@@ -42,26 +38,11 @@ static const size_t heartbeat_sink_buffer_size = 512;
 static const int heartbeat_sink_iterations = 30;
 static const int heartbeat_sink_timeout_ms = 100;
 
-static const u16 usb_packet_delimeter = 0xBBAA;
-static const u8 video_camera_id = 0x0B;
-static const u8 gravity_sensor_id = 0x07;
-
-static const size_t max_ghost_header_offset = 160;
-static const size_t jpeg_soi_markers_max_position = 256;
-
-static const u8 jpeg_boundary_marker = 0xFF;
-static const u8 jpeg_start_of_img_marker = 0xD8;
-static const u8 jpeg_end_of_img_marker = 0xD9;
-
 static const u32 resolution_width = 640;
 static const u32 resolution_height = 480;
 static const int diagnostic_log_iterations = 300;
 
 static const int usb_timeout_ms = 1000;
-
-static const unsigned int max_frame_size = (256 * 1024);
-
-static const size_t bulk_transfer_size = 16384;
 
 static const u8 iap_auth_handshake[] = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_video_command[] = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
@@ -72,83 +53,6 @@ static const struct usb_device_id useeplus_table[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(usb, useeplus_table);
-
-struct usb_packet_header {
-	__le16 le_delimeter;
-	u8 le_device_id;
-	__le16 le_length;
-} __packed;
-
-struct usb_payload_header {
-	u8 le_frame_id;
-	u8 le_camera_number;
-	u8 le_flags;
-	__le32 le_gravity_sensor;
-} __packed;
-
-static const size_t usb_packet_header_size =
-	sizeof(struct usb_packet_header);
-
-static const size_t usb_payload_header_size =
-	sizeof(struct usb_payload_header);
-
-static const size_t total_usb_header_size =
-	usb_packet_header_size + usb_payload_header_size;
-
-struct useeplus_buffer {
-	struct vb2_v4l2_buffer vb2_buffer;
-	struct list_head list;
-};
-
-enum useeplus_stream_state {
-	STREAM_HW_ACTIVE = 0,
-	STREAM_CLIENT_READY = 1,
-};
-
-struct useeplus_drv_data {
-	struct usb_interface *interface;
-	u8 video_in_ep;
-	u8 video_out_ep;
-	u8 iap_in_ep;
-	u8 iap_out_ep;
-
-	struct mutex v4l2_lock;
-
-	struct usb_device *usb_dev;
-	struct v4l2_device v4l2_dev;
-	struct video_device video_dev;
-
-	struct vb2_queue video_queue;
-	struct list_head ready_queue;
-	spinlock_t ready_queue_lock;
-	u64 sequence;
-
-	struct urb *urbs[BULK_TRANSFER_COUNT];
-	u8 *urb_buffers[BULK_TRANSFER_COUNT];
-	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
-
-	unsigned long streaming;
-
-	u8 *frame_buf;
-	size_t frame_len;
-	int frame_id;
-	bool building_frame;
-
-	u8 *decode_buf;
-	size_t decode_buf_len;
-
-	unsigned int frame_counter;
-
-	unsigned long dbg_urbs_processed;
-	unsigned long dbg_ghost_headers;
-	unsigned long dbg_packets_found;
-	unsigned long dbg_frames_found;
-	unsigned long dbg_frames_dropped_soi;
-	unsigned long dbg_frames_dropped_eoi;
-	unsigned long dbg_frames_dropped_queue;
-	unsigned long dbg_frames_delivered;
-	unsigned long dbg_usb_errors;
-};
 
 static int useeplus_queue_setup(
 	struct vb2_queue *vq,
@@ -547,65 +451,94 @@ struct useeplus_parse_ctx {
 	unsigned long flags;
 };
 
+static bool useeplus_is_valid_header(struct usb_packet_header *pkt)
+{
+	uint16_t delimiter = le16_to_cpu(pkt->le_delimeter);
+	u8 camera_id = pkt->le_device_id;
+
+	return (delimiter == usb_packet_delimeter &&
+		(camera_id == video_camera_id || camera_id == gravity_sensor_id));
+}
+
+static bool useeplus_check_ghost_header(struct useeplus_drv_data *drv_data,
+					struct useeplus_parse_ctx *ctx,
+					size_t *header_offset)
+{
+	size_t buf_len = drv_data->decode_buf_len;
+	size_t last_index = buf_len - ctx->index - 3;
+	size_t ghost_limit = min_t(size_t, max_ghost_header_offset, last_index);
+	size_t hdr_sz = usb_packet_header_size;
+	size_t offset;
+
+	for (offset = hdr_sz; offset <= ghost_limit; ++offset) {
+		u8 *offset_hdr_ptr = drv_data->decode_buf + ctx->index + offset;
+		struct usb_packet_header *offset_pkt = (struct usb_packet_header *)offset_hdr_ptr;
+
+		if (useeplus_is_valid_header(offset_pkt)) {
+			*header_offset = offset;
+			return true; /* Confirmed a ghost header collision */
+		}
+	}
+	return false;
+}
+
+static void useeplus_find_jpeg_boundaries(struct useeplus_drv_data *drv_data,
+					  size_t *soi_offset, size_t *eoi_offset,
+					  bool *building_frame, bool *found_eoi)
+{
+	long j;
+	size_t max_pos = min_t(size_t, jpeg_soi_markers_max_position, drv_data->frame_len);
+
+	*building_frame = false;
+	*found_eoi = false;
+
+	// Forward scan for SOI marker (FF D8)
+	for (j = 0; j + 1 < max_pos; ++j) {
+		if (drv_data->frame_buf[j] == jpeg_boundary_marker &&
+		    drv_data->frame_buf[j + 1] == jpeg_start_of_img_marker) {
+			*soi_offset = j;
+			*building_frame = true;
+			break;
+		}
+	}
+
+	// Backward scan for EOI marker (FF D9)
+	for (j = drv_data->frame_len; j >= 2; --j) {
+		if (drv_data->frame_buf[j - 2] == jpeg_boundary_marker &&
+		    drv_data->frame_buf[j - 1] == jpeg_end_of_img_marker) {
+			*eoi_offset = j;
+			*found_eoi = true;
+			break;
+		}
+	}
+}
+
 static void useeplus_decode_packets(struct useeplus_drv_data *drv_data,
 				    struct useeplus_parse_ctx *ctx)
 {
-	struct useeplus_buffer *vbuf;
-	long j;
-
 	while (ctx->index + total_usb_header_size <= drv_data->decode_buf_len) {
 		u8 *hdr_ptr = drv_data->decode_buf + ctx->index;
 		struct usb_packet_header *pkt = (struct usb_packet_header *)(hdr_ptr);
-
-		uint16_t delimeter = le16_to_cpu(pkt->le_delimeter);
-		u8 camera_id = pkt->le_device_id;
 		uint16_t packet_len = le16_to_cpu(pkt->le_length);
+		size_t total_packet_size = usb_packet_header_size + packet_len;
+		size_t header_offset = 0;
 
-		// Synchronize stream up to header delimiter matches
-		if (delimeter != usb_packet_delimeter ||
-		    (camera_id != video_camera_id && camera_id != gravity_sensor_id)) {
+		// State 1: Stream Alignment Check
+		if (!useeplus_is_valid_header(pkt)) {
 			ctx->index++;
 			continue;
 		}
 
-		// Ghost header filtration validation
-		{
-			bool is_ghost = false;
-			size_t header_offset = 0;
-			size_t buf_len = drv_data->decode_buf_len;
-			size_t last_index = buf_len - ctx->index - 3;
-			size_t ghost_limit = min_t(size_t, max_ghost_header_offset, last_index);
-			size_t hdr_sz = usb_packet_header_size;
-			size_t offset;
-
-			for (offset = hdr_sz; offset <= ghost_limit; ++offset) {
-				u8 *offset_ptr = drv_data->decode_buf;
-				u8 *offset_hdr_ptr = offset_ptr + ctx->index + offset;
-				struct usb_packet_header *offset_pkt =
-					(struct usb_packet_header *)(offset_hdr_ptr);
-
-				uint16_t offset_del = le16_to_cpu(offset_pkt->le_delimeter);
-				u8 offset_camera_id = offset_pkt->le_device_id;
-
-				if (offset_del == usb_packet_delimeter &&
-				    (offset_camera_id == video_camera_id ||
-				     offset_camera_id == gravity_sensor_id)) {
-					is_ghost = true;
-					header_offset = offset;
-					break;
-				}
-			}
-
-			if (is_ghost) {
-				drv_data->dbg_ghost_headers++;
-				ctx->index += header_offset;
-				continue;
-			}
+		// State 2: Ghost Header Filtering Check
+		if (useeplus_check_ghost_header(drv_data, ctx, &header_offset)) {
+			drv_data->dbg_ghost_headers++;
+			ctx->index += header_offset;
+			continue;
 		}
 
 		drv_data->dbg_packets_found++;
-		size_t total_packet_size = usb_packet_header_size + packet_len;
 
+		// State 3: Boundary Protection
 		if (total_packet_size > (bulk_transfer_size * 2)) {
 			dev_dbg(&drv_data->interface->dev,
 				"Corrupted packet_len %u, skipping byte\n", packet_len);
@@ -614,102 +547,36 @@ static void useeplus_decode_packets(struct useeplus_drv_data *drv_data,
 		}
 
 		if (ctx->index + total_packet_size > drv_data->decode_buf_len)
-			break; // Ran out of data. Wait for next bulk transfer
+			break;
 
 		if (packet_len < usb_payload_header_size) {
 			ctx->index += total_packet_size;
 			continue;
 		}
 
+		// State 4: Extract Payload Headers
 		size_t payload_offset = ctx->index + usb_packet_header_size;
-		u8 *decoder_ptr = drv_data->decode_buf;
-		u8 *payload_ptr = decoder_ptr + payload_offset;
-		struct usb_payload_header *payload = (struct usb_payload_header *)(payload_ptr);
+		struct usb_payload_header *payload =
+			(struct usb_payload_header *)(drv_data->decode_buf + payload_offset);
 
 		u8 current_frame_id = payload->le_frame_id;
 		u8 current_camera_number = payload->le_camera_number;
 		u8 current_flags = payload->le_flags;
 
-		// Frame boundary transformation detection
+		// State 5: Frame Transition Handling
 		if (drv_data->building_frame &&
 		    drv_data->frame_len > 0 &&
 		    drv_data->frame_id != current_frame_id) {
-
-			drv_data->dbg_frames_found++;
-			size_t soi_offset = 0;
-			size_t eoi_offset = 0;
-			bool building_frame = false;
-			bool found_eoi = false;
-			size_t max_pos = min_t(size_t, jpeg_soi_markers_max_position, drv_data->frame_len);
-
-			// Forward scan for SOI marker
-			for (j = 0; j + 1 < max_pos; ++j) {
-				if (drv_data->frame_buf[j] == jpeg_boundary_marker &&
-				    drv_data->frame_buf[j + 1] == jpeg_start_of_img_marker) {
-					soi_offset = j;
-					building_frame = true;
-					break;
-				}
-			}
-
-			// Backward scan for EOI marker
-			for (j = drv_data->frame_len; j >= 2; --j) {
-				if (drv_data->frame_buf[j - 2] == jpeg_boundary_marker &&
-				    drv_data->frame_buf[j - 1] == jpeg_end_of_img_marker) {
-					eoi_offset = j;
-					found_eoi = true;
-					break;
-				}
-			}
-
-			// Deliver extracted JPEG payloads to waiting V4L2 queue slots
-			if (building_frame && found_eoi && soi_offset < eoi_offset) {
-				size_t final_content_size = eoi_offset - soi_offset;
-
-				drv_data->frame_counter++;
-
-				spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
-				if (!list_empty(&drv_data->ready_queue)) {
-					vbuf = list_first_entry(&drv_data->ready_queue,
-								struct useeplus_buffer, list);
-					list_del(&vbuf->list);
-
-					void *vaddr = vb2_plane_vaddr(&vbuf->vb2_buffer.vb2_buf, 0);
-
-					if (vaddr) {
-						memcpy(vaddr, drv_data->frame_buf + soi_offset, final_content_size);
-						vb2_set_plane_payload(&vbuf->vb2_buffer.vb2_buf, 0, final_content_size);
-
-						vbuf->vb2_buffer.vb2_buf.timestamp = ktime_get_ns();
-						vbuf->vb2_buffer.sequence = drv_data->sequence++;
-						vbuf->vb2_buffer.field = V4L2_FIELD_NONE;
-
-						vb2_buffer_done(&vbuf->vb2_buffer.vb2_buf, VB2_BUF_STATE_DONE);
-						drv_data->dbg_frames_delivered++;
-					} else {
-						vb2_buffer_done(&vbuf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
-						drv_data->dbg_frames_dropped_queue++;
-					}
-				} else {
-					drv_data->dbg_frames_dropped_queue++;
-				}
-				spin_unlock_irqrestore(&drv_data->ready_queue_lock, ctx->flags);
-			} else if (!building_frame) {
-				drv_data->dbg_frames_dropped_soi++;
-			} else if (!found_eoi || eoi_offset <= soi_offset) {
-				drv_data->dbg_frames_dropped_eoi++;
-			}
-
-			drv_data->frame_len = 0;
+			useeplus_deliver_frame_to_client(drv_data, ctx);
 		}
 
 		drv_data->frame_id = current_frame_id;
 		drv_data->building_frame = true;
 
+		// State 6: Accumulate Frame Payload Components
 		bool has_gravity_sensor = (current_flags & 0x01) != 0;
 		uint8_t other_flags = (current_flags >> 2) & 0x3F;
 
-		// Extract frame video components when payload properties align
 		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
 			size_t payload_start = ctx->index + total_usb_header_size;
 			size_t payload_size = total_packet_size - total_usb_header_size;
