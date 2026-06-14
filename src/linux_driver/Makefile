@@ -60,7 +60,7 @@ install-with-deps: clean default
 
 uninstall:
 	@-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || \
-	echo "Module not loaded or not found."
+	echo "Module $(MODULE_NAME) not loaded or not found."
 
 rmmod:
 	sudo rmmod $(MODULE_NAME)
