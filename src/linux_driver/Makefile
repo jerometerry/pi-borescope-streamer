@@ -1,3 +1,8 @@
+.PHONY: default smatch coccicheck clean \
+        install install-debug install-with-deps \
+        rmmod modprobe-r lsmod insmod \
+        check-deps check-stack check-patch check-includes
+
 obj-m += useeplus_v4l2.o
 useeplus_v4l2-y := useeplus_v4l2_core.o useeplus.o
 
@@ -52,6 +57,18 @@ install-with-deps: clean default
 	sudo modprobe $(MODULE_NAME)
 	@echo "=== Verification ==="
 	@lsmod | grep -q $(MODULE_NAME) && echo "SUCCESS: $(MODULE_NAME) and all deps are loaded." || echo "FAILED to load module."
+
+uninstall:
+	sudo modprobe -r $(MODULE_NAME)
+
+rmmod:
+	sudo rmmod $(MODULE_NAME)
+
+lsmod:
+	lsmod | grep $(MODULE_NAME)
+
+insmod: default
+	sudo insmod ./$(MODULE_NAME).ko
 
 check-deps: default
 	@echo "=== Required Dependencies ==="
