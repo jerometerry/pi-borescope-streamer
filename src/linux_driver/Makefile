@@ -43,7 +43,7 @@ install-without-deps: clean default
 	@dmesg | tail -n 5
 
 install-debug:
-	$(MAKE) install-with-deps DEBUG=1
+	$(MAKE) install DEBUG=1
 
 install: clean default
 	@echo "=== Unloading existing module ==="
