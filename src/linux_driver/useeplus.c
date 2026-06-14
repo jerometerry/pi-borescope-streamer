@@ -51,7 +51,7 @@ static void useeplus_find_jpeg_boundaries(struct useeplus_drv_data *drv_data,
 	*found_eoi = false;
 
 	for (j = 0; j + 1 < max_pos; ++j) {
-		if (drv_data->frame_buf[j] == JPEG_BOUNDARY_MARKER &&
+		if (drv_data->frame_buf[j] == JPEG_MARKER_BOUNDARY &&
 		    drv_data->frame_buf[j + 1] == JPEG_START_OF_IMG_MARKER) {
 			*soi_offset = j;
 			*building_frame = true;
@@ -60,7 +60,7 @@ static void useeplus_find_jpeg_boundaries(struct useeplus_drv_data *drv_data,
 	}
 
 	for (j = drv_data->frame_len; j >= 2; --j) {
-		if (drv_data->frame_buf[j - 2] == JPEG_BOUNDARY_MARKER &&
+		if (drv_data->frame_buf[j - 2] == JPEG_MARKER_BOUNDARY &&
 		    drv_data->frame_buf[j - 1] == JPEG_END_OF_IMG_MARKER) {
 			*eoi_offset = j;
 			*found_eoi = true;

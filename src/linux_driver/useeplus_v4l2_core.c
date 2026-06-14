@@ -711,7 +711,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 
 	for (int i = 0; i < video_alt->desc.bNumEndpoints; ++i) {
 		ep_desc = &video_alt->endpoint[i].desc;
-		if (usb_endpoint_num(ep_desc) == useeplus_video_endpoint) {
+		if (usb_endpoint_num(ep_desc) == USEEPLUS_VIDEO_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
 				drv_data->video_in_ep = ep_desc->bEndpointAddress;
 			else
@@ -722,7 +722,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	// Dynamically Map Endpoints for iAP interface
 	for (int i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; ++i) {
 		ep_desc = &iap_intf->cur_altsetting->endpoint[i].desc;
-		if (usb_endpoint_num(ep_desc) == useeplus_iap_endpoint) {
+		if (usb_endpoint_num(ep_desc) == USEEPLUS_IAP_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
 				drv_data->iap_in_ep = ep_desc->bEndpointAddress;
 			else
