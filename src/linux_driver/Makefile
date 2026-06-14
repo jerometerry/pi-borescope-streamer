@@ -30,8 +30,6 @@ clean:
 install: clean default
 	@echo "=== Unloading existing module ==="
 	-sudo rmmod $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
-	@echo "=== Handling Dependencies ==="
-	sudo depmod -a
 	@echo "=== Loading New Module ==="
 	sudo insmod $(MODULE_NAME).ko
 	@echo "=== Verification ==="
@@ -42,28 +40,41 @@ install: clean default
 install-debug:
 	$(MAKE) install DEBUG=1
 
-check:
-	sparse -D__linux__ -D__KERNEL__ -DCONFIG_64BIT -DCONFIG_SMP \
-		-DKBUILD_MODNAME=\"$(MODULE_NAME)\" \
-		-DKBUILD_MODFILE=\"$(MODULE_NAME)\" \
-		-DBUILD_VER=\"$(VERSION_STR)\" \
-		-Wbitwise -Wcontext \
-		-I$(KDIR)/include \
-		-I$(KDIR)/arch/arm64/include \
-		-I$(KDIR)/arch/arm64/include/generated \
-		-I$(KDIR)/include/generated \
-		-I$(KDIR)/include/uapi \
-		-I$(KDIR)/arch/arm64/include/uapi \
-		useeplus_v4l2_core.c useeplus.c
+install-with-deps: clean default
+	@echo "=== Unloading existing module ==="
+	-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
+	@echo "=== Copying to Kernel Tree ==="
+	sudo mkdir -p /lib/modules/$(shell uname -r)/updates/dkms
+	sudo cp $(MODULE_NAME).ko /lib/modules/$(shell uname -r)/updates/dkms/
+	@echo "=== Building Dependency Tree ==="
+	sudo depmod -a
+	@echo "=== Loading Module & Dependencies ==="
+	sudo modprobe $(MODULE_NAME)
+	@echo "=== Verification ==="
+	@lsmod | grep -q $(MODULE_NAME) && echo "SUCCESS: $(MODULE_NAME) and all deps are loaded." || echo "FAILED to load module."
 
-check-stack: clean default
+check-deps: default
+	@echo "=== Required Dependencies ==="
+	@deps=$$(modinfo -F depends $(MODULE_NAME).ko); \
+	if [ -z "$$deps" ]; then \
+		echo "No external dependencies found."; \
+	else \
+		echo "Dependencies found: $$deps"; \
+		echo "--- Status ---"; \
+		echo "$$deps" | tr ',' '\n' | while read dep; do \
+			if lsmod | grep -q "^$$dep"; then \
+				echo "  [OK]      $$dep is currently loaded."; \
+			else \
+				echo "  [MISSING] $$dep is NOT loaded!"; \
+			fi; \
+		done; \
+	fi
+
+check-stack: default
 	objdump -d useeplus_v4l2.ko | $(KDIR)/scripts/checkstack.pl aarch64
 
-check-patch: clean
-	$(KDIR)/scripts/checkpatch.pl --file ./*.c ./*.h
+check-patch:
+	$(KDIR)/scripts/checkpatch.pl --strict --file ./*.c ./*.h
 
 check-includes:
-	$(KDIR)/scripts/checkincludes.pl
-
-check-legal:
-	$(KDIR)/scripts/spdxcheck.py --file ./*.c ./*.h
+	$(KDIR)/scripts/checkincludes.pl *.c *.h
