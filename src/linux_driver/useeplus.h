@@ -95,7 +95,9 @@ struct up_drv_data {
 	u8 iap_in_ep;
 	u8 iap_out_ep;
 
+	// Mutex protecting the video_queue
 	struct mutex v4l2_lock;
+	struct vb2_queue video_queue;
 
 	struct usb_device *usb_dev;
 	struct v4l2_device v4l2_dev;
@@ -103,9 +105,10 @@ struct up_drv_data {
 	u32 width;
 	u32 height;
 
-	struct vb2_queue video_queue;
-	struct list_head ready_queue;
+	// Spinlock protecting access to ready_queue
 	spinlock_t ready_queue_lock;
+	struct list_head ready_queue;
+
 	u64 sequence;
 
 	struct urb *urbs[BULK_TRANSFER_COUNT];
