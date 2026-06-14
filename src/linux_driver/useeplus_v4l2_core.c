@@ -619,7 +619,8 @@ static struct usb_driver useeplus_driver = {
 
 static void useeplus_device_release(struct v4l2_device *v4l2_dev)
 {
-	struct useeplus_drv_data *drv_data = container_of(v4l2_dev, struct useeplus_drv_data, v4l2_dev);
+	struct useeplus_drv_data *drv_data =
+		container_of(v4l2_dev, struct useeplus_drv_data, v4l2_dev);
 
 	vfree(drv_data->frame_buf);
 	kfree(drv_data->decode_buf);
@@ -829,10 +830,7 @@ error_unreg_v4l2:
 
 error_release_iap:
 	usb_driver_release_interface(&useeplus_driver, iap_intf);
-
-	if (drv_data->frame_buf)
-		vfree(drv_data->frame_buf);
-
+	vfree(drv_data->frame_buf);
 	kfree(drv_data->decode_buf);
 error_free_dev:
 	kfree(drv_data);

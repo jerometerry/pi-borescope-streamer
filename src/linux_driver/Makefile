@@ -46,6 +46,7 @@ check:
 	sparse -D__linux__ -D__KERNEL__ -DCONFIG_64BIT -DCONFIG_SMP \
 		-DKBUILD_MODNAME=\"$(MODULE_NAME)\" \
 		-DKBUILD_MODFILE=\"$(MODULE_NAME)\" \
+		-DBUILD_VER=\"$(VERSION_STR)\" \
 		-Wbitwise -Wcontext \
 		-I$(KDIR)/include \
 		-I$(KDIR)/arch/arm64/include \
