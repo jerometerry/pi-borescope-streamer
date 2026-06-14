@@ -1,6 +1,6 @@
 .PHONY: default smatch coccicheck clean \
         install install-debug install-with-deps \
-        rmmod modprobe-r lsmod insmod \
+        rmmod modprobe-r status insmod \
         check-deps check-stack check-patch check-includes
 
 obj-m += useeplus_v4l2.o
@@ -66,8 +66,8 @@ rmmod:
 	@-sudo rmmod $(MODULE_NAME) 2>/dev/null || \
 	echo "Module $(MODULE_NAME) not loaded or not found."
 
-lsmod:
-	lsmod 2>/dev/null | grep $(MODULE_NAME)
+status:
+	lsmod | grep $(MODULE_NAME)
 
 insmod: default
 	sudo insmod ./$(MODULE_NAME).ko
