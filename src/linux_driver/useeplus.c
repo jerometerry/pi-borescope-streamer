@@ -83,6 +83,7 @@ static void useeplus_deliver_frame_to_client(struct useeplus_drv_data *drv_data,
 
 	if (building_frame && found_eoi && soi_offset < eoi_offset) {
 		size_t final_content_size = eoi_offset - soi_offset;
+
 		drv_data->frame_counter++;
 
 		spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
@@ -91,6 +92,7 @@ static void useeplus_deliver_frame_to_client(struct useeplus_drv_data *drv_data,
 			list_del(&vbuf->list);
 
 			void *vaddr = vb2_plane_vaddr(&vbuf->vb2_buffer.vb2_buf, 0);
+
 			if (vaddr) {
 				memcpy(vaddr, drv_data->frame_buf + soi_offset, final_content_size);
 				vb2_set_plane_payload(&vbuf->vb2_buffer.vb2_buf, 0, final_content_size);

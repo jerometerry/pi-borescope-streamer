@@ -1,4 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0+ */
+// SPDX-License-Identifier: GPL-2.0+
+
 #ifndef _USEEPLUS_H_
 #define _USEEPLUS_H_
 
