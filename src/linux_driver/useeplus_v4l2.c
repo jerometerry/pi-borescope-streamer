@@ -26,25 +26,25 @@ MODULE_VERSION("0.1.0");
 #define USEEPLUS_IAP_INTERFACE				0
 #define USEEPLUS_VIDEO_INTERFACE			1
 
-static const unsigned int USEEPLUS_ALT_SETTING_VIDEO_ENABLE = 1;
+static const unsigned int useeplus_alt_setting_video_enable = 1;
 
-static const int USEEPLUS_VIDEO_ENDPOINT = 0x01;
-static const int USEEPLUS_IAP_ENDPOINT = 0x02;
+static const int useeplus_video_endpoint = 0x01;
+static const int useeplus_iap_endpoint = 0x02;
 
-static const size_t HEARTBEAT_SINK_BUFFER_SIZE = 512;
-static const int HEARTBEAT_SINK_ITERATIONS = 30;
-static const int HEARTBEAT_SINK_TIMEOUT_MS = 100;
+static const size_t heartbeat_sink_buffer_size = 512;
+static const int heartbeat_sink_iterations = 30;
+static const int heartbeat_sink_timeout_ms = 100;
 
-static const u16 USB_PACKET_DELIMETER = 0xBBAA;
-static const u8 VIDEO_CAMERA_ID = 0x0B;
-static const u8 GRAVITY_SENSOR_ID = 0x07;
+static const u16 usb_packet_delimeter = 0xBBAA;
+static const u8 video_camera_id = 0x0B;
+static const u8 gravity_sensor_id = 0x07;
 
-static const size_t MAX_SCAN_LIMIT = 160;
-static const size_t JPEG_SOI_MARKERS_MAX_POSITION = 256;
+static const size_t max_scan_limit = 160;
+static const size_t jpeg_soi_markers_max_position = 256;
 
-static const u8 JPEG_BOUNDARY_MARKER = 0xFF;
-static const u8 JPEG_START_OF_IMG_MARKER = 0xD8;
-static const u8 JPEG_END_OF_IMG_MARKER = 0xD9;
+static const u8 jpeg_boundary_marker = 0xFF;
+static const u8 jpeg_start_of_img_marker = 0xD8;
+static const u8 jpeg_end_of_img_marker = 0xD9;
 
 static const u32 resolution_width = 640;
 static const u32 resolution_height = 480;
@@ -496,9 +496,9 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		u8 camera_id = pkt->le_device_id;
 		uint16_t packet_len = le16_to_cpu(pkt->le_length);
 
-		if (delimeter != USB_PACKET_DELIMETER ||
-			(camera_id != VIDEO_CAMERA_ID &&
-			 camera_id != GRAVITY_SENSOR_ID)) {
+		if (delimeter != usb_packet_delimeter ||
+			(camera_id != video_camera_id &&
+			 camera_id != gravity_sensor_id)) {
 			current_parse_index++;
 			continue;
 		}
@@ -506,7 +506,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		{
 			bool is_ghost = false;
 			size_t header_offset = 0;
-			size_t max_scan = min_t(size_t, MAX_SCAN_LIMIT, drv_data->parse_len - current_parse_index - 3);
+			size_t max_scan = min_t(size_t, max_scan_limit, drv_data->parse_len - current_parse_index - 3);
 
 			for (size_t offset = usb_packet_header_size; offset <= max_scan; ++offset) {
 				struct usb_packet_header *offset_pkt =
@@ -515,9 +515,9 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 				uint16_t offset_delimeter = le16_to_cpu(offset_pkt->le_delimeter);
 				u8 offset_camera_id = offset_pkt->le_device_id;
 
-				if (offset_delimeter == USB_PACKET_DELIMETER &&
-					(offset_camera_id == VIDEO_CAMERA_ID ||
-					 offset_camera_id == GRAVITY_SENSOR_ID)) {
+				if (offset_delimeter == usb_packet_delimeter &&
+					(offset_camera_id == video_camera_id ||
+					 offset_camera_id == gravity_sensor_id)) {
 					is_ghost = true;
 					header_offset = offset;
 					break;
@@ -565,12 +565,12 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			size_t eoi_offset = 0;
 			bool found_soi = false;
 			bool found_eoi = false;
-			size_t max_pos = min_t(size_t, JPEG_SOI_MARKERS_MAX_POSITION, drv_data->current_frame_len);
+			size_t max_pos = min_t(size_t, jpeg_soi_markers_max_position, drv_data->current_frame_len);
 
 			// Scan forward for Start of Image (FF D8)
 			for (size_t j = 0; j + 1 < max_pos; ++j) {
-				if (drv_data->current_frame[j] == JPEG_BOUNDARY_MARKER &&
-					drv_data->current_frame[j + 1] == JPEG_START_OF_IMG_MARKER) {
+				if (drv_data->current_frame[j] == jpeg_boundary_marker &&
+					drv_data->current_frame[j + 1] == jpeg_start_of_img_marker) {
 					soi_offset = j;
 					found_soi = true;
 					break;
@@ -579,8 +579,8 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 			// Scan backwards for End of Image (FF D9)
 			for (size_t j = drv_data->current_frame_len; j >= 2; --j) {
-				if (drv_data->current_frame[j - 2] == JPEG_BOUNDARY_MARKER &&
-					drv_data->current_frame[j - 1] == JPEG_END_OF_IMG_MARKER) {
+				if (drv_data->current_frame[j - 2] == jpeg_boundary_marker &&
+					drv_data->current_frame[j - 1] == jpeg_end_of_img_marker) {
 					eoi_offset = j;
 					found_eoi = true;
 					break;
@@ -824,7 +824,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	}
 
 	/* Dynamically Map Endpoints for VIDEO interface (Must look at Altsetting 1) */
-	video_alt = usb_altnum_to_altsetting(interface, USEEPLUS_ALT_SETTING_VIDEO_ENABLE);
+	video_alt = usb_altnum_to_altsetting(interface, useeplus_alt_setting_video_enable);
 	if (!video_alt) {
 		dev_err(&interface->dev, "Could not find Video Altsetting\n");
 		retval = -ENODEV;
@@ -833,7 +833,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 
 	for (int i = 0; i < video_alt->desc.bNumEndpoints; ++i) {
 		ep_desc = &video_alt->endpoint[i].desc;
-		if (usb_endpoint_num(ep_desc) == USEEPLUS_VIDEO_ENDPOINT) {
+		if (usb_endpoint_num(ep_desc) == useeplus_video_endpoint) {
 			if (usb_endpoint_dir_in(ep_desc))
 				drv_data->video_in_ep = ep_desc->bEndpointAddress;
 			else
@@ -844,7 +844,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	/* Dynamically Map Endpoints for iAP interface */
 	for (int i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; ++i) {
 		ep_desc = &iap_intf->cur_altsetting->endpoint[i].desc;
-		if (usb_endpoint_num(ep_desc) == USEEPLUS_IAP_ENDPOINT) {
+		if (usb_endpoint_num(ep_desc) == useeplus_iap_endpoint) {
 			if (usb_endpoint_dir_in(ep_desc))
 				drv_data->iap_in_ep = ep_desc->bEndpointAddress;
 			else
@@ -896,25 +896,25 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	video_set_drvdata(&drv_data->video_dev, drv_data);
 
 	/* Hardware Initialization (iAP Drain) */
-	iap_heartbeat_sink = kmalloc(HEARTBEAT_SINK_BUFFER_SIZE, GFP_KERNEL);
+	iap_heartbeat_sink = kmalloc(heartbeat_sink_buffer_size, GFP_KERNEL);
 	if (!iap_heartbeat_sink) {
 		retval = -ENOMEM;
 		goto error_unreg_v4l2;
 	}
 
-	for (int i = 0; i < HEARTBEAT_SINK_ITERATIONS; ++i) {
+	for (int i = 0; i < heartbeat_sink_iterations; ++i) {
 		usb_bulk_msg(
 			usb_dev,
 			usb_rcvbulkpipe(usb_dev, drv_data->iap_in_ep),
 			iap_heartbeat_sink,
-			HEARTBEAT_SINK_BUFFER_SIZE,
+			heartbeat_sink_buffer_size,
 			&actual_len,
-			HEARTBEAT_SINK_TIMEOUT_MS
+			heartbeat_sink_timeout_ms
 		);
 	}
 	kfree(iap_heartbeat_sink);
 
-	retval = usb_set_interface(usb_dev, USEEPLUS_VIDEO_INTERFACE, USEEPLUS_ALT_SETTING_VIDEO_ENABLE);
+	retval = usb_set_interface(usb_dev, USEEPLUS_VIDEO_INTERFACE, useeplus_alt_setting_video_enable);
 	if (retval) {
 		dev_err(&interface->dev, "usb_set_interface failed with error %d\n", retval);
 		goto error_unreg_v4l2;
