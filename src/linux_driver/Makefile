@@ -57,7 +57,7 @@ check:
 		useeplus_v4l2_core.c useeplus.c
 
 check-stack: clean default
-	objdump -d useeplus_v4l2.ko | $(KDIR)/scripts/checkpatch.pl aarch64
+	objdump -d useeplus_v4l2.ko | $(KDIR)/scripts/checkstack.pl aarch64
 
 check-patch:
 	$(KDIR)/scripts/checkpatch.pl --file ./*.c ./*.h
