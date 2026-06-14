@@ -16,13 +16,9 @@
 #define BULK_TRANSFER_SIZE             (16 * 1024)
 #define MAX_FRAME_SIZE                 (512 * 1024)
 
-#define USB_PACKET_DELIMITER           0xBBAA
-#define VIDEO_CAMERA_ID                1
-#define GRAVITY_SENSOR_ID              2
+#define USEEPLUS_DEF_WIDTH	640
+#define USEEPLUS_DEF_HEIGHT	480
 
-#define JPEG_BOUNDARY_MARKER           0xFF
-#define JPEG_START_OF_IMG_MARKER       0xD8
-#define JPEG_END_OF_IMG_MARKER         0xD9
 #define JPEG_SOI_MARKERS_MAX_POSITION  256
 #define MAX_GHOST_HEADER_OFFSET        32
 
@@ -33,6 +29,26 @@
 
 /* Global Diagnostic String Macro */
 #define DIAG_DATA_FORMAT "URBs:%lu Err:%lu Pkt:%lu Frm:%lu Deliv:%lu D-SOI:%lu D-EOI:%lu D-Q:%lu Ghost:%lu\n"
+
+enum useeplus_usb_topology {
+	USEEPLUS_IAP_INTERFACE		= 0,
+	USEEPLUS_VIDEO_INTERFACE	= 1,
+	USEEPLUS_ALT_VIDEO_ENABLE	= 1,
+	USEEPLUS_VIDEO_ENDPOINT		= 0x01,
+	USEEPLUS_IAP_ENDPOINT		= 0x02,
+};
+
+enum useeplus_hw_signatures {
+	USB_PACKET_DELIMITER	= 0xBBAA,
+	VIDEO_CAMERA_ID		= 0x0B,
+	GRAVITY_SENSOR_ID	= 0x07,
+};
+
+enum useeplus_jpeg_marker {
+	JPEG_MARKER_BOUNDARY	= 0xFF,
+	JPEG_MARKER_SOI		= 0xD8,
+	JPEG_MARKER_EOI		= 0xD9,
+};
 
 /**
  * struct usb_packet_header - High-level wire transfer framing format
@@ -84,6 +100,8 @@ struct useeplus_drv_data {
 	struct usb_device *usb_dev;
 	struct v4l2_device v4l2_dev;
 	struct video_device video_dev;
+	u32 width;
+	u32 height;
 
 	struct vb2_queue video_queue;
 	struct list_head ready_queue;

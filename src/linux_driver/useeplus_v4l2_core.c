@@ -22,30 +22,9 @@ MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
-#define USEEPLUS_IAP_INTERFACE 0
-#define USEEPLUS_VIDEO_INTERFACE 1
-
 #define CAP_DRIVER "Useeplus"
 #define CAP_CARD "Useeplus non-UVC Borescope"
 #define V4L2_INPUT_NAME "Borescope Lens Channel 0"
-
-static const unsigned int useeplus_alt_setting_video_enable = 1;
-
-static const int useeplus_video_endpoint = 0x01;
-static const int useeplus_iap_endpoint = 0x02;
-
-static const size_t heartbeat_sink_buffer_size = 512;
-static const int heartbeat_sink_iterations = 30;
-static const int heartbeat_sink_timeout_ms = 100;
-
-static const u32 resolution_width = 640;
-static const u32 resolution_height = 480;
-static const int diagnostic_log_iterations = 300;
-
-static const int usb_timeout_ms = 1000;
-
-static const u8 iap_auth_handshake[] = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
-static const u8 start_video_command[] = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
 static const struct usb_device_id useeplus_table[] = {
 	{ USB_DEVICE(0x0329, 0x2022) },
@@ -53,6 +32,17 @@ static const struct usb_device_id useeplus_table[] = {
 	{ }
 };
 MODULE_DEVICE_TABLE(usb, useeplus_table);
+
+static const u8 iap_auth_handshake[] = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
+static const u8 start_video_command[] = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
+
+enum useeplus_config {
+	HEARTBEAT_SINK_BUFFER_SIZE = 512,
+	HEARTBEAT_SINK_ITERATIONS = 30,
+	HEARTBEAT_SINK_TIMEOUT_MS = 100,
+	DIAG_LOG_ITERATIONS = 300,
+	USB_TIMEOUT_MS = 1000,
+};
 
 static int useeplus_queue_setup(
 	struct vb2_queue *vq,
@@ -145,7 +135,7 @@ static int useeplus_write_msg(
 		dma_buffer,
 		len,
 		&actual_length,
-		usb_timeout_ms
+		USB_TIMEOUT_MS
 	);
 
 	kfree(dma_buffer);
@@ -195,7 +185,16 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 		goto error_start;
 	}
 
-	// Submit URBs to begin pulling the stream
+	// Allow URB callback paths to start passing payloads to buffers
+	// We do this before submitting URBs so that the read callbacks can
+	// start processing data before we finish initializing all URBs
+	set_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+
+	// Ensure the bit is visible to all CPU cores before submitting URBs
+	// Required after Non-Value-Returning set_bit operation.
+	smp_mb__after_atomic();
+
+	// Submit the URBs
 	for (urbs_submitted = 0; urbs_submitted < BULK_TRANSFER_COUNT; ++urbs_submitted) {
 		retval = usb_submit_urb(
 			drv_data->urbs[urbs_submitted],
@@ -207,9 +206,6 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 			goto error_start;
 		}
 	}
-
-	// Allow URB callback paths to start passing payloads to buffers
-	set_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 
 	return 0;
 
@@ -486,7 +482,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	drv_data->dbg_urbs_processed++;
 
 	// Diagnostic logging throttle
-	if (drv_data->dbg_urbs_processed % diagnostic_log_iterations == 0) {
+	if (drv_data->dbg_urbs_processed % DIAG_LOG_ITERATIONS == 0) {
 		dev_dbg(&drv_data->interface->dev, DIAG_DATA_FORMAT,
 			drv_data->dbg_urbs_processed, drv_data->dbg_usb_errors,
 			drv_data->dbg_packets_found, drv_data->dbg_frames_found,
@@ -659,6 +655,8 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	drv_data->building_frame = false;
 	drv_data->frame_len = 0;
 	drv_data->decode_buf_len = 0;
+	drv_data->width = USEEPLUS_DEF_WIDTH;
+	drv_data->height = USEEPLUS_DEF_HEIGHT;
 
 	mutex_init(&drv_data->v4l2_lock);
 	spin_lock_init(&drv_data->ready_queue_lock);
@@ -777,20 +775,20 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	video_set_drvdata(&drv_data->video_dev, drv_data);
 
 	/* Hardware Initialization (iAP Drain) */
-	iap_heartbeat_sink = kmalloc(heartbeat_sink_buffer_size, GFP_KERNEL);
+	iap_heartbeat_sink = kmalloc(HEARTBEAT_SINK_BUFFER_SIZE, GFP_KERNEL);
 	if (!iap_heartbeat_sink) {
 		retval = -ENOMEM;
 		goto error_unreg_v4l2;
 	}
 
-	for (int i = 0; i < heartbeat_sink_iterations; ++i) {
+	for (int i = 0; i < HEARTBEAT_SINK_ITERATIONS; ++i) {
 		usb_bulk_msg(
 			usb_dev,
 			usb_rcvbulkpipe(usb_dev, drv_data->iap_in_ep),
 			iap_heartbeat_sink,
-			heartbeat_sink_buffer_size,
+			HEARTBEAT_SINK_BUFFER_SIZE,
 			&actual_len,
-			heartbeat_sink_timeout_ms
+			HEARTBEAT_SINK_TIMEOUT_MS
 		);
 	}
 	kfree(iap_heartbeat_sink);
