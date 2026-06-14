@@ -59,7 +59,8 @@ install-with-deps: clean default
 	@lsmod | grep -q $(MODULE_NAME) && echo "SUCCESS: $(MODULE_NAME) and all deps are loaded." || echo "FAILED to load module."
 
 uninstall:
-	sudo modprobe -r $(MODULE_NAME)
+	-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || \
+	echo "Module not loaded or not found."
 
 rmmod:
 	sudo rmmod $(MODULE_NAME)
