@@ -14,6 +14,12 @@ make clean
 make CHECKER=1
 ```
 
+### Coccinelle
+
+```bash
+sudo apt install coccinelle
+```
+
 ### Smatch (C static analysis tool)
 
 ```bash
