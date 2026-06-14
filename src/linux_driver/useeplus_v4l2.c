@@ -75,8 +75,8 @@ struct usb_payload_header {
 	__le32 le_gravity_sensor;
 } __packed;
 
-static const size_t USB_PACKET_HEADER_SIZE = sizeof(usb_packet_header);
-static const size_t USB_PAYLOAD_HEADER_SIZE = sizeof(usb_payload_header);
+static const size_t USB_PACKET_HEADER_SIZE = sizeof(struct usb_packet_header);
+static const size_t USB_PAYLOAD_HEADER_SIZE = sizeof(struct usb_payload_header);
 static const size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
 
 struct useeplus_buffer {
