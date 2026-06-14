@@ -27,7 +27,7 @@ smatch:
 	$(MAKE) CHECK=$(SMATCH) C=1 -C $(KDIR) M=$(PWD) modules
 
 coccicheck:
-	$(MAKE) -C $(KDIR) M=$(PWD) W=1 V=0 coccicheck MODE=report SPFLAGS="--quiet"
+	@$(MAKE) --no-print-directory -C $(KDIR) M=$(PWD) W=1 V=0 coccicheck MODE=report DEBUG_FILE=/dev/null
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
