@@ -32,19 +32,6 @@ coccicheck:
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
 
-install-without-deps: clean default
-	@echo "=== Unloading existing module ==="
-	-sudo rmmod $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
-	@echo "=== Loading New Module ==="
-	sudo insmod $(MODULE_NAME).ko
-	@echo "=== Verification ==="
-	@lsmod | grep -q $(MODULE_NAME) && echo "SUCCESS: $(MODULE_NAME) is loaded into memory." || echo "FAILED to load module."
-	@echo "--- Last 5 Kernel Messages ---"
-	@dmesg | tail -n 5
-
-install-debug:
-	$(MAKE) install DEBUG=1
-
 install: clean default
 	@echo "=== Unloading existing module ==="
 	-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
@@ -57,6 +44,19 @@ install: clean default
 	sudo modprobe $(MODULE_NAME)
 	@echo "=== Verification ==="
 	@lsmod | grep -q $(MODULE_NAME) && echo "SUCCESS: $(MODULE_NAME) and all deps are loaded." || echo "FAILED to load module."
+
+install-without-deps: clean default
+	@echo "=== Unloading existing module ==="
+	-sudo rmmod $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
+	@echo "=== Loading New Module ==="
+	sudo insmod $(MODULE_NAME).ko
+	@echo "=== Verification ==="
+	@lsmod | grep -q $(MODULE_NAME) && echo "SUCCESS: $(MODULE_NAME) is loaded into memory." || echo "FAILED to load module."
+	@echo "--- Last 5 Kernel Messages ---"
+	@dmesg | tail -n 5
+
+install-debug:
+	$(MAKE) install DEBUG=1
 
 uninstall:
 	@-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || \
