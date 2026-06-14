@@ -49,11 +49,13 @@ MODULE_VERSION("0.1.0");
 #define FLAG_STREAMING						0
 #define USB_TIMEOUT_MS						1000
 #define BULK_TRANSFER_COUNT					4
-#define BULK_TRANSFER_SIZE					16384
+
 #define MAX_FRAME_SIZE						(256 * 1024)
 
-static const u8 IAP_AUTH_HANDSHAKE[]	= { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
-static const u8 START_VIDEO_COMMAND[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
+static const size_t bulk_transfer_size = 16384;
+
+static const u8 iap_auth_handshake[]	= { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
+static const u8 start_video_command[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
 static const struct usb_device_id useeplus_table[] = {
 	{ USB_DEVICE(0x0329, 0x2022) },
@@ -75,9 +77,9 @@ struct usb_payload_header {
 	__le32 le_gravity_sensor;
 } __packed;
 
-static const size_t USB_PACKET_HEADER_SIZE = sizeof(struct usb_packet_header);
-static const size_t USB_PAYLOAD_HEADER_SIZE = sizeof(struct usb_payload_header);
-static const size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
+static const size_t usb_packet_header_size = sizeof(struct usb_packet_header);
+static const size_t usb_payload_header_size = sizeof(struct usb_payload_header);
+static const size_t total_usb_header_size = usb_packet_header_size + usb_payload_header_size;
 
 struct useeplus_buffer {
 	struct vb2_v4l2_buffer vb2_buffer;
@@ -182,7 +184,7 @@ static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 			if (drv_data->urb_buffers[i]) {
 				usb_free_coherent(
 					drv_data->usb_dev,
-					BULK_TRANSFER_SIZE,
+					bulk_transfer_size,
 					drv_data->urb_buffers[i],
 					drv_data->urb_dma_addrs[i]
 				);
@@ -234,13 +236,13 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	if (test_and_set_bit(FLAG_STREAMING, &drv_data->flags))
 		return 0;
 
-	retval = useeplus_write_msg(drv_data, drv_data->iap_out_ep, IAP_AUTH_HANDSHAKE, sizeof(IAP_AUTH_HANDSHAKE));
+	retval = useeplus_write_msg(drv_data, drv_data->iap_out_ep, iap_auth_handshake, sizeof(iap_auth_handshake));
 	if (retval) {
 		dev_err(&drv_data->interface->dev, "useeplus_write_msg init failed: %d\n", retval);
 		goto error_start;
 	}
 
-	retval = useeplus_write_msg(drv_data, drv_data->video_out_ep, START_VIDEO_COMMAND, sizeof(START_VIDEO_COMMAND));
+	retval = useeplus_write_msg(drv_data, drv_data->video_out_ep, start_video_command, sizeof(start_video_command));
 	if (retval) {
 		dev_err(&drv_data->interface->dev, "useeplus_write_msg start failed: %d\n", retval);
 		goto error_start;
@@ -478,7 +480,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			drv_data->dbg_frames_dropped_queue, drv_data->dbg_ghost_headers);
 	}
 
-	if (drv_data->parse_len + urb->actual_length > BULK_TRANSFER_SIZE * 2) {
+	if (drv_data->parse_len + urb->actual_length > bulk_transfer_size * 2) {
 		dev_warn(&drv_data->interface->dev, "Parse buffer overflow, dropping data\n");
 		drv_data->parse_len = 0;
 	} else {
@@ -486,7 +488,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		drv_data->parse_len += urb->actual_length;
 	}
 
-	while (current_parse_index + TOTAL_USB_HEADER_SIZE <= drv_data->parse_len) {
+	while (current_parse_index + total_usb_header_size <= drv_data->parse_len) {
 		struct usb_packet_header *pkt = (struct usb_packet_header *)(drv_data->parse_buffer + current_parse_index);
 		uint16_t delimeter = le16_to_cpu(pkt->le_delimeter);
 		u8 camera_id = pkt->le_device_id;
@@ -504,7 +506,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			size_t header_offset = 0;
 			size_t max_scan = min_t(size_t, MAX_SCAN_LIMIT, drv_data->parse_len - current_parse_index - 3);
 
-			for (size_t offset = USB_PACKET_HEADER_SIZE; offset <= max_scan; ++offset) {
+			for (size_t offset = usb_packet_header_size; offset <= max_scan; ++offset) {
 				struct usb_packet_header *offset_pkt =
 					(struct usb_packet_header *)(drv_data->parse_buffer + current_parse_index + offset);
 
@@ -528,9 +530,9 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		}
 
 		drv_data->dbg_packets_found++;
-		size_t total_packet_size = USB_PACKET_HEADER_SIZE + packet_len;
+		size_t total_packet_size = usb_packet_header_size + packet_len;
 
-		if (total_packet_size > (BULK_TRANSFER_SIZE * 2)) {
+		if (total_packet_size > (bulk_transfer_size * 2)) {
 			dev_dbg(&drv_data->interface->dev, "Corrupted packet_len %u, skipping byte\n", packet_len);
 			current_parse_index++;
 			continue;
@@ -539,12 +541,12 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		if (current_parse_index + total_packet_size > drv_data->parse_len)
 			break;
 
-		if (packet_len < USB_PAYLOAD_HEADER_SIZE) {
+		if (packet_len < usb_payload_header_size) {
 			current_parse_index += total_packet_size;
 			continue;
 		}
 
-		size_t payload_offset = current_parse_index + USB_PACKET_HEADER_SIZE;
+		size_t payload_offset = current_parse_index + usb_packet_header_size;
 
 		struct usb_payload_header *payload = (struct usb_payload_header *)(drv_data->parse_buffer + payload_offset);
 
@@ -625,8 +627,8 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		uint8_t other_flags = (current_flags >> 2) & 0x3F;
 
 		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
-			size_t payload_start = current_parse_index + TOTAL_USB_HEADER_SIZE;
-			size_t payload_size = total_packet_size - TOTAL_USB_HEADER_SIZE;
+			size_t payload_start = current_parse_index + total_usb_header_size;
+			size_t payload_size = total_packet_size - total_usb_header_size;
 
 			if (drv_data->current_frame_len + payload_size <= MAX_FRAME_SIZE) {
 				memcpy(drv_data->current_frame + drv_data->current_frame_len,
@@ -673,7 +675,7 @@ static int useeplus_alloc_urbs(struct useeplus_drv_data *drv_data)
 
 		drv_data->urb_buffers[i] = usb_alloc_coherent(
 			usb_dev,
-			BULK_TRANSFER_SIZE,
+			bulk_transfer_size,
 			GFP_KERNEL,
 			&drv_data->urb_dma_addrs[i]
 		);
@@ -688,7 +690,7 @@ static int useeplus_alloc_urbs(struct useeplus_drv_data *drv_data)
 			usb_dev,
 			usb_rcvbulkpipe(usb_dev, drv_data->video_in_ep),
 			drv_data->urb_buffers[i],
-			BULK_TRANSFER_SIZE,
+			bulk_transfer_size,
 			useeplus_read_bulk_callback,
 			drv_data
 		);
@@ -813,7 +815,7 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 		goto error_release_iap;
 	}
 
-	drv_data->parse_buffer = kzalloc(BULK_TRANSFER_SIZE * 2, GFP_KERNEL);
+	drv_data->parse_buffer = kzalloc(bulk_transfer_size * 2, GFP_KERNEL);
 	if (!drv_data->parse_buffer) {
 		retval = -ENOMEM;
 		goto error_release_iap;
