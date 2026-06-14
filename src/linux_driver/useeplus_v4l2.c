@@ -22,6 +22,7 @@ MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
 #define BULK_TRANSFER_COUNT					4
+#define FLAG_STREAMING						0
 
 #define USEEPLUS_IAP_INTERFACE				0
 #define USEEPLUS_VIDEO_INTERFACE			1
@@ -34,21 +35,20 @@ MODULE_VERSION("0.1.0");
 #define HEARTBEAT_SINK_ITERATIONS			30
 #define HEARTBEAT_SINK_TIMEOUT_MS			100
 
-#define USB_PACKET_DELIMETER				0xBBAA
-#define VIDEO_CAMERA_ID						0x0B
-#define GRAVITY_SENSOR_ID					0x07
+static const u16 USB_PACKET_DELIMETER = 0xBBAA;
+static const u8 VIDEO_CAMERA_ID = 0x0B;
+static const u8 GRAVITY_SENSOR_ID = 0x07;
 
-#define MAX_SCAN_LIMIT						160
-#define JPEG_SOI_MARKERS_MAX_POSITION		256
-#define JPEG_BOUNDARY_MARKER				0xFF
-#define JPEG_START_OF_IMG_MARKER			0xD8
-#define JPEG_END_OF_IMG_MARKER				0xD9
+static const size_t MAX_SCAN_LIMIT = 160;
+static const u8 JPEG_SOI_MARKERS_MAX_POSITION = 256;
+static const u8 JPEG_BOUNDARY_MARKER = 0xFF;
+static const u8 JPEG_START_OF_IMG_MARKER = 0xD8;
+static const u8 JPEG_END_OF_IMG_MARKER = 0xD9;
 
 static const u32 resolution_width = 640;
 static const u32 resolution_height = 480;
 static const int diagnostic_log_iterations = 300;
 
-static const long flag_streaming = 0;
 static const int usb_timeout_ms = 1000;
 
 static const unsigned int max_frame_size = (256 * 1024);
@@ -169,7 +169,7 @@ static void useeplus_buf_queue(struct vb2_buffer *vb)
 
 static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 {
-	clear_bit(flag_streaming, &drv_data->flags);
+	clear_bit(FLAG_STREAMING, &drv_data->flags);
 
 	// Kill ALL URBs first. This guarantees every callback is stopped
 	// and no new ones can be submitted.
@@ -234,7 +234,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	drv_data->streaming_video = true;
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 
-	if (test_and_set_bit(flag_streaming, &drv_data->flags))
+	if (test_and_set_bit(FLAG_STREAMING, &drv_data->flags))
 		return 0;
 
 	retval = useeplus_write_msg(drv_data, drv_data->iap_out_ep, iap_auth_handshake, sizeof(iap_auth_handshake));
@@ -264,7 +264,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	return 0;
 
 error_start:
-	clear_bit(flag_streaming, &drv_data->flags);
+	clear_bit(FLAG_STREAMING, &drv_data->flags);
 
 	/* Kill any URBs that successfully submitted before the failure */
 	for (int i = 0; i < urbs_submitted; ++i)
@@ -292,7 +292,7 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 	struct useeplus_buffer *buf;
 	unsigned long flags;
 
-	clear_bit(flag_streaming, &drv_data->flags);
+	clear_bit(FLAG_STREAMING, &drv_data->flags);
 
 	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (drv_data->urbs[i])
@@ -651,7 +651,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 	}
 
 resubmit:
-	if (test_bit(flag_streaming, &drv_data->flags)) {
+	if (test_bit(FLAG_STREAMING, &drv_data->flags)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval) {
 			if (retval != -ENODEV && retval != -ESHUTDOWN && retval != -ENOENT)
@@ -709,7 +709,7 @@ static int useeplus_suspend(struct usb_interface *intf, pm_message_t message)
 
 static int useeplus_resume(struct usb_interface *intf)
 {
-	/* Resubmit URBs if flag_streaming is true */
+	/* Resubmit URBs if FLAG_STREAMING is true */
 	return 0;
 }
 
