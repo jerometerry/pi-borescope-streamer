@@ -1,6 +1,6 @@
 .PHONY: default smatch coccicheck clean \
         install install-debug install-with-deps \
-        rmmod modprobe-r status insmod \
+        remove uninstall check-status insert \
         check-deps check-stack check-patch check-includes
 
 obj-m += useeplus_v4l2.o
@@ -62,14 +62,15 @@ uninstall:
 	@-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || \
 	echo "Module $(MODULE_NAME) not loaded or not found."
 
-rmmod:
+remove:
 	@-sudo rmmod $(MODULE_NAME) 2>/dev/null || \
 	echo "Module $(MODULE_NAME) not loaded or not found."
 
-status:
-	-lsmod | grep $(MODULE_NAME)
+check-status:
+	@lsmod | grep "^$(MODULE_NAME)" || \
+	echo "Module $(MODULE_NAME) is not currently loaded."
 
-insmod: default
+insert: default
 	sudo insmod ./$(MODULE_NAME).ko
 
 check-deps: default
