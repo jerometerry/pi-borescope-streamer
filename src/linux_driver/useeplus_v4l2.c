@@ -21,19 +21,6 @@ MODULE_AUTHOR("Jerome Terry");
 MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
-#define USB_TIMEOUT_MS						1000
-#define BULK_TRANSFER_COUNT					4
-
-#define BULK_TRANSFER_SIZE					16384
-#define MAX_FRAME_SIZE						(256 * 1024)
-
-#define MAX_SCAN_LIMIT						160
-
-#define USB_PACKET_HEADER_SIZE				5
-#define USB_PAYLOAD_HEADER_SIZE				7
-#define TOTAL_USB_HEADER_SIZE				(USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE)
-#define MAX_SCAN_LIMIT						160
-
 #define USEEPLUS_IAP_INTERFACE				0
 #define USEEPLUS_VIDEO_INTERFACE			1
 #define USEEPLUS_ALT_SETTING_VIDEO_ENABLE	1
@@ -45,20 +32,25 @@ MODULE_VERSION("0.1.0");
 #define HEARTBEAT_SINK_ITERATIONS			30
 #define HEARTBEAT_SINK_TIMEOUT_MS			100
 
-#define JPEG_SOI_MARKERS_MAX_POSITION		256
+#define USB_PACKET_DELIMETER				0xBBAA
 #define VIDEO_CAMERA_ID						0x0B
 #define GRAVITY_SENSOR_ID					0x07
 
-#define USB_PACKET_DELIMETER				0xBBAA
-#define BOUNDARY_MARKER						0xFF
-#define START_MARKER						0xD8
-#define END_MARKER							0xD9
+#define MAX_SCAN_LIMIT						160
+#define JPEG_SOI_MARKERS_MAX_POSITION		256
+#define JPEG_BOUNDARY_MARKER				0xFF
+#define JPEG_START_OF_IMG_MARKER			0xD8
+#define JPEG_END_OF_IMG_MARKER				0xD9
 
 #define RESOLUTION_WIDTH					640
 #define RESOLUTION_HEIGHT					480
 #define DIAGNOSTIC_LOG_ITERATIONS			300
 
 #define FLAG_STREAMING						0
+#define USB_TIMEOUT_MS						1000
+#define BULK_TRANSFER_COUNT					4
+#define BULK_TRANSFER_SIZE					16384
+#define MAX_FRAME_SIZE						(256 * 1024)
 
 static const u8 IAP_AUTH_HANDSHAKE[]	= { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 START_VIDEO_COMMAND[]	= { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
@@ -82,6 +74,10 @@ struct usb_payload_header {
 	u8 le_flags;
 	__le32 le_gravity_sensor;
 } __packed;
+
+static const USB_PACKET_HEADER_SIZE = sizeof(usb_packet_header);
+static const USB_PAYLOAD_HEADER_SIZE = sizeof(usb_payload_header);
+static const TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
 
 struct useeplus_buffer {
 	struct vb2_v4l2_buffer vb2_buffer;
@@ -184,8 +180,12 @@ static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (drv_data->urbs[i]) {
 			if (drv_data->urb_buffers[i]) {
-				usb_free_coherent(drv_data->usb_dev, BULK_TRANSFER_SIZE,
-								  drv_data->urb_buffers[i], drv_data->urb_dma_addrs[i]);
+				usb_free_coherent(
+					drv_data->usb_dev,
+					BULK_TRANSFER_SIZE,
+					drv_data->urb_buffers[i],
+					drv_data->urb_dma_addrs[i]
+				);
 				drv_data->urb_buffers[i] = NULL;
 			}
 			usb_free_urb(drv_data->urbs[i]);
@@ -201,15 +201,18 @@ static int useeplus_write_msg(struct useeplus_drv_data *drv_data, u8 endpoint_ad
 	u8 *dma_buffer;
 
 	dma_buffer = kmemdup(tokens, len, GFP_KERNEL);
+
 	if (!dma_buffer)
 		return -ENOMEM;
 
-	retval = usb_bulk_msg(drv_data->usb_dev,
-				  usb_sndbulkpipe(drv_data->usb_dev, endpoint_addr),
-				  dma_buffer,
-				  len,
-				  &actual_length,
-				  USB_TIMEOUT_MS);
+	retval = usb_bulk_msg(
+		drv_data->usb_dev,
+		usb_sndbulkpipe(drv_data->usb_dev, endpoint_addr),
+		dma_buffer,
+		len,
+		&actual_length,
+		USB_TIMEOUT_MS
+	);
 
 	kfree(dma_buffer);
 	return retval;
@@ -227,6 +230,7 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 	drv_data->has_stored_header = false;
 	drv_data->streaming_video = true;
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
 	if (test_and_set_bit(FLAG_STREAMING, &drv_data->flags))
 		return 0;
 
@@ -455,7 +459,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 		case -EPIPE:
 			dev_err(&urb->dev->dev, "Endpoint stalled. Clear halt required.\n");
-			// Optional: Schedule a workqueue to call usb_clear_halt()
+			// TODO: Schedule a workqueue to call usb_clear_halt()
 			return;
 
 		default:
@@ -548,7 +552,8 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		u8 current_camera_number = payload->le_camera_number;
 		u8 current_flags = payload->le_flags;
 
-		if (drv_data->has_stored_header && drv_data->current_frame_len > 0 &&
+		if (drv_data->has_stored_header &&
+			drv_data->current_frame_len > 0 &&
 			drv_data->last_frame_id != current_frame_id) {
 
 			drv_data->dbg_frames_found++;
@@ -556,17 +561,22 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 			size_t eoi_offset = 0;
 			bool found_soi = false;
 			bool found_eoi = false;
+			size_t max_pos = min_t(size_t, JPEG_SOI_MARKERS_MAX_POSITION, drv_data->current_frame_len);
 
-			for (size_t j = 0; j + 1 < min_t(size_t, JPEG_SOI_MARKERS_MAX_POSITION, drv_data->current_frame_len); ++j) {
-				if (drv_data->current_frame[j] == BOUNDARY_MARKER && drv_data->current_frame[j + 1] == START_MARKER) {
+			// Scan forward for Start of Image (FF D8)
+			for (size_t j = 0; j + 1 < max_pos; ++j) {
+				if (drv_data->current_frame[j] == JPEG_BOUNDARY_MARKER &&
+					drv_data->current_frame[j + 1] == JPEG_START_OF_IMG_MARKER) {
 					soi_offset = j;
 					found_soi = true;
 					break;
 				}
 			}
 
+			// Scan backwards for End of Image (FF D9)
 			for (size_t j = drv_data->current_frame_len; j >= 2; --j) {
-				if (drv_data->current_frame[j - 2] == BOUNDARY_MARKER && drv_data->current_frame[j - 1] == END_MARKER) {
+				if (drv_data->current_frame[j - 2] == JPEG_BOUNDARY_MARKER &&
+					drv_data->current_frame[j - 1] == JPEG_END_OF_IMG_MARKER) {
 					eoi_offset = j;
 					found_eoi = true;
 					break;
