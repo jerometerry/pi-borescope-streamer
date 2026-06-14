@@ -90,9 +90,8 @@ static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 
 	// Kill ALL URBs first. This guarantees every callback is stopped
 	// and no new ones can be submitted.
-	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i)
 		usb_kill_urb(drv_data->urbs[i]);
-	}
 
 	// Safe Zone: No callbacks can possibly be running now.
 	// It is now 100% safe to free the memory structures.
