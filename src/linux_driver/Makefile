@@ -6,6 +6,7 @@ GIT_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "no-git")
 BUILD_DATE  := $(shell date +"%Y-%m-%d_%H:%M:%S")
 VERSION_STR := $(BUILD_DATE)-$(GIT_VERSION)
 KDIR ?= /lib/modules/$(shell uname -r)/build
+SMATCH := ~/github/smatch/smatch
 PWD  := $(shell pwd)
 
 ccflags-y += -DBUILD_VER='"$(VERSION_STR)"'
@@ -16,6 +17,9 @@ endif
 
 default:
 	$(MAKE) C=1 -C $(KDIR) M=$(PWD) W=1 modules
+
+smatch:
+	$(MAKE) CHECK=$(SMATCH) C=1 -C $(KDIR) M=$(PWD) modules
 
 coccicheck:
 	$(MAKE) -C $(KDIR) M=$(PWD) W=1 coccicheck

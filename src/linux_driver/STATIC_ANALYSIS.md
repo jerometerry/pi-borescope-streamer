@@ -6,7 +6,7 @@
 
 checkpath.pl
 
-### Sparse 
+### Sparse
 
 ```bash
 sudo apt install sparse
@@ -14,9 +14,16 @@ make clean
 make CHECKER=1
 ```
 
-### Smatch
+### Smatch (C static analysis tool)
 
+```bash
 git clone git://repo.or.cz/smatch.git
+sudo apt update
+sudo apt install gcc make sqlite3 libsqlite3-dev libdbd-sqlite3-perl libssl-dev libtry-tiny-perl
+cd smatch
+make
+
+```
 
 ## Code Analysis
 
@@ -129,7 +136,7 @@ vzalloc
 ### Function Signatures
 
 ```c
-static int useeplus_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers, unsigned int *nplanes, 
+static int useeplus_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers, unsigned int *nplanes,
 								unsigned int sizes[], struct device *alloc_devs[]);
 static int useeplus_buf_prepare(struct vb2_buffer *vb);
 static void useeplus_buf_queue(struct vb2_buffer *vb);
