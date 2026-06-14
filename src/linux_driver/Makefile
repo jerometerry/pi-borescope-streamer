@@ -67,7 +67,7 @@ rmmod:
 	echo "Module $(MODULE_NAME) not loaded or not found."
 
 lsmod:
-	lsmod | grep $(MODULE_NAME)
+	lsmod 2>/dev/null | grep $(MODULE_NAME)
 
 insmod: default
 	sudo insmod ./$(MODULE_NAME).ko
