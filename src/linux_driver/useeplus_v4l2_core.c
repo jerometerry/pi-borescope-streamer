@@ -91,8 +91,7 @@ static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 	// Kill ALL URBs first. This guarantees every callback is stopped
 	// and no new ones can be submitted.
 	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
-		if (drv_data->urbs[i])
-			usb_kill_urb(drv_data->urbs[i]);
+		usb_kill_urb(drv_data->urbs[i]);
 	}
 
 	// Safe Zone: No callbacks can possibly be running now.
@@ -622,9 +621,7 @@ static void useeplus_device_release(struct v4l2_device *v4l2_dev)
 {
 	struct useeplus_drv_data *drv_data = container_of(v4l2_dev, struct useeplus_drv_data, v4l2_dev);
 
-	if (drv_data->frame_buf)
-		vfree(drv_data->frame_buf);
-
+	vfree(drv_data->frame_buf);
 	kfree(drv_data->decode_buf);
 	kfree(drv_data);
 }
