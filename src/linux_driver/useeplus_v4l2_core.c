@@ -345,8 +345,10 @@ static int useeplus_vidioc_fmt_vid_cap(
 	void *priv,
 	struct v4l2_format *f)
 {
-	f->fmt.pix.width = resolution_width;
-	f->fmt.pix.height = resolution_height;
+	struct useeplus_drv_data *drv_data = video_drvdata(file);
+
+	f->fmt.pix.width = drv_data->width;
+	f->fmt.pix.height = drv_data->height;
 	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
 	f->fmt.pix.field = V4L2_FIELD_NONE;
 	f->fmt.pix.bytesperline	= 0;
