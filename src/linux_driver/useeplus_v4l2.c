@@ -22,7 +22,6 @@ MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
 MODULE_VERSION("0.1.0");
 
 #define BULK_TRANSFER_COUNT 4
-#define FLAG_STREAMING 0
 #define USEEPLUS_IAP_INTERFACE 0
 #define USEEPLUS_VIDEO_INTERFACE 1
 
@@ -101,6 +100,11 @@ struct useeplus_buffer {
 	struct list_head list;
 };
 
+enum useeplus_stream_state {
+	STREAM_HW_ACTIVE = 0,
+	STREAM_CLIENT_READY = 1,
+};
+
 struct useeplus_drv_data {
 	struct usb_interface *interface;
 	u8 video_in_ep;
@@ -123,16 +127,15 @@ struct useeplus_drv_data {
 	u8 *urb_buffers[BULK_TRANSFER_COUNT];
 	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
 
-	unsigned long flags;
-	bool streaming_video;
+	unsigned long streaming;
 
-	u8 *mjpeg_frame_buffer;
-	size_t mjpeg_frame_len;
-	int mjpeg_frame_id;
-	bool waiting_for_jpeg_eoi_marker;
+	u8 *frame_buf;
+	size_t frame_len;
+	int frame_id;
+	bool building_frame;
 
-	u8 *useeplus_decoder_buffer;
-	size_t useeplus_decoder_buffer_len;
+	u8 *decode_buf;
+	size_t decode_buf_len;
 
 	unsigned int frame_counter;
 
@@ -188,7 +191,8 @@ static void useeplus_buf_queue(struct vb2_buffer *vb)
 
 static void useeplus_kill_urbs(struct useeplus_drv_data *drv_data)
 {
-	clear_bit(FLAG_STREAMING, &drv_data->flags);
+	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
 
 	// Kill ALL URBs first. This guarantees every callback is stopped
 	// and no new ones can be submitted.
@@ -248,18 +252,19 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct useeplus_drv_data *drv_data = vb2_get_drv_priv(vq);
 	unsigned long flags;
-	int urbs_submitted, retval;
+	int urbs_submitted = 0;
+	int i, retval;
 
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	drv_data->mjpeg_frame_len = 0;
-	drv_data->mjpeg_frame_id = -1;
-	drv_data->waiting_for_jpeg_eoi_marker = false;
-	drv_data->streaming_video = true;
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-
-	if (test_and_set_bit(FLAG_STREAMING, &drv_data->flags))
+	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->streaming))
 		return 0;
 
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	drv_data->frame_len = 0;
+	drv_data->frame_id = -1;
+	drv_data->building_frame = false;
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
+	// Send hardware initialization commands
 	retval = useeplus_write_msg(
 		drv_data,
 		drv_data->iap_out_ep,
@@ -286,19 +291,12 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 		goto error_start;
 	}
 
-	// Ensure memory visibility before hardware DMA triggers
-	smp_mb__after_atomic();
-
 	// Submit URBs to begin pulling the stream
-	for (urbs_submitted = 0;
-		 urbs_submitted < BULK_TRANSFER_COUNT;
-		 ++urbs_submitted) {
-
+	for (urbs_submitted = 0; urbs_submitted < BULK_TRANSFER_COUNT; ++urbs_submitted) {
 		retval = usb_submit_urb(
 			drv_data->urbs[urbs_submitted],
 			GFP_KERNEL
 		);
-
 		if (retval) {
 			dev_err(&drv_data->interface->dev,
 				"Failed to submit URBs: %d\n", retval);
@@ -306,19 +304,21 @@ static int useeplus_start_streaming(struct vb2_queue *vq, unsigned int count)
 		}
 	}
 
+	// Allow URB callback paths to start passing payloads to buffers
+	set_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+
 	return 0;
 
 error_start:
-	clear_bit(FLAG_STREAMING, &drv_data->flags);
+	// Clear the client-ready bit immediately to block incoming URB data paths
+	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 
-	// Kill any URBs that successfully submitted before the failure
-	for (int i = 0; i < urbs_submitted; ++i)
+	// Kill any URBs that were successfully submitted before the failure
+	for (i = 0; i < urbs_submitted; ++i)
 		usb_kill_urb(drv_data->urbs[i]);
 
-	// Drain the queue and return to userspace per V4L2 spec
+	// Drain the queue and return buffers to userspace per V4L2 spec
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	drv_data->streaming_video = false;
-
 	while (!list_empty(&drv_data->ready_queue)) {
 		struct useeplus_buffer *buf;
 
@@ -327,16 +327,15 @@ error_start:
 			struct useeplus_buffer,
 			list
 		);
-
 		list_del(&buf->list);
 
-		vb2_buffer_done(
-			&buf->vb2_buffer.vb2_buf,
-			VB2_BUF_STATE_QUEUED
-		);
+		// Buffers correctly marked as queued for V4L2 cleanup on start error
+		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_QUEUED);
 	}
-
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
+	// Clear the HW guard last so a future start_streaming invocation can re-attempt
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
 
 	return retval;
 }
@@ -346,17 +345,28 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 	struct useeplus_drv_data *drv_data = vb2_get_drv_priv(vq);
 	struct useeplus_buffer *buf;
 	unsigned long flags;
+	int i;
 
-	clear_bit(FLAG_STREAMING, &drv_data->flags);
+	// Signal the callback to STOP processing and STOP resubmitting immediately.
+	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 
-	for (int i = 0; i < BULK_TRANSFER_COUNT; ++i) {
+	// Ensure all CPU cores see the bit change before we start killing URBs.
+	// clear_bit doesn't imply a memory barrier, so we explicitly add one.
+	smp_mb__after_atomic();
+
+	// usb_kill_urb blocks until any active callback finishes executing.
+	// Since STREAM_CLIENT_READY is now 0, the callback will exit without resubmitting.
+	for (i = 0; i < BULK_TRANSFER_COUNT; ++i) {
 		if (drv_data->urbs[i])
 			usb_kill_urb(drv_data->urbs[i]);
 	}
 
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	drv_data->streaming_video = false;
+	// Reset the hardware active guard state.
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
 
+	// Safely drain any buffers that were left over in the queue.
+	// Because all URBs are definitively dead now, no one else will touch this list.
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
 	while (!list_empty(&drv_data->ready_queue)) {
 		buf = list_first_entry(
 			&drv_data->ready_queue,
@@ -366,12 +376,12 @@ static void useeplus_stop_streaming(struct vb2_queue *vq)
 
 		list_del(&buf->list);
 
+		// Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR
 		vb2_buffer_done(
 			&buf->vb2_buffer.vb2_buf,
 			VB2_BUF_STATE_ERROR
 		);
 	}
-
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
@@ -532,132 +542,54 @@ static const struct v4l2_ioctl_ops useeplus_v4l2_ioctl_ops = {
 	.vidioc_streamoff = vb2_ioctl_streamoff,
 };
 
-static void useeplus_read_bulk_callback(struct urb *urb)
-{
-	struct useeplus_drv_data *drv_data = urb->context;
-	struct useeplus_buffer *vbuf;
-	size_t current_parse_index = 0;
+struct useeplus_parse_ctx {
+	size_t index;
 	unsigned long flags;
-	int retval;
+};
 
-	if (urb->status) {
-		switch (urb->status) {
-		case -ENOENT:
-		case -ECONNRESET:
-		case -ESHUTDOWN:
-		case -ENODEV:
-			dev_dbg(&urb->dev->dev,
-				"URB stopped cleanly: %d\n", urb->status);
-			return;
+static void useeplus_decode_packets(struct useeplus_drv_data *drv_data,
+				    struct useeplus_parse_ctx *ctx)
+{
+	struct useeplus_buffer *vbuf;
+	long j;
 
-		case -EPROTO:
-			drv_data->dbg_usb_errors++;
-			goto resubmit;
-		case -EILSEQ:
-		case -ECOMM:
-			dev_dbg(&urb->dev->dev,
-				"Transient CRC/timeout error: %d. Retrying...\n",
-				urb->status);
-			goto resubmit;
-
-		case -EPIPE:
-			dev_err(&urb->dev->dev,
-				"Endpoint stalled. Clear halt required.\n");
-			// TODO: Schedule a workqueue to call usb_clear_halt()
-			return;
-
-		default:
-			dev_err(&urb->dev->dev,
-				"Uncaught URB error: %d. Aborting stream.\n",
-				urb->status);
-			return;
-		}
-	}
-
-	drv_data->dbg_urbs_processed++;
-
-	if (drv_data->dbg_urbs_processed % diagnostic_log_iterations == 0) {
-		dev_dbg(
-			&drv_data->interface->dev,
-			DIAG_DATA_FORMAT,
-			drv_data->dbg_urbs_processed,
-			drv_data->dbg_usb_errors,
-			drv_data->dbg_packets_found,
-			drv_data->dbg_frames_found,
-			drv_data->dbg_frames_delivered,
-			drv_data->dbg_frames_dropped_soi,
-			drv_data->dbg_frames_dropped_eoi,
-			drv_data->dbg_frames_dropped_queue,
-			drv_data->dbg_ghost_headers
-		);
-	}
-
-	if (drv_data->useeplus_decoder_buffer_len +
-			urb->actual_length <= bulk_transfer_size * 2) {
-		// Append incoming data to the decoding buffer
-		memcpy(drv_data->useeplus_decoder_buffer
-			+ drv_data->useeplus_decoder_buffer_len,
-			urb->transfer_buffer, urb->actual_length);
-
-		drv_data->useeplus_decoder_buffer_len += urb->actual_length;
-	} else {
-		dev_warn(&drv_data->interface->dev,
-			"Parse buffer overflow, dropping data\n");
-		drv_data->useeplus_decoder_buffer_len = 0;
-	}
-
-	while (current_parse_index + total_usb_header_size
-			<= drv_data->useeplus_decoder_buffer_len) {
-
-		u8 *hdr_ptr = drv_data->useeplus_decoder_buffer
-			+ current_parse_index;
-
-		struct usb_packet_header *pkt =
-			(struct usb_packet_header *)(hdr_ptr);
+	while (ctx->index + total_usb_header_size <= drv_data->decode_buf_len) {
+		u8 *hdr_ptr = drv_data->decode_buf + ctx->index;
+		struct usb_packet_header *pkt = (struct usb_packet_header *)(hdr_ptr);
 
 		uint16_t delimeter = le16_to_cpu(pkt->le_delimeter);
 		u8 camera_id = pkt->le_device_id;
 		uint16_t packet_len = le16_to_cpu(pkt->le_length);
 
-		// Move current_parse_index until a valid usb_packet_header is found
+		// Synchronize stream up to header delimiter matches
 		if (delimeter != usb_packet_delimeter ||
-			(camera_id != video_camera_id &&
-			 camera_id != gravity_sensor_id)) {
-			current_parse_index++;
+		    (camera_id != video_camera_id && camera_id != gravity_sensor_id)) {
+			ctx->index++;
 			continue;
 		}
 
+		// Ghost header filtration validation
 		{
 			bool is_ghost = false;
 			size_t header_offset = 0;
-			size_t buf_len = drv_data->useeplus_decoder_buffer_len;
-			size_t last_index = buf_len - current_parse_index - 3;
-
-			size_t ghost_limit = min_t(
-				size_t,
-				max_ghost_header_offset,
-				last_index
-			);
-
+			size_t buf_len = drv_data->decode_buf_len;
+			size_t last_index = buf_len - ctx->index - 3;
+			size_t ghost_limit = min_t(size_t, max_ghost_header_offset, last_index);
 			size_t hdr_sz = usb_packet_header_size;
+			size_t offset;
 
-			// Skip to the next valid usb_packet_heder if there's one close enough
-			for (size_t offset = hdr_sz; offset <= ghost_limit; ++offset) {
-				u8 *offset_ptr = drv_data->useeplus_decoder_buffer;
-				u8 *offset_hdr_ptr = offset_ptr + current_parse_index + offset;
-
+			for (offset = hdr_sz; offset <= ghost_limit; ++offset) {
+				u8 *offset_ptr = drv_data->decode_buf;
+				u8 *offset_hdr_ptr = offset_ptr + ctx->index + offset;
 				struct usb_packet_header *offset_pkt =
 					(struct usb_packet_header *)(offset_hdr_ptr);
 
 				uint16_t offset_del = le16_to_cpu(offset_pkt->le_delimeter);
-
 				u8 offset_camera_id = offset_pkt->le_device_id;
 
-				// Found another valid usb_packet_header so close to the
-				// previous usb_packet_heder, the previous header is not valid.
 				if (offset_del == usb_packet_delimeter &&
-					(offset_camera_id == video_camera_id ||
-					 offset_camera_id == gravity_sensor_id)) {
+				    (offset_camera_id == video_camera_id ||
+				     offset_camera_id == gravity_sensor_id)) {
 					is_ghost = true;
 					header_offset = offset;
 					break;
@@ -666,7 +598,7 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 
 			if (is_ghost) {
 				drv_data->dbg_ghost_headers++;
-				current_parse_index += header_offset;
+				ctx->index += header_offset;
 				continue;
 			}
 		}
@@ -674,194 +606,204 @@ static void useeplus_read_bulk_callback(struct urb *urb)
 		drv_data->dbg_packets_found++;
 		size_t total_packet_size = usb_packet_header_size + packet_len;
 
-		// Sanity check on usb_packet_header->le_length
 		if (total_packet_size > (bulk_transfer_size * 2)) {
 			dev_dbg(&drv_data->interface->dev,
 				"Corrupted packet_len %u, skipping byte\n", packet_len);
-			current_parse_index++;
+			ctx->index++;
 			continue;
 		}
 
-		if (current_parse_index + total_packet_size > drv_data->useeplus_decoder_buffer_len)
+		if (ctx->index + total_packet_size > drv_data->decode_buf_len)
 			break; // Ran out of data. Wait for next bulk transfer
 
 		if (packet_len < usb_payload_header_size) {
-			current_parse_index += total_packet_size;
-			continue; // Skip ahead to end of payload
+			ctx->index += total_packet_size;
+			continue;
 		}
 
-		size_t payload_offset = current_parse_index + usb_packet_header_size;
-
-		u8 *decoder_ptr = drv_data->useeplus_decoder_buffer;
+		size_t payload_offset = ctx->index + usb_packet_header_size;
+		u8 *decoder_ptr = drv_data->decode_buf;
 		u8 *payload_ptr = decoder_ptr + payload_offset;
-
-		struct usb_payload_header *payload =
-			(struct usb_payload_header *)(payload_ptr);
+		struct usb_payload_header *payload = (struct usb_payload_header *)(payload_ptr);
 
 		u8 current_frame_id = payload->le_frame_id;
 		u8 current_camera_number = payload->le_camera_number;
 		u8 current_flags = payload->le_flags;
 
-		// When frame id changes, send if valid else drop it.
-		if (drv_data->waiting_for_jpeg_eoi_marker &&
-			drv_data->mjpeg_frame_len > 0 &&
-			drv_data->mjpeg_frame_id != current_frame_id) {
+		// Frame boundary transformation detection
+		if (drv_data->building_frame &&
+		    drv_data->frame_len > 0 &&
+		    drv_data->frame_id != current_frame_id) {
 
 			drv_data->dbg_frames_found++;
 			size_t soi_offset = 0;
 			size_t eoi_offset = 0;
-			bool found_soi = false;
+			bool building_frame = false;
 			bool found_eoi = false;
+			size_t max_pos = min_t(size_t, jpeg_soi_markers_max_position, drv_data->frame_len);
 
-			size_t max_pos = min_t(
-				size_t,
-				jpeg_soi_markers_max_position,
-				drv_data->mjpeg_frame_len
-			);
-
-			// Scan forward for Start of Image (FF D8)
-			for (size_t j = 0; j + 1 < max_pos; ++j) {
-				if (drv_data->mjpeg_frame_buffer[j] == jpeg_boundary_marker &&
-					drv_data->mjpeg_frame_buffer[j + 1] == jpeg_start_of_img_marker) {
+			// Forward scan for SOI marker
+			for (j = 0; j + 1 < max_pos; ++j) {
+				if (drv_data->frame_buf[j] == jpeg_boundary_marker &&
+				    drv_data->frame_buf[j + 1] == jpeg_start_of_img_marker) {
 					soi_offset = j;
-					found_soi = true;
+					building_frame = true;
 					break;
 				}
 			}
 
-			// Scan backwards for End of Image (FF D9)
-			for (size_t j = drv_data->mjpeg_frame_len; j >= 2; --j) {
-				if (drv_data->mjpeg_frame_buffer[j - 2] == jpeg_boundary_marker &&
-					drv_data->mjpeg_frame_buffer[j - 1] == jpeg_end_of_img_marker) {
+			// Backward scan for EOI marker
+			for (j = drv_data->frame_len; j >= 2; --j) {
+				if (drv_data->frame_buf[j - 2] == jpeg_boundary_marker &&
+				    drv_data->frame_buf[j - 1] == jpeg_end_of_img_marker) {
 					eoi_offset = j;
 					found_eoi = true;
 					break;
 				}
 			}
 
-			if (found_soi && found_eoi && soi_offset < eoi_offset) {
+			// Deliver extracted JPEG payloads to waiting V4L2 queue slots
+			if (building_frame && found_eoi && soi_offset < eoi_offset) {
 				size_t final_content_size = eoi_offset - soi_offset;
-
 				drv_data->frame_counter++;
 
-				spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-
-				if (drv_data->streaming_video &&
-					!list_empty(&drv_data->ready_queue)) {
-
-					vbuf = list_first_entry(
-						&drv_data->ready_queue,
-						struct useeplus_buffer,
-						list
-					);
-
+				spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
+				if (!list_empty(&drv_data->ready_queue)) {
+					vbuf = list_first_entry(&drv_data->ready_queue,
+								struct useeplus_buffer, list);
 					list_del(&vbuf->list);
 
-					void *vaddr = vb2_plane_vaddr(
-						&vbuf->vb2_buffer.vb2_buf,
-						0
-					);
-
+					void *vaddr = vb2_plane_vaddr(&vbuf->vb2_buffer.vb2_buf, 0);
 					if (vaddr) {
-						memcpy(
-							vaddr,
-							drv_data->mjpeg_frame_buffer + soi_offset,
-							final_content_size
-						);
-
-						vb2_set_plane_payload(
-							&vbuf->vb2_buffer.vb2_buf,
-							0,
-							final_content_size
-						);
+						memcpy(vaddr, drv_data->frame_buf + soi_offset, final_content_size);
+						vb2_set_plane_payload(&vbuf->vb2_buffer.vb2_buf, 0, final_content_size);
 
 						vbuf->vb2_buffer.vb2_buf.timestamp = ktime_get_ns();
 						vbuf->vb2_buffer.sequence = drv_data->sequence++;
 						vbuf->vb2_buffer.field = V4L2_FIELD_NONE;
 
-						vb2_buffer_done(
-							&vbuf->vb2_buffer.vb2_buf,
-							VB2_BUF_STATE_DONE
-						);
-
+						vb2_buffer_done(&vbuf->vb2_buffer.vb2_buf, VB2_BUF_STATE_DONE);
 						drv_data->dbg_frames_delivered++;
 					} else {
-						vb2_buffer_done(
-							&vbuf->vb2_buffer.vb2_buf,
-							VB2_BUF_STATE_ERROR
-						);
+						vb2_buffer_done(&vbuf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
 						drv_data->dbg_frames_dropped_queue++;
 					}
 				} else {
 					drv_data->dbg_frames_dropped_queue++;
 				}
-
-				spin_unlock_irqrestore(
-					&drv_data->ready_queue_lock,
-					flags
-				);
-			} else if (!found_soi) {
+				spin_unlock_irqrestore(&drv_data->ready_queue_lock, ctx->flags);
+			} else if (!building_frame) {
 				drv_data->dbg_frames_dropped_soi++;
 			} else if (!found_eoi || eoi_offset <= soi_offset) {
 				drv_data->dbg_frames_dropped_eoi++;
 			}
 
-			drv_data->mjpeg_frame_len = 0;
+			drv_data->frame_len = 0;
 		}
 
-		drv_data->mjpeg_frame_id = current_frame_id;
-		drv_data->waiting_for_jpeg_eoi_marker = true;
+		drv_data->frame_id = current_frame_id;
+		drv_data->building_frame = true;
 
 		bool has_gravity_sensor = (current_flags & 0x01) != 0;
 		uint8_t other_flags = (current_flags >> 2) & 0x3F;
 
-		if (!has_gravity_sensor &&
-			other_flags == 0 &&
-			current_camera_number < 2) {
-			size_t payload_start = current_parse_index + total_usb_header_size;
+		// Extract frame video components when payload properties align
+		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
+			size_t payload_start = ctx->index + total_usb_header_size;
 			size_t payload_size = total_packet_size - total_usb_header_size;
+			size_t combined_len = drv_data->frame_len + payload_size;
 
-			if (drv_data->mjpeg_frame_len + payload_size <= max_frame_size) {
-				memcpy(
-					drv_data->mjpeg_frame_buffer + drv_data->mjpeg_frame_len,
-					drv_data->useeplus_decoder_buffer + payload_start,
-					payload_size
-				);
+			if (combined_len <= max_frame_size) {
+				u8 *jpg_ptr = drv_data->frame_buf + drv_data->frame_len;
+				u8 *decode_ptr = drv_data->decode_buf + payload_start;
 
-				drv_data->mjpeg_frame_len += payload_size;
+				memcpy(jpg_ptr, decode_ptr, payload_size);
+				drv_data->frame_len += payload_size;
 			}
 		}
 
-		current_parse_index += total_packet_size;
+		ctx->index += total_packet_size;
+	}
+}
+
+static void useeplus_read_bulk_callback(struct urb *urb)
+{
+	struct useeplus_drv_data *drv_data = urb->context;
+	struct useeplus_parse_ctx ctx = { .index = 0 };
+	size_t remaining;
+	u8 *dcp;
+	int retval;
+
+	// Concurrency safety guard
+	if (!test_bit(STREAM_CLIENT_READY, &drv_data->streaming))
+		return;
+
+	// Handle URB completion status codes
+	if (urb->status) {
+		switch (urb->status) {
+		case -ENOENT:
+		case -ECONNRESET:
+		case -ESHUTDOWN:
+		case -ENODEV:
+			dev_dbg(&urb->dev->dev, "URB stopped cleanly: %d\n", urb->status);
+			return;
+		case -EPROTO:
+			drv_data->dbg_usb_errors++;
+			goto resubmit;
+		case -EILSEQ:
+		case -ECOMM:
+			dev_dbg(&urb->dev->dev, "Transient CRC/timeout error: %d\n", urb->status);
+			goto resubmit;
+		case -EPIPE:
+			dev_err(&urb->dev->dev, "Endpoint stalled.\n");
+			return;
+		default:
+			dev_err(&urb->dev->dev, "Uncaught URB error: %d\n", urb->status);
+			return;
+		}
 	}
 
-	size_t dec_len = drv_data->useeplus_decoder_buffer_len;
-	if (current_parse_index < dec_len) {
-		size_t remaining = dec_len - current_parse_index;
+	drv_data->dbg_urbs_processed++;
 
-		memmove(
-			drv_data->useeplus_decoder_buffer,
-			drv_data->useeplus_decoder_buffer + current_parse_index,
-			remaining
-		);
+	// Diagnostic logging throttle
+	if (drv_data->dbg_urbs_processed % diagnostic_log_iterations == 0) {
+		dev_dbg(&drv_data->interface->dev, DIAG_DATA_FORMAT,
+			drv_data->dbg_urbs_processed, drv_data->dbg_usb_errors,
+			drv_data->dbg_packets_found, drv_data->dbg_frames_found,
+			drv_data->dbg_frames_delivered, drv_data->dbg_frames_dropped_soi,
+			drv_data->dbg_frames_dropped_eoi, drv_data->dbg_frames_dropped_queue,
+			drv_data->dbg_ghost_headers);
+	}
 
-		drv_data->useeplus_decoder_buffer_len = remaining;
+	// Append incoming block to decoding workspace
+	if (drv_data->decode_buf_len + urb->actual_length <= bulk_transfer_size * 2) {
+		memcpy(drv_data->decode_buf + drv_data->decode_buf_len,
+		       urb->transfer_buffer, urb->actual_length);
+		drv_data->decode_buf_len += urb->actual_length;
 	} else {
-		drv_data->useeplus_decoder_buffer_len = 0;
+		dev_warn(&drv_data->interface->dev, "Parse buffer overflow, dropping data\n");
+		drv_data->decode_buf_len = 0;
+	}
+
+	// Run the decoupled Protocol Decoding Machine
+	useeplus_decode_packets(drv_data, &ctx);
+
+	// Shift fractional remaining elements down to the buffer head
+	if (ctx.index < drv_data->decode_buf_len) {
+		remaining = drv_data->decode_buf_len - ctx.index;
+		dcp = drv_data->decode_buf;
+		memmove(dcp, dcp + ctx.index, remaining);
+		drv_data->decode_buf_len = remaining;
+	} else {
+		drv_data->decode_buf_len = 0;
 	}
 
 resubmit:
-	if (test_bit(FLAG_STREAMING, &drv_data->flags)) {
+	// Safe Pipeline Resubmission check
+	if (test_bit(STREAM_CLIENT_READY, &drv_data->streaming)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
-		if (retval) {
-			if (retval != -ENODEV && retval != -ESHUTDOWN && retval != -ENOENT) {
-				dev_err(&drv_data->interface->dev,
-					"usb_submit_urb failed with error %d\n", retval);
-			}
-			else {
-				dev_warn(&drv_data->interface->dev,
-					 "usb_submit_urb failed returned %d\n", retval);
-			}
+		if (retval && retval != -ENODEV && retval != -ESHUTDOWN && retval != -ENOENT) {
+			dev_err(&drv_data->interface->dev, "usb_submit_urb failed: %d\n", retval);
 		}
 	}
 }
@@ -913,7 +855,7 @@ static int useeplus_suspend(struct usb_interface *intf, pm_message_t message)
 
 static int useeplus_resume(struct usb_interface *intf)
 {
-	/* Resubmit URBs if FLAG_STREAMING is true */
+	/* Resubmit URBs if 0 is true */
 	return 0;
 }
 
@@ -958,10 +900,10 @@ static void useeplus_device_release(struct v4l2_device *v4l2_dev)
 {
 	struct useeplus_drv_data *drv_data = container_of(v4l2_dev, struct useeplus_drv_data, v4l2_dev);
 
-	if (drv_data->mjpeg_frame_buffer)
-		vfree(drv_data->mjpeg_frame_buffer);
+	if (drv_data->frame_buf)
+		vfree(drv_data->frame_buf);
 
-	kfree(drv_data->useeplus_decoder_buffer);
+	kfree(drv_data->decode_buf);
 	kfree(drv_data);
 }
 
@@ -990,10 +932,9 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	drv_data->usb_dev = usb_dev;
 	drv_data->interface = interface;
 	drv_data->sequence = 0;
-	drv_data->streaming_video = false;
-	drv_data->waiting_for_jpeg_eoi_marker = false;
-	drv_data->mjpeg_frame_len = 0;
-	drv_data->useeplus_decoder_buffer_len = 0;
+	drv_data->building_frame = false;
+	drv_data->frame_len = 0;
+	drv_data->decode_buf_len = 0;
 
 	mutex_init(&drv_data->v4l2_lock);
 	spin_lock_init(&drv_data->ready_queue_lock);
@@ -1020,14 +961,14 @@ static int useeplus_probe(struct usb_interface *interface, const struct usb_devi
 	}
 
 	/* Memory Allocations */
-	drv_data->mjpeg_frame_buffer = vzalloc(max_frame_size);
-	if (!drv_data->mjpeg_frame_buffer) {
+	drv_data->frame_buf = vzalloc(max_frame_size);
+	if (!drv_data->frame_buf) {
 		retval = -ENOMEM;
 		goto error_release_iap;
 	}
 
-	drv_data->useeplus_decoder_buffer = kzalloc(bulk_transfer_size * 2, GFP_KERNEL);
-	if (!drv_data->useeplus_decoder_buffer) {
+	drv_data->decode_buf = kzalloc(bulk_transfer_size * 2, GFP_KERNEL);
+	if (!drv_data->decode_buf) {
 		retval = -ENOMEM;
 		goto error_release_iap;
 	}
@@ -1168,10 +1109,10 @@ error_unreg_v4l2:
 error_release_iap:
 	usb_driver_release_interface(&useeplus_driver, iap_intf);
 
-	if (drv_data->mjpeg_frame_buffer)
-		vfree(drv_data->mjpeg_frame_buffer);
+	if (drv_data->frame_buf)
+		vfree(drv_data->frame_buf);
 
-	kfree(drv_data->useeplus_decoder_buffer);
+	kfree(drv_data->decode_buf);
 error_free_dev:
 	kfree(drv_data);
 	return retval;
