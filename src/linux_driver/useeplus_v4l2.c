@@ -23,9 +23,9 @@ MODULE_VERSION("0.1.0");
 
 #define BULK_TRANSFER_COUNT					4
 #define FLAG_STREAMING						0
+#define USEEPLUS_IAP_INTERFACE				0
+#define USEEPLUS_VIDEO_INTERFACE			1
 
-static const u8 USEEPLUS_IAP_INTERFACE = 0;
-static const u8 USEEPLUS_VIDEO_INTERFACE = 1;
 static const unsigned int USEEPLUS_ALT_SETTING_VIDEO_ENABLE = 1;
 
 static const int USEEPLUS_VIDEO_ENDPOINT = 0x01;
