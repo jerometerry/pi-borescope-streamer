@@ -9,6 +9,8 @@ sudo apt install build-essential linux-headers-$(uname -r)
 
 ## Linux Kernel Style Check
 
+https://docs.kernel.org/process/coding-style.html
+
 https://docs.kernel.org/driver-api/index.html
 
 https://docs.kernel.org/driver-api/usb/writing_usb_driver.html
