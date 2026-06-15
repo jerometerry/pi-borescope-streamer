@@ -1,5 +1,5 @@
-.PHONY: default smatch coccicheck clean install install-debug install-without-deps remove \
-	uninstall check-status insert check-deps check-stack check-patch check-includes \
+.PHONY: default smatch static-check coccicheck clean install install-debug install-without-deps \
+	remove uninstall check-status insert check-deps check-stack check-patch check-includes \
 	check-format fix-format
 
 obj-m += useeplus_v4l2.o
@@ -18,13 +18,17 @@ ccflags-y += -DBUILD_VER='"$(VERSION_STR)"'
 
 ifeq ($(DEBUG),1)
 ccflags-y += -DDEBUG
+ccflags-y += -fsanitize=bounds -fsanitize=undefined -fhardened
 endif
 
 default:
 	$(MAKE) C=1 -C $(KDIR) M=$(PWD) W=1 modules
 
 smatch:
-	$(MAKE) CHECK=$(SMATCH) C=1 -C $(KDIR) M=$(PWD) modules
+	$(MAKE) CHECK="$(SMATCH) -p=kernel --param-mapper" C=1 -C $(KDIR) M=$(PWD) modules
+
+static-check:
+	$(MAKE) EXTRA_CFLAGS="-fanalyzer -Wanalyzer-infinite-loop -Warray-bounds=2" C=1 -C $(KDIR) M=$(PWD) modules
 
 coccicheck:
 	@$(MAKE) --no-print-directory -C $(KDIR) M=$(PWD) W=1 V=0 coccicheck MODE=report \
