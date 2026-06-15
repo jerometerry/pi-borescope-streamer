@@ -26,7 +26,7 @@ MODULE_VERSION("0.1.0");
 #define CAP_CARD "Useeplus non-UVC Borescope"
 #define V4L2_INPUT_NAME "Borescope Lens Channel 0"
 
-static const struct usb_driver up_driver;
+static struct usb_driver up_driver;
 static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops;
 static const struct v4l2_file_operations up_v4l2_fops;
 static const struct vb2_ops up_vb2_ops;
@@ -872,7 +872,7 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 	.vidioc_streamoff = vb2_ioctl_streamoff,
 };
 
-static const struct usb_driver up_driver = {
+static struct usb_driver up_driver = {
 	.name = "useeplus",
 	.id_table = up_table,
 	.probe = up_probe,
