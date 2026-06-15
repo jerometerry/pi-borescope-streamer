@@ -96,7 +96,7 @@ static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 	}
 
 	usb_free_urb(drv_data->urbs[urb_index]);
-	drv_data->urbs[i] = NULL;
+	drv_data->urbs[urb_index] = NULL;
 }
 
 static void up_free_urbs(struct up_drv_data *drv_data)
