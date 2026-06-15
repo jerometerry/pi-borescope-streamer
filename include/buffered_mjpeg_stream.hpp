@@ -5,11 +5,10 @@
 #include <span>
 #include <vector>
 
+#include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "usb_payload_header.hpp"
-
-class BufferPool;
 
 /**
  * @brief The translator that extracts and reassembles clean MJPEG video pictures from the hardware

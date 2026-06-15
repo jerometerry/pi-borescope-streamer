@@ -120,8 +120,9 @@ int main(int argc, const char* argv[]) {
             if (bytesInTransfer < 0) return EXIT_FAILURE;
 
             for (std::streamsize idx = 0; idx < bytesInTransfer; ++idx) {
-                uint8_t b = transferBuffer
-                    [idx];  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+                // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
+                uint8_t b = transferBuffer[idx];
+                // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
 
                 switch (state) {
                     case ParseState::FIND_HEADER_A:
@@ -142,8 +143,9 @@ int main(int argc, const char* argv[]) {
                         break;
 
                     case ParseState::READ_PACKET_HEADER:
-                        headerBuffer[headerBytesCollected++] =
-                            b;  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+                        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
+                        headerBuffer[headerBytesCollected++] = b;
+                        // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
                         if (headerBytesCollected == USB_PACKET_HEADER_SIZE) {
                             const auto* pkt =
                                 reinterpret_cast<const UsbPacketHeader*>(headerBuffer);
@@ -160,8 +162,9 @@ int main(int argc, const char* argv[]) {
                         break;
 
                     case ParseState::READ_PAYLOAD_HEADER:
-                        headerBuffer[headerBytesCollected++] =
-                            b;  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+                        // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
+                        headerBuffer[headerBytesCollected++] = b;
+                        // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
                         payloadBytesRemaining--;
 
                         if (headerBytesCollected == TOTAL_USB_HEADER_SIZE) {
@@ -199,8 +202,9 @@ int main(int argc, const char* argv[]) {
 
                     case ParseState::STREAM_VIDEO:
                         if (currentFrameLen < MAX_FRAME_SIZE) {
-                            currentFrame[currentFrameLen++] =
-                                b;  // NOLINT(cppcoreguidelines-pro-bounds-constant-array-index)
+                            // NOLINTBEGIN(cppcoreguidelines-pro-bounds-constant-array-index)
+                            currentFrame[currentFrameLen++] = b;
+                            // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
                         }
                         payloadBytesRemaining--;
 
