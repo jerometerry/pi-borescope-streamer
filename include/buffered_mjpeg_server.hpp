@@ -4,6 +4,7 @@
 #include <functional>
 #include <thread>
 #include <vector>
+
 #include "buffer_ptr.hpp"
 
 // IWYU pragma: begin_exports
@@ -11,16 +12,19 @@ struct us_listen_socket_t;
 struct us_timer_t;
 // IWYU pragma: end_exports
 
-namespace uWS { template <bool SSL> struct HttpResponse; }
+namespace uWS {
+template <bool SSL>
+struct HttpResponse;
+}
 
 /**
  * @brief The server that streams the USB camera video to your web browser or video player.
- * @details MjpegServer bridges the physical USB camera and your network using the highly 
- * optimized uWebSockets epoll engine. It takes the raw video pictures coming from the 
+ * @details MjpegServer bridges the physical USB camera and your network using the highly
+ * optimized uWebSockets epoll engine. It takes the raw video pictures coming from the
  * hardware and packages them into an MJPEG stream that any standard web browser can display.
  */
 class BufferedMjpegServer {
-public:
+   public:
     /**
      * @brief The callback signature used by the server to request the latest frame.
      * @param[out] currentFrameId Passed by reference so the source can populate the latest ID.
@@ -34,7 +38,8 @@ public:
      * @param running A reference to the global shutdown flag to monitor for graceful exit.
      * @param frameSource The provider (usually MjpegFrameQueue) that supplies the video frames.
      */
-    explicit BufferedMjpegServer(int port, const std::atomic<bool>& running, FrameSource frameSource);
+    explicit BufferedMjpegServer(int port, const std::atomic<bool>& running,
+                                 FrameSource frameSource);
     ~BufferedMjpegServer();
 
     BufferedMjpegServer(const BufferedMjpegServer&) = delete;
@@ -45,7 +50,7 @@ public:
      */
     void start();
 
-private:
+   private:
     struct ViewerState {
         uWS::HttpResponse<false>* res{};
         uint32_t lastSentFrameId{0};
@@ -71,5 +76,5 @@ private:
     std::vector<ViewerState> activeViewers_;
     uint32_t lastBroadcastedFrameId_{0};
 
-    static void onTimer(us_timer_t *t);
+    static void onTimer(us_timer_t* t);
 };

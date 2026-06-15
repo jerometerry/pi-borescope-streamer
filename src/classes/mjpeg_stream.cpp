@@ -1,18 +1,19 @@
+#include "mjpeg_stream.hpp"
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <span>
 #include <string>
 #include <vector>
+
 #include "constants.hpp"
-#include "mjpeg_stream.hpp"
 #include "usb_packet_header.hpp"
 #include "usb_payload_header.hpp"
 #include "video_frame.hpp"
 #include "video_frame_buffer.hpp"
 
-MjpegStream::MjpegStream(VideoFrameBuffer& disruptor) :
-    disruptor_(&disruptor) {
+MjpegStream::MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {
     inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
 }
 
@@ -25,27 +26,22 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         UsbPacketHeader packetHeader{};
         std::memcpy(&packetHeader, &inputBuffer_[i], USB_PACKET_HEADER_SIZE);
 
-        if (packetHeader.getHeader() != UsbProtocol::USB_FRAME_HEADER || 
-           (packetHeader.getCameraId() != UsbProtocol::VIDEO_CAMERA_ID && 
-            packetHeader.getCameraId() != UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
+        if (packetHeader.getHeader() != UsbProtocol::USB_FRAME_HEADER ||
+            (packetHeader.getCameraId() != UsbProtocol::VIDEO_CAMERA_ID &&
+             packetHeader.getCameraId() != UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
             i++;
             continue;
         }
 
         bool isGhost = false;
         size_t nextHeaderOffset = 0;
-        size_t maxScan = std::min<size_t>(
-            UsbProtocol::MAX_SCAN_LIMIT,
-            inputBuffer_.size() - i - 3
-        );
+        size_t maxScan = std::min<size_t>(UsbProtocol::MAX_SCAN_LIMIT, inputBuffer_.size() - i - 3);
 
         for (size_t d = USB_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
-            if (inputBuffer_[i+d] == UsbProtocol::USB_FRAME_HEADER_A && 
-                inputBuffer_[i+d+1] == UsbProtocol::USB_FRAME_HEADER_B && (
-                    inputBuffer_[i+d+2] == UsbProtocol::VIDEO_CAMERA_ID || 
-                    inputBuffer_[i+d+2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID
-                )
-            ) {
+            if (inputBuffer_[i + d] == UsbProtocol::USB_FRAME_HEADER_A &&
+                inputBuffer_[i + d + 1] == UsbProtocol::USB_FRAME_HEADER_B &&
+                (inputBuffer_[i + d + 2] == UsbProtocol::VIDEO_CAMERA_ID ||
+                 inputBuffer_[i + d + 2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
                 isGhost = true;
                 nextHeaderOffset = d;
                 break;
@@ -59,7 +55,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
 
         size_t totalPacketSize = USB_PACKET_HEADER_SIZE + packetHeader.getLength();
 
-        if (i + totalPacketSize > inputBuffer_.size()) { 
+        if (i + totalPacketSize > inputBuffer_.size()) {
             break;
         }
 
@@ -69,33 +65,24 @@ void MjpegStream::send(std::span<const uint8_t> data) {
         }
 
         UsbPayloadHeader payloadHeader{};
-        std::memcpy(
-            &payloadHeader,
-            &inputBuffer_[i + USB_PACKET_HEADER_SIZE],
-             USB_PAYLOAD_HEADER_SIZE
-        );
+        std::memcpy(&payloadHeader, &inputBuffer_[i + USB_PACKET_HEADER_SIZE],
+                    USB_PAYLOAD_HEADER_SIZE);
 
-        if (frameActive_ && 
-            disruptor_->getBySequence(currentClaimSequence_).contentSize() > 0 && 
+        if (frameActive_ && disruptor_->getBySequence(currentClaimSequence_).contentSize() > 0 &&
             payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
             outputFrame();
         }
-        
+
         payloadHeader_ = payloadHeader;
 
-        if (!payloadHeader.hasGravitySensor() && 
-            payloadHeader.getOtherFlags() == 0 && 
+        if (!payloadHeader.hasGravitySensor() && payloadHeader.getOtherFlags() == 0 &&
             payloadHeader.getCameraNumber() < 2) {
-
             size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
             size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
 
             VideoFrame& slot = getActiveFrameSlot();
 
-            std::span<const uint8_t> toInsert(
-                inputBuffer_.data() + payloadStart, 
-                payloadSize
-            );
+            std::span<const uint8_t> toInsert(inputBuffer_.data() + payloadStart, payloadSize);
             slot.insertContent(toInsert);
         }
 
@@ -119,7 +106,7 @@ void MjpegStream::outputFrame() {
     }
 
     VideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);
-    
+
     if (slot.contentSize() == 0) {
         disruptor_->publish(currentClaimSequence_);
         frameActive_ = false;
@@ -130,9 +117,10 @@ void MjpegStream::outputFrame() {
     size_t eoiOffset = std::string::npos;
 
     // Scan forward for Start of Image (FF D8)
-    size_t maxSoiPosition = std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, slot.contentSize());
+    size_t maxSoiPosition =
+        std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, slot.contentSize());
     for (size_t j = 0; j + 1 < maxSoiPosition; ++j) {
-        if (slot.storage[slot.paddingSize() + j] == UsbProtocol::BOUNDARY_MARKER && 
+        if (slot.storage[slot.paddingSize() + j] == UsbProtocol::BOUNDARY_MARKER &&
             slot.storage[slot.paddingSize() + j + 1] == UsbProtocol::START_MARKER) {
             soiOffset = j;
             break;
@@ -141,7 +129,7 @@ void MjpegStream::outputFrame() {
 
     // Scan backwards for End of Image (FF D9)
     for (size_t j = slot.contentSize(); j >= 2; --j) {
-        if (slot.storage[slot.paddingSize() + j - 2] == UsbProtocol::BOUNDARY_MARKER && 
+        if (slot.storage[slot.paddingSize() + j - 2] == UsbProtocol::BOUNDARY_MARKER &&
             slot.storage[slot.paddingSize() + j - 1] == UsbProtocol::END_MARKER) {
             eoiOffset = j;
             break;
@@ -153,7 +141,7 @@ void MjpegStream::outputFrame() {
         size_t endTrim = eoiOffset;
         slot.trim(startTrim, endTrim);
     } else {
-        slot.clear(); 
+        slot.clear();
     }
 
     disruptor_->publish(currentClaimSequence_);
@@ -170,4 +158,3 @@ VideoFrame& MjpegStream::getActiveFrameSlot() {
     }
     return disruptor_->getBySequence(currentClaimSequence_);
 }
-    

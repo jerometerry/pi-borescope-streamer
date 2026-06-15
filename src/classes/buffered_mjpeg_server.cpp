@@ -1,27 +1,31 @@
+#include "buffered_mjpeg_server.hpp"
+
 #include <App.h>
 #include <HttpResponse.h>
 #include <Loop.h>
 #include <libusockets.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
-#include <iostream>
 #include <functional>
 #include <future>
+#include <iostream>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
+
 #include "buffer.hpp"
-#include "buffered_mjpeg_server.hpp"
 #include "buffered_zero_allocation_response_builder.hpp"
 #include "constants.hpp"
 #include "index_html.hpp"
 #include "intrusive_ptr.hpp"
 #include "usb_device_finder.hpp"
 
-BufferedMjpegServer::BufferedMjpegServer(const int port, const std::atomic<bool>& running, FrameSource frameSource)
+BufferedMjpegServer::BufferedMjpegServer(const int port, const std::atomic<bool>& running,
+                                         FrameSource frameSource)
     : port_(port), running_(running), frameSource_(std::move(frameSource)) {}
 
 BufferedMjpegServer::~BufferedMjpegServer() {
@@ -31,7 +35,7 @@ BufferedMjpegServer::~BufferedMjpegServer() {
     std::cout << "[Network Core] Network engine cleanly terminated.\n";
 }
 
-void BufferedMjpegServer::onTimer(us_timer_t *t) {
+void BufferedMjpegServer::onTimer(us_timer_t* t) {
     auto* server = *static_cast<BufferedMjpegServer**>(us_timer_ext(t));
 
     if (!server->running_) {
@@ -54,10 +58,11 @@ void BufferedMjpegServer::onTimer(us_timer_t *t) {
     uint32_t currentFrameId = 0;
     auto currentFrame = server->frameSource_(currentFrameId);
 
-    if (currentFrame && !currentFrame->empty() && currentFrameId != server->lastBroadcastedFrameId_) {
+    if (currentFrame && !currentFrame->empty() &&
+        currentFrameId != server->lastBroadcastedFrameId_) {
         server->lastBroadcastedFrameId_ = currentFrameId;
 
-        for (size_t i = 0; i < server->activeViewers_.size(); ) {
+        for (size_t i = 0; i < server->activeViewers_.size();) {
             auto& viewer = server->activeViewers_[i];
             auto* res = viewer.res;
 
@@ -79,35 +84,37 @@ void BufferedMjpegServer::onTimer(us_timer_t *t) {
                 if (backpressure == 0) {
                     if (viewer.isLagging) {
                         uint32_t droppedFrames = currentFrameId - viewer.lagStartFrameId;
-                        std::cerr << "[Network Telemetry] Viewer recovered. TCP pipe cleared. " 
-                                  << droppedFrames << " frames were deliberately dropped to maintain real-time latency.\n";
+                        std::cerr
+                            << "[Network Telemetry] Viewer recovered. TCP pipe cleared. "
+                            << droppedFrames
+                            << " frames were deliberately dropped to maintain real-time latency.\n";
                         viewer.isLagging = false;
                     }
 
-                    CorkState state {
-                        res,
-                        BufferedZeroAllocationResponseBuilder::build(currentFrame.get()),
-                        false
-                    };
+                    CorkState state{
+                        res, BufferedZeroAllocationResponseBuilder::build(currentFrame.get()),
+                        false};
 
-                    state.res->cork([&state]() {
-                        state.ok = state.res->write(state.payload);
-                    });
+                    state.res->cork([&state]() { state.ok = state.res->write(state.payload); });
 
                     if (!state.ok) {
                         std::cerr << "[Network Telemetry] ALERT: Kernel buffer rejected data! "
-                                << "uWebSockets just executed a user-space malloc to queue this frame.\n";
+                                  << "uWebSockets just executed a user-space malloc to queue this "
+                                     "frame.\n";
                     }
 
                     size_t postWriteBackpressure = res->getWriteOffset();
                     if (postWriteBackpressure > 0) {
-                        std::cerr << "[Network Telemetry] HEAP ALLOCATION DETECTED! res->write() caused " 
-                                  << postWriteBackpressure << " bytes to be queued on the heap for viewer frame " 
-                                  << currentFrameId << "\n";
+                        std::cerr
+                            << "[Network Telemetry] HEAP ALLOCATION DETECTED! res->write() caused "
+                            << postWriteBackpressure
+                            << " bytes to be queued on the heap for viewer frame " << currentFrameId
+                            << "\n";
                     }
                 } else {
                     if (!viewer.isLagging) {
-                        std::cerr << "[Network Telemetry] Warning: TCP stall detected! OS buffer backed up with " 
+                        std::cerr << "[Network Telemetry] Warning: TCP stall detected! OS buffer "
+                                     "backed up with "
                                   << backpressure << " bytes. Dropping frames...\n";
                         viewer.isLagging = true;
                         viewer.lagStartFrameId = currentFrameId;
@@ -127,25 +134,25 @@ void BufferedMjpegServer::start() {
 
     networkThread_ = std::thread([this, &loopPromise]() {
         auto app = uWS::App();
-        app.get("/", [](auto *res, auto *) {
+        app.get("/", [](auto* res, auto*) {
             res->writeHeader("Connection", "close")
                 ->writeHeader("Content-Type", "text/html")
                 ->end(Resources::index_html);
         });
-        app.get("/api/cameras", [](auto *res, auto *) {
+        app.get("/api/cameras", [](auto* res, auto*) {
             auto cameras = UsbDeviceFinder::superCameras();
             std::string jsonPayload = UsbDeviceFinder::toJson(cameras);
             res->writeHeader("Connection", "close")
-            ->writeHeader("Content-Type", "application/json")
-            ->end(jsonPayload);
+                ->writeHeader("Content-Type", "application/json")
+                ->end(jsonPayload);
         });
-        app.get("/favicon.ico", [](auto *res, auto *) {
+        app.get("/favicon.ico", [](auto* res, auto*) {
             res->writeStatus("404 Not Found")
-            ->writeHeader("Connection", "close")
-            ->writeHeader("Cache-Control", "public, max-age=31536000")
-            ->end();
+                ->writeHeader("Connection", "close")
+                ->writeHeader("Cache-Control", "public, max-age=31536000")
+                ->end();
         });
-        app.get("/stream", [this](auto *res, auto *) {
+        app.get("/stream", [this](auto* res, auto*) {
             if (activeViewers_.size() >= WebServerConfig::MAX_CLIENTS) {
                 std::cerr << "Server at capacity. Refused new viewer\n";
                 res->writeStatus("503 Service Unavailable")->end("Server Capacity Reached");
@@ -166,41 +173,34 @@ void BufferedMjpegServer::start() {
                 std::cerr << "Viewer disconnected from stream\n";
 
                 auto it = std::find_if(activeViewers_.begin(), activeViewers_.end(),
-                    [res](const ViewerState& v) { return v.res == res; });
-                    
+                                       [res](const ViewerState& v) { return v.res == res; });
+
                 if (it != activeViewers_.end()) {
                     it->isClosed = true;
                 }
             });
         });
-        app.any("/*", [](auto *res, auto *) {
-            res->writeStatus("404 Not Found")->end();
-        });
-        app.listen(port_, [this](us_listen_socket_t *socket) {
+        app.any("/*", [](auto* res, auto*) { res->writeStatus("404 Not Found")->end(); });
+        app.listen(port_, [this](us_listen_socket_t* socket) {
             if (socket) {
                 listenSocket_ = socket;
-                std::cerr << "[Network Core] Asynchronous uWebSockets engine listening on port " << port_ << '\n';
+                std::cerr << "[Network Core] Asynchronous uWebSockets engine listening on port "
+                          << port_ << '\n';
 
-                auto *loop = reinterpret_cast<struct us_loop_t *>(uWS::Loop::get());
-                us_timer_t *timer = us_create_timer(
-                    loop, 
-                    WebServerConfig::TIMER_FALLTHROUGH, 
-                    sizeof(BufferedMjpegServer*)
-                );
-                
+                auto* loop = reinterpret_cast<struct us_loop_t*>(uWS::Loop::get());
+                us_timer_t* timer = us_create_timer(loop, WebServerConfig::TIMER_FALLTHROUGH,
+                                                    sizeof(BufferedMjpegServer*));
+
                 *static_cast<BufferedMjpegServer**>(us_timer_ext(timer)) = this;
-                us_timer_set(
-                    timer, 
-                    BufferedMjpegServer::onTimer, 
-                    WebServerConfig::TIMER_INTERVAL_MS, 
-                    WebServerConfig::TIMER_INTERVAL_MS
-                );
+                us_timer_set(timer, BufferedMjpegServer::onTimer,
+                             WebServerConfig::TIMER_INTERVAL_MS,
+                             WebServerConfig::TIMER_INTERVAL_MS);
             } else {
                 std::cerr << "[Network Core Error] Failed to bind to port " << port_ << '\n';
             }
         });
 
-        loopPromise.set_value(); 
+        loopPromise.set_value();
         app.run();
     });
 

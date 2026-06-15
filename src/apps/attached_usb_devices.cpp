@@ -1,9 +1,9 @@
 /**
  * @file attached_usb_devices.cpp
  * @brief A diagnostic tool to scan the Raspberry Pi's USB ports for compatible cameras.
- * @details Before a user tries to start the main streaming server, they can run this 
- * simple utility to verify that their camera is physically plugged in, turned on, 
- * and recognized by the operating system. It prints out a clean list of every 
+ * @details Before a user tries to start the main streaming server, they can run this
+ * simple utility to verify that their camera is physically plugged in, turned on,
+ * and recognized by the operating system. It prints out a clean list of every
  * compatible endoscope it finds, including the hardware Bus and Address numbers.
  */
 
@@ -13,6 +13,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 
@@ -32,11 +33,12 @@ int main() {
         } else {
             for (size_t i = 0; i < devices.size(); ++i) {
                 std::cout << "  [" << i << "] Bus " << static_cast<int>(devices[i].bus)
-                            << " Address " << static_cast<int>(devices[i].address)
-                            << " - Is SuperCamera: " << (devices[i].isSuperCamera ? "Yes" : "No")
-                            << " - " << devices[i].manufacturer << " " << devices[i].product
-                            << " (Serial: " << (devices[i].serialNumber.empty() ? "N/A" : devices[i].serialNumber) 
-                            << ")\n";
+                          << " Address " << static_cast<int>(devices[i].address)
+                          << " - Is SuperCamera: " << (devices[i].isSuperCamera ? "Yes" : "No")
+                          << " - " << devices[i].manufacturer << " " << devices[i].product
+                          << " (Serial: "
+                          << (devices[i].serialNumber.empty() ? "N/A" : devices[i].serialNumber)
+                          << ")\n";
             }
         }
     } catch (const std::exception& e) {

@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -14,35 +15,34 @@
 #include <string>
 #include <thread>
 #include <vector>
+
 #include "constants.hpp"
+#include "mjpeg_server.hpp"
 #include "video_frame.hpp"
 #include "video_frame_buffer.hpp"
-#include "mjpeg_server.hpp"
 
 namespace {
-    constexpr int TEST_PORT = 18080; 
+constexpr int TEST_PORT = 18080;
 
-    std::string toLowerString(std::string str) {
-        std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c){ return std::tolower(c); });
-        return str;
-    }
+std::string toLowerString(std::string str) {
+    std::transform(str.begin(), str.end(), str.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return str;
 }
+}  // namespace
 
 class MjpegServerTest : public ::testing::Test {
-private:
+   private:
     std::atomic<bool> running_{true};
     VideoFrameBuffer disruptor_;
     MjpegServer server_;
 
-public:
-    MjpegServerTest() :
-        disruptor_(), 
-        server_(TEST_PORT, running_, disruptor_)
-    {
+   public:
+    MjpegServerTest() : disruptor_(), server_(TEST_PORT, running_, disruptor_) {
         disruptor_.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-    }   
+    }
 
-protected:
+   protected:
     void SetUp() override {
         int64_t seq = disruptor_.claim();
         disruptor_.publish(seq);
@@ -61,7 +61,7 @@ protected:
 
         slot.clear();
         slot.insertContent(data);
-        
+
         disruptor_.publish(seq);
     }
 
@@ -69,7 +69,7 @@ protected:
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) return "";
 
-        struct timeval timeout{}; 
+        struct timeval timeout{};
         timeout.tv_sec = 2;
         timeout.tv_usec = 0;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
@@ -84,10 +84,11 @@ protected:
             return "";
         }
 
-        std::string requestPayload = "GET " + route + " HTTP/1.1\r\n"
+        std::string requestPayload = "GET " + route +
+                                     " HTTP/1.1\r\n"
                                      "Host: 127.0.0.1\r\n"
                                      "Connection: close\r\n\r\n";
-                                     
+
         send(sock, requestPayload.c_str(), requestPayload.length(), 0);
 
         std::string response;
@@ -98,10 +99,10 @@ protected:
             if (bytesRead > 0) {
                 response.append(buffer, bytesRead);
             } else {
-                break; 
+                break;
             }
         }
-        
+
         close(sock);
         return response;
     }
@@ -110,7 +111,7 @@ protected:
 TEST_F(MjpegServerTest, Returns404ForUnknownRoutes) {
     std::string response = fetchFromLocalhost("/invalid-route");
     std::string lowerResponse = toLowerString(response);
-    
+
     EXPECT_FALSE(response.empty());
     EXPECT_NE(lowerResponse.find("404 not found"), std::string::npos);
 }
@@ -118,10 +119,10 @@ TEST_F(MjpegServerTest, Returns404ForUnknownRoutes) {
 TEST_F(MjpegServerTest, ReturnsFaviconNotFoundWithCacheHeaders) {
     std::string response = fetchFromLocalhost("/favicon.ico");
     std::string lowerResponse = toLowerString(response);
-    
+
     EXPECT_FALSE(response.empty());
     EXPECT_NE(lowerResponse.find("404 not found"), std::string::npos);
-    EXPECT_NE(lowerResponse.find("max-age=31536000"), std::string::npos); 
+    EXPECT_NE(lowerResponse.find("max-age=31536000"), std::string::npos);
 }
 
 TEST_F(MjpegServerTest, ServesWebDashboard) {
@@ -137,7 +138,7 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
     ASSERT_GE(sock, 0);
 
     struct timeval timeout{};
-    timeout.tv_sec = 2; 
+    timeout.tv_sec = 2;
     timeout.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
@@ -148,27 +149,29 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
 
     ASSERT_GE(connect(sock, reinterpret_cast<struct sockaddr*>(&serv_addr), sizeof(serv_addr)), 0);
 
-    std::string request = "GET /stream HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n";
+    std::string request =
+        "GET /stream HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: keep-alive\r\n\r\n";
     send(sock, request.c_str(), request.length(), 0);
 
     std::string chunkResponse;
     char buffer[4096];
     bool headersReceived = false;
-    
+
     auto startTime = std::chrono::steady_clock::now();
 
     while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(2)) {
         int bytesRead = read(sock, buffer, sizeof(buffer));
-        
+
         if (bytesRead > 0) {
             chunkResponse.append(buffer, bytesRead);
-            if (toLowerString(chunkResponse).find("multipart/x-mixed-replace") != std::string::npos) {
+            if (toLowerString(chunkResponse).find("multipart/x-mixed-replace") !=
+                std::string::npos) {
                 headersReceived = true;
                 break;
             }
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
     ASSERT_TRUE(headersReceived) << "Server did not respond with stream headers.";
@@ -183,7 +186,7 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
 
     while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(2)) {
         int bytesRead = read(sock, buffer, sizeof(buffer));
-        
+
         if (bytesRead > 0) {
             chunkResponse.append(buffer, bytesRead);
             if (chunkResponse.find(payloadString) != std::string::npos) {
@@ -191,8 +194,8 @@ TEST_F(MjpegServerTest, ServesContinuousMjpegStream) {
                 break;
             }
         }
-        
-        std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
     EXPECT_TRUE(payloadReceived) << "Stream chunk payload corrupted or incomplete.";

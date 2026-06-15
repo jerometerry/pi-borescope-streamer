@@ -1,13 +1,15 @@
+#include "mjpeg_frame_queue.hpp"
+
 #include <cstdint>
 #include <utility>
+
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
 #include "intrusive_ptr.hpp"
-#include "mjpeg_frame_queue.hpp"
 #include "thread_safety_mutex.hpp"
 
 void MjpegFrameQueue::push(BufferPtr frame) {
-    if (!frame || frame->empty()) { 
+    if (!frame || frame->empty()) {
         return;
     }
     BufferPtr previousFrame;

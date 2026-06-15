@@ -1,23 +1,22 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <thread>
 #include <vector>
-#include <memory>
+
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_frame_queue.hpp"
 
-static void queueFrame (
-    MjpegFrameQueue& queue, 
-    const std::shared_ptr<BufferPool>& pool, 
-    std::vector<uint8_t>& frame) {
-
+static void queueFrame(MjpegFrameQueue& queue, const std::shared_ptr<BufferPool>& pool,
+                       std::vector<uint8_t>& frame) {
     BufferPtr buffer = pool->borrow();
     buffer->insertContent(frame);
     queue.push(buffer);
@@ -29,7 +28,7 @@ TEST(MjpegFrameQueueTest, InitializesWithCorrectBufferState) {
     uint32_t frameId = 99;
 
     auto activeFrame = frameQueue.pop(frameId);
-    
+
     EXPECT_EQ(activeFrame.get(), nullptr);
     EXPECT_EQ(frameId, 0) << "BufferPtr ID should start strictly at 0";
 }
@@ -62,7 +61,7 @@ TEST(MjpegFrameQueueTest, PopRetrievesPushedFrameIntact) {
     auto bufferPool = BufferPool::create();
     MjpegFrameQueue frameQueue;
 
-    std::vector<uint8_t> frame = { 0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9 };
+    std::vector<uint8_t> frame = {0xFF, 0xD8, 0xAA, 0xBB, 0xFF, 0xD9};
     queueFrame(frameQueue, bufferPool, frame);
 
     uint32_t currentId = 0;
@@ -73,34 +72,30 @@ TEST(MjpegFrameQueueTest, PopRetrievesPushedFrameIntact) {
 
     EXPECT_EQ(currentFrame->contentSize(), frame.size());
 
-    EXPECT_THAT(
-        currentFrame->getContentSlice(), 
-        ::testing::ElementsAreArray(frame)
-    ) << "The popped payload did not perfectly match the pushed payload.";
+    EXPECT_THAT(currentFrame->getContentSlice(), ::testing::ElementsAreArray(frame))
+        << "The popped payload did not perfectly match the pushed payload.";
 }
 
 TEST(MjpegFrameQueueTest, SafelyRejectsEmptyFrames) {
     auto bufferPool = BufferPool::create();
     MjpegFrameQueue frameQueue;
 
-    std::vector<uint8_t> frameData = { 0x01, 0x02, 0x03 };
+    std::vector<uint8_t> frameData = {0x01, 0x02, 0x03};
     queueFrame(frameQueue, bufferPool, frameData);
 
     std::vector<uint8_t> emptyFrame = {};
-    queueFrame(frameQueue, bufferPool, emptyFrame);    
+    queueFrame(frameQueue, bufferPool, emptyFrame);
 
     uint32_t popId = 0;
     auto poppedFrame = frameQueue.pop(popId);
-    
+
     EXPECT_EQ(popId, 1) << "VideoFrame ID should match the first valid push.";
     ASSERT_TRUE(poppedFrame) << "Popped frame must not be null.";
 
     std::span<const uint8_t> payload = poppedFrame->getContentSlice();
 
-    EXPECT_THAT(
-        payload, 
-        ::testing::ElementsAre(0x01, 0x02, 0x03)
-    ) << "Queue should have retained the valid frame, ignoring the empty push.";
+    EXPECT_THAT(payload, ::testing::ElementsAre(0x01, 0x02, 0x03))
+        << "Queue should have retained the valid frame, ignoring the empty push.";
 
     uint32_t emptyId = 0;
     auto emptyPop = frameQueue.pop(emptyId);
@@ -117,13 +112,13 @@ TEST(MjpegFrameQueueTest, ConcurrentProducersAndConsumers) {
     constexpr int TARGET_FRAMES = 5000;
 
     std::thread producer([&]() {
-        std::vector<uint8_t> frame = { 0xAA, 0xBB, 0xCC };
-        
+        std::vector<uint8_t> frame = {0xAA, 0xBB, 0xCC};
+
         while (framesProduced.load(std::memory_order_relaxed) < TARGET_FRAMES) {
             queueFrame(frameQueue, bufferPool, frame);
             framesProduced.fetch_add(1, std::memory_order_relaxed);
 
-            std::this_thread::yield(); 
+            std::this_thread::yield();
         }
         producerDone.store(true, std::memory_order_release);
     });
@@ -135,17 +130,17 @@ TEST(MjpegFrameQueueTest, ConcurrentProducersAndConsumers) {
         while (true) {
             uint32_t currentId = 0;
             auto frame = frameQueue.pop(currentId);
-            
+
             if (frame && currentId > lastSeenId) {
                 localConsumed++;
-                lastSeenId = currentId; 
+                lastSeenId = currentId;
             }
 
             if (producerDone.load(std::memory_order_acquire) && currentId >= TARGET_FRAMES) {
                 break;
             }
 
-            std::this_thread::yield(); 
+            std::this_thread::yield();
         }
 
         totalFramesConsumed.fetch_add(localConsumed, std::memory_order_relaxed);
@@ -153,7 +148,7 @@ TEST(MjpegFrameQueueTest, ConcurrentProducersAndConsumers) {
 
     const int NUM_CONSUMERS = 4;
     std::vector<std::thread> consumers;
-    consumers.reserve(NUM_CONSUMERS); 
+    consumers.reserve(NUM_CONSUMERS);
     for (int i = 0; i < NUM_CONSUMERS; ++i) {
         consumers.emplace_back(consumerFunc);
     }
@@ -168,6 +163,6 @@ TEST(MjpegFrameQueueTest, ConcurrentProducersAndConsumers) {
         }
     }
 
-    EXPECT_GT(totalFramesConsumed.load(std::memory_order_relaxed), 0) 
+    EXPECT_GT(totalFramesConsumed.load(std::memory_order_relaxed), 0)
         << "Consumers starved or pipeline failed to serve frames.";
 }

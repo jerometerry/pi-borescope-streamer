@@ -1,18 +1,17 @@
 #include <gtest/gtest.h>
+
 #include <string>
 #include <vector>
+
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 
 class DeviceFinderTest : public ::testing::Test {
-private:
-
+   private:
     std::vector<UsbDeviceInfo> mockCameras_{};
 
-protected:
-    void SetUp() override {
-
-    }
+   protected:
+    void SetUp() override {}
 
     void addMockCamera(const UsbDeviceInfo& device) {
         mockCameras_.push_back(device);
@@ -29,7 +28,10 @@ TEST_F(DeviceFinderTest, SingleDeviceToJson) {
     addMockCamera(info);
     auto json = devicesToJson();
 
-    EXPECT_EQ(json, "[{\"bus\":1,\"address\":2,\"vendorId\":4660,\"productId\":22136,\"manufacturer\":\"TestCam Inc.\",\"product\":\"TestCam Model X\",\"serialNumber\":\"TEST123456\",\"isSuperCamera\":true}]");
+    EXPECT_EQ(json,
+              "[{\"bus\":1,\"address\":2,\"vendorId\":4660,\"productId\":22136,\"manufacturer\":"
+              "\"TestCam Inc.\",\"product\":\"TestCam Model "
+              "X\",\"serialNumber\":\"TEST123456\",\"isSuperCamera\":true}]");
 }
 
 TEST_F(DeviceFinderTest, MultipleDevicesToJson) {
@@ -40,5 +42,11 @@ TEST_F(DeviceFinderTest, MultipleDevicesToJson) {
     addMockCamera(info2);
     auto json = devicesToJson();
 
-    EXPECT_EQ(json, "[{\"bus\":1,\"address\":2,\"vendorId\":4660,\"productId\":22136,\"manufacturer\":\"TestCam Inc.\",\"product\":\"TestCam Model X\",\"serialNumber\":\"TEST123456\",\"isSuperCamera\":true},{\"bus\":3,\"address\":4,\"vendorId\":4660,\"productId\":22136,\"manufacturer\":\"TestCam Inc.\",\"product\":\"TestCam Model X\",\"serialNumber\":\"TEST789012\",\"isSuperCamera\":true}]");
+    EXPECT_EQ(json,
+              "[{\"bus\":1,\"address\":2,\"vendorId\":4660,\"productId\":22136,\"manufacturer\":"
+              "\"TestCam Inc.\",\"product\":\"TestCam Model "
+              "X\",\"serialNumber\":\"TEST123456\",\"isSuperCamera\":true},{\"bus\":3,\"address\":"
+              "4,\"vendorId\":4660,\"productId\":22136,\"manufacturer\":\"TestCam "
+              "Inc.\",\"product\":\"TestCam Model "
+              "X\",\"serialNumber\":\"TEST789012\",\"isSuperCamera\":true}]");
 }

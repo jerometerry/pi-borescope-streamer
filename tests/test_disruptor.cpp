@@ -1,9 +1,11 @@
 #include <gtest/gtest.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <string>
 #include <thread>
+
 #include "disruptor.hpp"
 
 using namespace disruptor;
@@ -75,23 +77,23 @@ TEST(DisruptorTest, ConcurrentStressTestProcessesAllEventsWithoutDataLoss) {
     constexpr int64_t TOTAL_EVENTS = 10'000'000;
 
     constexpr int64_t EXPECTED_EVENT_ID_SUM = (TOTAL_EVENTS * (TOTAL_EVENTS - 1)) / 2;
-    
-    disruptor::Disruptor<Event, 65536> pipeline; 
+
+    disruptor::Disruptor<Event, 65536> pipeline;
     std::atomic<int64_t> actual_id_sum{0};
 
     std::jthread consumer([&pipeline, &actual_id_sum]() {
         int64_t nextRead = 0;
         int64_t local_sum = 0;
-        
+
         while (nextRead < TOTAL_EVENTS) {
             int64_t available = pipeline.waitFor(nextRead);
-            
+
             while (nextRead <= available && nextRead < TOTAL_EVENTS) {
                 Event& event = pipeline.getBySequence(nextRead);
                 local_sum += event.id;
                 nextRead++;
             }
-            
+
             pipeline.markConsumed(nextRead - 1);
         }
 
@@ -100,11 +102,11 @@ TEST(DisruptorTest, ConcurrentStressTestProcessesAllEventsWithoutDataLoss) {
 
     for (int64_t i = 0; i < TOTAL_EVENTS; ++i) {
         int64_t seq = pipeline.claim();
-        
+
         Event& event = pipeline.getBySequence(seq);
         event.id = i;
         event.price = 100.0 + (i % 10);
-        
+
         pipeline.publish(seq);
     }
 

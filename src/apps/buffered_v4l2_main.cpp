@@ -2,14 +2,15 @@
 #include <chrono>
 #include <csignal>
 #include <cstdint>
-#include <cstdlib> 
+#include <cstdlib>
 #include <functional>
 #include <iostream>
+#include <memory>
 #include <span>
 #include <string>
-#include <memory>
 #include <thread>
 #include <vector>
+
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
@@ -18,13 +19,13 @@
 #include "constants.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_frame_queue.hpp"
-#include "usb_device_info.hpp"
 #include "usb_device_finder.hpp"
+#include "usb_device_info.hpp"
 #include "usb_driver.hpp"
 #include "v4l2.hpp"
 
 namespace {
-    std::atomic<bool> running{true};
+std::atomic<bool> running{true};
 }
 
 void signalHandler(int signal) {
@@ -39,7 +40,7 @@ int main(int argc, const char* argv[]) {
     std::signal(SIGTERM, signalHandler);
 
     V4L2::Config config;
-    
+
     Arguments::ParseResult result = V4L2::parseArguments(argc, argv, config);
     if (result == Arguments::ParseResult::HelpRequested) {
         return EXIT_SUCCESS;
@@ -63,17 +64,15 @@ int main(int argc, const char* argv[]) {
     }
 
     const UsbDeviceInfo& camera = cameras[0];
-    std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
-              << " Address " << static_cast<int>(camera.address) << "...\n";
+    std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) << " Address "
+              << static_cast<int>(camera.address) << "...\n";
 
     auto pool = BufferPool::create();
 
     // MjpegFrameQueue HAS to be initialized after BufferPool!
-    // Prevents segfaults if MjpegFrameQueue goes out of scope before program terminates. 
+    // Prevents segfaults if MjpegFrameQueue goes out of scope before program terminates.
     MjpegFrameQueue queue;
-    BufferedMjpegStream stream(pool, [&queue](const BufferPtr& frame) {
-        queue.push(frame);
-    });
+    BufferedMjpegStream stream(pool, [&queue](const BufferPtr& frame) { queue.push(frame); });
 
     auto transfer = [&stream](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
         if (status == UsbTransferStatus::Completed) {
@@ -82,7 +81,7 @@ int main(int argc, const char* argv[]) {
             }
             return true;
         }
-        return status != UsbTransferStatus::Disconnected; 
+        return status != UsbTransferStatus::Disconnected;
     };
 
     UsbDriver driver(transfer, &running);
@@ -107,7 +106,7 @@ int main(int argc, const char* argv[]) {
     }
 
     driver.stop();
-    
+
     std::cout << "[System Termination] V4L2 daemon exited cleanly.\n";
     return EXIT_SUCCESS;
 }

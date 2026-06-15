@@ -1,9 +1,11 @@
+#include "zero_allocation_response_builder.hpp"
+
 #include <charconv>
 #include <cstring>
 #include <string_view>
 #include <vector>
+
 #include "video_frame.hpp"
-#include "zero_allocation_response_builder.hpp"
 
 char* writeNewLines(char* position) {
     constexpr char newLines[4] = {'\r', '\n', '\r', '\n'};
@@ -23,7 +25,8 @@ char* writeLength(char* position, size_t size) {
 }
 
 char* writePrefix(char* position) {
-    constexpr std::string_view prefix = "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: ";
+    constexpr std::string_view prefix =
+        "--mjpegstream\r\nContent-Type: image/jpeg\r\nContent-Length: ";
 
     char* newPosition = position - prefix.size();
     std::memcpy(newPosition, prefix.data(), prefix.size());
@@ -36,7 +39,7 @@ std::string_view ZeroAllocationResponseBuilder::build(VideoFrame& frame) {
     char* payloadPtr = reinterpret_cast<char*>(frame.storage.data()) + VideoFrame::PADDING_SIZE;
     char* startPtr = payloadPtr;
     char* cursor = startPtr;
-    
+
     cursor = writeNewLines(cursor);
     cursor = writeLength(cursor, size);
     cursor = writePrefix(cursor);

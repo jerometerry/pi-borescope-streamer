@@ -3,8 +3,9 @@
 #include <cstdint>
 #include <cstring>
 #include <span>
-#include <vector>
 #include <stdexcept>
+#include <vector>
+
 #include "disruptor.hpp"
 
 struct alignas(disruptor::CACHE_LINE_SIZE) VideoFrame {
@@ -49,38 +50,35 @@ struct alignas(disruptor::CACHE_LINE_SIZE) VideoFrame {
         size_t new_length = endOffset - startOffset;
 
         if (startOffset > 0) {
-            std::memmove(
-                storage.data() + paddingSize(), 
-                storage.data() + paddingSize() + startOffset, 
-                new_length
-            );
+            std::memmove(storage.data() + paddingSize(),
+                         storage.data() + paddingSize() + startOffset, new_length);
         }
         activeSize = new_length;
     }
 
-    static size_t paddingSize() noexcept { 
-        return PADDING_SIZE; 
+    static size_t paddingSize() noexcept {
+        return PADDING_SIZE;
     }
 
-    size_t contentSize() const noexcept { 
-        return activeSize; 
+    size_t contentSize() const noexcept {
+        return activeSize;
     }
 
-    size_t totalSize() const noexcept { 
-        return paddingSize() + activeSize; 
-}
-    
+    size_t totalSize() const noexcept {
+        return paddingSize() + activeSize;
+    }
+
     uint8_t front() const {
         if (empty()) throw std::out_of_range("Buffer is empty");
         return storage[paddingSize()];
     }
 
     std::span<const uint8_t> getContentSlice() const noexcept {
-        return { storage.data() + paddingSize(), activeSize };
+        return {storage.data() + paddingSize(), activeSize};
     }
 
     std::span<uint8_t> getMutableContentSlice() noexcept {
-        return { storage.data() + paddingSize(), activeSize };
+        return {storage.data() + paddingSize(), activeSize};
     }
 
     std::vector<uint8_t>& data() noexcept {

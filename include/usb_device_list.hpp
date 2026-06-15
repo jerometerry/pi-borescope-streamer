@@ -1,26 +1,28 @@
 #pragma once
 #include <libusb.h>
+
 #include <span>
+
 #include "usb_context.hpp"
 
 /**
  * @brief A safely managed snapshot of every device currently plugged into the computer.
- * @details Asking the operating system for a list of USB devices requires reserving a chunk 
- * of memory. If you forget to free that memory, the system eventually crashes. 
- * 
- * This class acts as an automatic garbage collector for that list. It grabs the "census" of 
- * plugged-in devices, lets you read it safely, and guarantees the memory is cleanly deleted 
+ * @details Asking the operating system for a list of USB devices requires reserving a chunk
+ * of memory. If you forget to free that memory, the system eventually crashes.
+ *
+ * This class acts as an automatic garbage collector for that list. It grabs the "census" of
+ * plugged-in devices, lets you read it safely, and guarantees the memory is cleanly deleted
  * as soon as you are done looking at it.
  */
 class UsbDeviceList {
-public:
+   public:
     /**
      * @brief Take a snapshot of all currently connected USB devices.
      * @param context The active USB permit required to ask the OS for this list.
      */
-    explicit UsbDeviceList(UsbContext& context) :
-        count_(libusb_get_device_list(context.get(), &devices_)) {}
-    
+    explicit UsbDeviceList(UsbContext& context)
+        : count_(libusb_get_device_list(context.get(), &devices_)) {}
+
     /**
      * @brief Automatically throw away the snapshot and free the memory.
      */
@@ -49,7 +51,7 @@ public:
         return {devices_, static_cast<size_t>(count_)};
     }
 
-private:
+   private:
     /**
      * @brief The raw, dangerous C-array of hardware devices provided by the OS.
      */

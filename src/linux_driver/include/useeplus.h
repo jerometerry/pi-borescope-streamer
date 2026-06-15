@@ -12,42 +12,43 @@
 #include <media/videobuf2-v4l2.h>
 
 /* Global Protocol Constant Macros */
-#define NUM_URBS	4
-#define URB_SIZE	(16 * 1024)
-#define MAX_FRAME_SIZE	(512 * 1024)
+#define NUM_URBS 4
+#define URB_SIZE (16 * 1024)
+#define MAX_FRAME_SIZE (512 * 1024)
 
-#define UP_DEF_WIDTH	640
-#define UP_DEF_HEIGHT	480
+#define UP_DEF_WIDTH 640
+#define UP_DEF_HEIGHT 480
 
-#define JPEG_SOI_MAX_POS	256
-#define MAX_GHOST_HEADER_OFFSET	160
+#define JPEG_SOI_MAX_POS 256
+#define MAX_GHOST_HEADER_OFFSET 160
 
 /* Structural Protocol Sizing Expressions */
-#define UP_PKT_HDR_SIZE		(sizeof(struct up_pkt_hdr))
-#define UP_PL_HDR_SIZE		(sizeof(struct up_pl_hdr))
-#define TOTAL_USB_HEADER_SIZE	(UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE)
+#define UP_PKT_HDR_SIZE (sizeof(struct up_pkt_hdr))
+#define UP_PL_HDR_SIZE (sizeof(struct up_pl_hdr))
+#define TOTAL_USB_HEADER_SIZE (UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE)
 
 /* Global Diagnostic String Macro */
-#define DIAG_DATA_FORMAT "URBs:%lu Err:%lu Pkt:%lu Frm:%lu Deliv:%lu D-SOI:%lu D-EOI:%lu D-Q:%lu Ghost:%lu\n"
+#define DIAG_DATA_FORMAT \
+	"URBs:%lu Err:%lu Pkt:%lu Frm:%lu Deliv:%lu D-SOI:%lu D-EOI:%lu D-Q:%lu Ghost:%lu\n"
 
 enum up_usb_topology {
-	UP_IAP_INTERFACE	= 0,
-	UP_VIDEO_INTERFACE	= 1,
-	UP_ALT_VIDEO_ENABLE	= 1,
-	UP_VIDEO_ENDPOINT	= 0x01,
-	UP_IAP_ENDPOINT		= 0x02,
+	UP_IAP_INTERFACE = 0,
+	UP_VIDEO_INTERFACE = 1,
+	UP_ALT_VIDEO_ENABLE = 1,
+	UP_VIDEO_ENDPOINT = 0x01,
+	UP_IAP_ENDPOINT = 0x02,
 };
 
 enum up_hw_signatures {
-	UP_PKT_DEL	= 0xBBAA,
-	VIDEO_CAMERA_ID		= 0x0B,
-	GRAVITY_SENSOR_ID	= 0x07,
+	UP_PKT_DEL = 0xBBAA,
+	VIDEO_CAMERA_ID = 0x0B,
+	GRAVITY_SENSOR_ID = 0x07,
 };
 
 enum up_jpeg_marker {
-	JPEG_DEL	= 0xFF,
-	JPEG_SOI	= 0xD8,
-	JPEG_EOI	= 0xD9,
+	JPEG_DEL = 0xFF,
+	JPEG_SOI = 0xD8,
+	JPEG_EOI = 0xD9,
 };
 
 /**
@@ -144,7 +145,6 @@ struct up_parse_ctx {
 	unsigned long flags;
 };
 
-void up_decode_packets(struct up_drv_data *drv_data,
-		       struct up_parse_ctx *ctx);
+void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx);
 
 #endif /* _up_H_ */

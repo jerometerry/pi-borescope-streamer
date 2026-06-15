@@ -1,17 +1,19 @@
 #pragma once
 #include "video_frame.hpp"
 
-namespace V4L2 { struct Config; }
+namespace V4L2 {
+struct Config;
+}
 
 /**
  * @brief Bridges raw MJPEG frames into the Linux Kernel's Video4Linux subsystem.
  */
 class V4l2Publisher {
-public:
+   public:
     /**
      * @brief Construct a new V4l2Publisher object
-     * 
-     * @param config 
+     *
+     * @param config
      */
     explicit V4l2Publisher(const V4L2::Config& config);
 
@@ -25,6 +27,6 @@ public:
      */
     void writeFrame(const VideoFrame& frame);
 
-private:
+   private:
     int v4l2_fd_{-1};
 };

@@ -1,12 +1,12 @@
 /**
  * @file mjpeg_server_main.cpp
  * @brief The main entry point for the live video streaming application.
- * @details This is the primary program you run to actually use your camera. 
- * When executed, it automatically finds the camera on the USB bus, launches the 
- * video decoding engine, spins up the network broadcaster, and starts serving 
+ * @details This is the primary program you run to actually use your camera.
+ * When executed, it automatically finds the camera on the USB bus, launches the
+ * video decoding engine, spins up the network broadcaster, and starts serving
  * the live video feed to any web browser that connects to the Raspberry Pi's IP address.
- * 
- * By default, it broadcasts on port 8080, but you can override this by passing 
+ *
+ * By default, it broadcasts on port 8080, but you can override this by passing
  * a different port number when you launch the program from the terminal.
  */
 
@@ -22,6 +22,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
 #include "mjpeg_stream.hpp"
@@ -31,9 +32,9 @@
 #include "video_frame_buffer.hpp"
 
 namespace {
-    constexpr int DEFAULT_PORT = 8080;
-    std::atomic<bool> running{true};
-}
+constexpr int DEFAULT_PORT = 8080;
+std::atomic<bool> running{true};
+}  // namespace
 
 void signalHandler(int) {
     running.store(false, std::memory_order_release);
@@ -50,10 +51,12 @@ int main(int argc, const char* argv[]) {
                 port = parsedPort;
                 isUsingDefaultPort = false;
             } else {
-                std::cerr << "[Warning] Invalid network port range specified (" << argv[1] << "). Falling back to default port " << DEFAULT_PORT << ".\n";
+                std::cerr << "[Warning] Invalid network port range specified (" << argv[1]
+                          << "). Falling back to default port " << DEFAULT_PORT << ".\n";
             }
         } catch (const std::exception& exception) {
-            std::cerr << "[Warning] Malformed network port parameter specified (" << argv[1] << "). Falling back to default port " << DEFAULT_PORT << ".\n";
+            std::cerr << "[Warning] Malformed network port parameter specified (" << argv[1]
+                      << "). Falling back to default port " << DEFAULT_PORT << ".\n";
         }
     }
 
@@ -67,7 +70,7 @@ int main(int argc, const char* argv[]) {
     } else {
         std::cout << "  -> Status: Running on CUSTOM port override " << port << "\n";
     }
-    
+
     std::cout << "  -> Web Dashboard:          http://localhost:" << port << "/\n";
     std::cout << "  -> Raw Streaming (VLC):    http://localhost:" << port << "/stream\n";
     std::cout << "==================================================================\n";
@@ -89,11 +92,12 @@ int main(int argc, const char* argv[]) {
             std::cout << "\nMultiple cameras detected:\n";
             for (size_t i = 0; i < cameras.size(); ++i) {
                 std::cout << "  [" << i << "] Bus " << static_cast<int>(cameras[i].bus)
-                          << " Address " << static_cast<int>(cameras[i].address)
-                          << " - " << cameras[i].manufacturer << " " << cameras[i].product
-                          << " (Serial: " << (cameras[i].serialNumber.empty() ? "N/A" : cameras[i].serialNumber) << ")\n";
+                          << " Address " << static_cast<int>(cameras[i].address) << " - "
+                          << cameras[i].manufacturer << " " << cameras[i].product << " (Serial: "
+                          << (cameras[i].serialNumber.empty() ? "N/A" : cameras[i].serialNumber)
+                          << ")\n";
             }
-            
+
             size_t choice = 0;
             while (true) {
                 std::cout << "\nSelect camera to stream [0-" << (cameras.size() - 1) << "]: ";
@@ -109,20 +113,21 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "\n[Info] Binding stream to camera on Bus " << static_cast<int>(camera.bus)
                   << " Address " << static_cast<int>(camera.address) << "...\n";
-        
+
         VideoFrameBuffer ringBuffer;
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
         MjpegStream stream(ringBuffer);
 
-        auto transfer = [&stream](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
+        auto transfer = [&stream](UsbTransferStatus status,
+                                  std::span<const uint8_t> payload) -> bool {
             if (status == UsbTransferStatus::Completed) {
                 if (!payload.empty()) {
                     stream.send(payload);
                 }
                 return true;
             }
-            return status != UsbTransferStatus::Disconnected; 
+            return status != UsbTransferStatus::Disconnected;
         };
         UsbDriver driver(transfer, &running);
 
@@ -134,7 +139,7 @@ int main(int argc, const char* argv[]) {
         server.start();
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
-        
+
         while (running.load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
@@ -142,7 +147,7 @@ int main(int argc, const char* argv[]) {
         std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
 
         driver.stop();
-        
+
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception in application core: " << e.what() << "\n";
         return EXIT_FAILURE;

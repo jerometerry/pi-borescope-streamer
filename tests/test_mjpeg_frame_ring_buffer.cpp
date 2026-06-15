@@ -1,5 +1,6 @@
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -9,28 +10,30 @@
 #include <string>
 #include <thread>
 #include <vector>
+
 #include "buffer.hpp"
-#include "buffer_ptr.hpp"
 #include "buffer_pool.hpp"
+#include "buffer_ptr.hpp"
 #include "intrusive_ptr.hpp"
 #include "mjpeg_frame_ring_buffer.hpp"
 
 namespace {
-    BufferPtr createTestFrame(const std::shared_ptr<BufferPool>& pool, const std::vector<uint8_t>& data) {
-        auto frame = pool->borrow();
-        if (!data.empty()) {
-            frame->insertContent(data);
-        }
-        return frame;
+BufferPtr createTestFrame(const std::shared_ptr<BufferPool>& pool,
+                          const std::vector<uint8_t>& data) {
+    auto frame = pool->borrow();
+    if (!data.empty()) {
+        frame->insertContent(data);
     }
+    return frame;
 }
+}  // namespace
 
 class MjpegFrameRingBufferTest : public ::testing::Test {
-private:
+   private:
     std::shared_ptr<BufferPool> pool_;
     std::atomic<bool> running_{true};
 
-protected:
+   protected:
     void SetUp() override {
         pool_ = BufferPool::create();
         running_.store(true, std::memory_order_release);
@@ -40,14 +43,13 @@ protected:
         running_.store(false, std::memory_order_release);
     }
 
-	std::shared_ptr<BufferPool>& getPool() {
-		return pool_;
-	}
+    std::shared_ptr<BufferPool>& getPool() {
+        return pool_;
+    }
 
-	std::atomic<bool>& getRunning() {
-		return running_;
-	}
-
+    std::atomic<bool>& getRunning() {
+        return running_;
+    }
 };
 
 TEST_F(MjpegFrameRingBufferTest, PushPop_BasicFifoOrder) {
@@ -71,7 +73,7 @@ TEST_F(MjpegFrameRingBufferTest, Push_SafelyIgnoresEmptyFrames) {
     BufferPtr nullFrame;
     ring.push(nullFrame);
 
-    ring.push(createTestFrame(getPool(), {})); 
+    ring.push(createTestFrame(getPool(), {}));
 
     getRunning().store(false, std::memory_order_release);
     ring.shutdown();
@@ -104,7 +106,7 @@ TEST_F(MjpegFrameRingBufferTest, Pop_ShutdownSafelyUnblocksSleepingConsumers) {
 
     std::thread consumer([&]() {
         auto frame = ring.pop();
-        EXPECT_FALSE(frame); 
+        EXPECT_FALSE(frame);
         threadExitedCleanly.store(true, std::memory_order_release);
     });
 
@@ -115,16 +117,16 @@ TEST_F(MjpegFrameRingBufferTest, Pop_ShutdownSafelyUnblocksSleepingConsumers) {
 
     consumer.join();
 
-    EXPECT_TRUE(threadExitedCleanly.load(std::memory_order_acquire)) 
+    EXPECT_TRUE(threadExitedCleanly.load(std::memory_order_acquire))
         << "Consumer thread failed to wake up and exit after shutdown().";
 }
 
 TEST_F(MjpegFrameRingBufferTest, ThreadSafety_ConcurrentProducersAndConsumers) {
     constexpr size_t CAPACITY = 10;
     constexpr int TARGET_FRAMES = 1000;
-    
+
     MjpegFrameRingBuffer ring(CAPACITY, getRunning());
-    
+
     std::atomic<int> pushCount{0};
     std::atomic<int> popCount{0};
 
@@ -132,7 +134,7 @@ TEST_F(MjpegFrameRingBufferTest, ThreadSafety_ConcurrentProducersAndConsumers) {
         for (int i = 0; i < TARGET_FRAMES; ++i) {
             ring.push(createTestFrame(getPool(), {0xFF}));
             pushCount.fetch_add(1, std::memory_order_relaxed);
-            
+
             if (i % 10 == 0) {
                 std::this_thread::yield();
             }
@@ -151,7 +153,7 @@ TEST_F(MjpegFrameRingBufferTest, ThreadSafety_ConcurrentProducersAndConsumers) {
     producer.join();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    
+
     getRunning().store(false, std::memory_order_release);
     ring.shutdown();
     consumer.join();

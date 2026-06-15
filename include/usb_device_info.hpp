@@ -4,13 +4,14 @@
 
 /**
  * @brief The physical identification badge for a piece of hardware plugged into the system.
- * @details Before the software can start pumping video, it needs to know exactly where the 
- * camera is and who made it. This structure holds the physical "address" of the device on 
+ * @details Before the software can start pumping video, it needs to know exactly where the
+ * camera is and who made it. This structure holds the physical "address" of the device on
  * the motherboard, along with the manufacturer's embedded ID tags (Vendor and Product IDs).
  */
 struct UsbDeviceInfo {
     /**
-     * @brief The physical hardware lane the device is plugged into (e.g., the top USB row vs bottom row).
+     * @brief The physical hardware lane the device is plugged into (e.g., the top USB row vs bottom
+     * row).
      */
     uint8_t bus{0};
 

@@ -4,21 +4,23 @@
 #include <memory>
 #include <span>
 #include <vector>
+
 #include "buffer_recycler.hpp"
 
 /**
- * @brief Pre-allocated contiguous block of memory, used to prevent memory allocations on the hot paths. 
+ * @brief Pre-allocated contiguous block of memory, used to prevent memory allocations on the hot
+ * paths.
  *
- * @details A small block of memory is reserved at the beginning of the contiguous memory block for use by 
- * HTTP web servers sending payloads to clients. The web server can use this reserved block of memory to construct 
- * the necessary HTTP headers, so that only one send is necessary, allowing the web servers zero-byte allocation 
- * routines to be leveraged when possible.
+ * @details A small block of memory is reserved at the beginning of the contiguous memory block for
+ * use by HTTP web servers sending payloads to clients. The web server can use this reserved block
+ * of memory to construct the necessary HTTP headers, so that only one send is necessary, allowing
+ * the web servers zero-byte allocation routines to be leveraged when possible.
  */
 class Buffer {
-public:
+   public:
     /**
      * @brief Constructs a standalone Buffer without a pool recycler.
-     * @details When this buffer's reference count hits zero, it will be destroyed 
+     * @details When this buffer's reference count hits zero, it will be destroyed
      * via standard heap deletion.
      * @param paddingSize The number of bytes to permanently reserve at the front of the buffer.
      */
@@ -26,7 +28,7 @@ public:
 
     /**
      * @brief Constructs a pooled Buffer linked to a specific recycler.
-     * @details When this buffer's reference count hits zero, it will be handed back 
+     * @details When this buffer's reference count hits zero, it will be handed back
      * to the provided recycler (e.g., the BufferPool) instead of being deleted.
      * @param paddingSize The number of bytes to permanently reserve at the front of the buffer.
      * @param recycler Pointer to the interface responsible for reclaiming this buffer.
@@ -38,7 +40,7 @@ public:
      * @details Automatically called by IntrusivePtr copy constructors and assignments.
      */
     void retain();
-    
+
     /**
      * @brief Atomically decrements the internal reference count.
      * @details Automatically called by IntrusivePtr destructors.
@@ -48,7 +50,7 @@ public:
 
     /**
      * @brief Resets the buffer's content for reuse.
-     * @details Clears out the image payload but safely preserves the reserved HTTP padding 
+     * @details Clears out the image payload but safely preserves the reserved HTTP padding
      * so the buffer is immediately ready for the next frame.
      */
     void clear();
@@ -61,7 +63,8 @@ public:
 
     /**
      * @brief Expands the underlying memory capacity to prevent mid-stream reallocations.
-     * @param size The expected payload size. (The padding size will be automatically added to this).
+     * @param size The expected payload size. (The padding size will be automatically added to
+     * this).
      */
     void reserve(size_t size);
 
@@ -103,7 +106,7 @@ public:
 
     /**
      * @brief Retrieves the reserved prefix memory space.
-     * @return A writable span pointing to the 128 bytes immediately preceding the video data, 
+     * @return A writable span pointing to the 128 bytes immediately preceding the video data,
      * intended for injecting zero-copy network headers.
      */
     std::span<uint8_t> getMutablePaddingSlice();
@@ -129,7 +132,7 @@ public:
 
     /**
      * @brief Retrieves a continuous read-only view of both the padding and the payload.
-     * @details This is the method used by the web server to broadcast the perfectly fused 
+     * @details This is the method used by the web server to broadcast the perfectly fused
      * HTTP headers and JPEG data in a single socket system call.
      * @return A read-only span encompassing the entire active buffer.
      */
@@ -141,7 +144,7 @@ public:
      */
     std::span<uint8_t> getMutableContentSlice();
 
-private:
+   private:
     friend void intrusive_ptr_release(Buffer* b);
 
     void ensurePaddingReserved();
@@ -157,8 +160,8 @@ private:
 
 /**
  * @brief Increments the intrusive reference count for a Buffer object.
- * @details This is a free function designed to be resolved via Argument-Dependent Lookup (ADL) 
- * by the IntrusivePtr template. It acts as the bridge between the smart pointer and the 
+ * @details This is a free function designed to be resolved via Argument-Dependent Lookup (ADL)
+ * by the IntrusivePtr template. It acts as the bridge between the smart pointer and the
  * Buffer's internal atomic counter.
  * @param b The raw pointer to the Buffer being retained.
  */
@@ -168,11 +171,11 @@ inline void intrusive_ptr_add_ref(Buffer* b) {
 
 /**
  * @brief Decrements the intrusive reference count and triggers lifecycle management.
- * @details This free function is resolved via Argument-Dependent Lookup (ADL). It handles 
- * the critical memory lifecycle branching logic. When a Buffer's reference count drops to zero, 
- * this function checks for the existence of a BufferRecycler. 
- * * If a recycler is present, the Buffer is safely handed back to the BufferPool for the next 
- * USB interrupt. If no recycler is present (a standalone Buffer), it is permanently destroyed 
+ * @details This free function is resolved via Argument-Dependent Lookup (ADL). It handles
+ * the critical memory lifecycle branching logic. When a Buffer's reference count drops to zero,
+ * this function checks for the existence of a BufferRecycler.
+ * * If a recycler is present, the Buffer is safely handed back to the BufferPool for the next
+ * USB interrupt. If no recycler is present (a standalone Buffer), it is permanently destroyed
  * and its memory is freed.
  * @param b The raw pointer to the Buffer being released.
  */

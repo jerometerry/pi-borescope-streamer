@@ -1,24 +1,25 @@
 #include <atomic>
 #include <csignal>
 #include <cstdint>
-#include <cstdlib> 
+#include <cstdlib>
 #include <iostream>
 #include <span>
 #include <string>
 #include <vector>
+
 #include "constants.hpp"
 #include "disruptor.hpp"
 #include "mjpeg_stream.hpp"
-#include "usb_device_info.hpp"
 #include "usb_device_finder.hpp"
+#include "usb_device_info.hpp"
 #include "usb_driver.hpp"
-#include "video_frame.hpp"
-#include "video_frame_buffer.hpp"
 #include "v4l2.hpp"
 #include "v4l2_publisher.hpp"
+#include "video_frame.hpp"
+#include "video_frame_buffer.hpp"
 
 namespace {
-    static std::atomic<bool> running{true};
+static std::atomic<bool> running{true};
 }
 
 void signalHandler(int signal) {
@@ -56,8 +57,8 @@ int main(int argc, const char* argv[]) {
     }
 
     const UsbDeviceInfo& camera = cameras[0];
-    std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) 
-              << " Address " << static_cast<int>(camera.address) << "...\n";
+    std::cout << "[Info] Binding to camera on Bus " << static_cast<int>(camera.bus) << " Address "
+              << static_cast<int>(camera.address) << "...\n";
 
     VideoFrameBuffer ringBuffer;
     ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
@@ -71,7 +72,7 @@ int main(int argc, const char* argv[]) {
             }
             return true;
         }
-        return status != UsbTransferStatus::Disconnected; 
+        return status != UsbTransferStatus::Disconnected;
     };
 
     UsbDriver driver(transfer, &running);

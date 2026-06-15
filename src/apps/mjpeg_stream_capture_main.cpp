@@ -19,6 +19,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+
 #include "constants.hpp"
 #include "disruptor.hpp"
 #include "usb_device_finder.hpp"
@@ -28,15 +29,15 @@
 #include "video_frame_buffer.hpp"
 
 namespace {
-    static std::atomic<bool> running{true};
+static std::atomic<bool> running{true};
 
-    struct alignas(disruptor::CACHE_LINE_SIZE) PipelineMetrics {
-        std::atomic<uint64_t> totalFramesReceived{0};
-        std::atomic<uint64_t> totalFramesDropped{0};
-    };
-    
-    static PipelineMetrics metrics;
-}
+struct alignas(disruptor::CACHE_LINE_SIZE) PipelineMetrics {
+    std::atomic<uint64_t> totalFramesReceived{0};
+    std::atomic<uint64_t> totalFramesDropped{0};
+};
+
+static PipelineMetrics metrics;
+}  // namespace
 
 void signalHandler(int /*signum*/) {
     running.store(false, std::memory_order_relaxed);
@@ -50,16 +51,17 @@ bool selectCamera(UsbDeviceInfo& cameraInfo) {
     }
 
     cameraInfo = cameras[0];
-    
+
     if (cameras.size() > 1) {
         std::cout << "Multiple Useeplus cameras detected:\n";
         for (size_t i = 0; i < cameras.size(); ++i) {
-            std::cout << "  [" << i << "] Bus " << static_cast<int>(cameras[i].bus)
-                      << " Address " << static_cast<int>(cameras[i].address)
-                      << " - " << cameras[i].manufacturer << " " << cameras[i].product
-                      << " (Serial: " << (cameras[i].serialNumber.empty() ? "N/A" : cameras[i].serialNumber) << ")\n";
+            std::cout << "  [" << i << "] Bus " << static_cast<int>(cameras[i].bus) << " Address "
+                      << static_cast<int>(cameras[i].address) << " - " << cameras[i].manufacturer
+                      << " " << cameras[i].product << " (Serial: "
+                      << (cameras[i].serialNumber.empty() ? "N/A" : cameras[i].serialNumber)
+                      << ")\n";
         }
-        
+
         size_t choice = 0;
         while (true) {
             std::cout << "\nSelect camera to stream [0-" << (cameras.size() - 1) << "]: ";
@@ -103,8 +105,10 @@ int main() {
             while (!st.stop_requested() && running.load(std::memory_order_relaxed)) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
 
-                uint64_t currentReceived = metrics.totalFramesReceived.load(std::memory_order_relaxed);
-                uint64_t currentDropped = metrics.totalFramesDropped.load(std::memory_order_relaxed);
+                uint64_t currentReceived =
+                    metrics.totalFramesReceived.load(std::memory_order_relaxed);
+                uint64_t currentDropped =
+                    metrics.totalFramesDropped.load(std::memory_order_relaxed);
                 auto currentTime = std::chrono::steady_clock::now();
 
                 std::chrono::duration<double> elapsed = currentTime - lastTime;
@@ -116,16 +120,21 @@ int main() {
                     uint64_t totalAttempted = deltaReceived + deltaDropped;
 
                     double fps = deltaReceived / seconds;
-                    double dropRate = (totalAttempted > 0) 
-                        ? (static_cast<double>(deltaDropped) / totalAttempted) * 100.0 
-                        : 0.0;
+                    double dropRate =
+                        (totalAttempted > 0)
+                            ? (static_cast<double>(deltaDropped) / totalAttempted) * 100.0
+                            : 0.0;
 
                     if (deltaDropped > 0) {
-                        std::print("[METRICS] Ingestion: {:.2f} FPS | WARNING: Dropped {} frames ({:.1f}% drop rate) due to disk saturation\n", 
-                                   fps, deltaDropped, dropRate);
+                        std::print(
+                            "[METRICS] Ingestion: {:.2f} FPS | WARNING: Dropped {} frames ({:.1f}% "
+                            "drop rate) due to disk saturation\n",
+                            fps, deltaDropped, dropRate);
                     } else if (deltaReceived > 0) {
-                        std::print("[METRICS] Ingestion: {:.2f} FPS | Health: 100% | Total Processed: {}\n", 
-                                   fps, currentReceived);
+                        std::print(
+                            "[METRICS] Ingestion: {:.2f} FPS | Health: 100% | Total Processed: "
+                            "{}\n",
+                            fps, currentReceived);
                     }
                 }
 
@@ -152,13 +161,15 @@ int main() {
                         break;
                     }
 
-                    if (!outFile.write(reinterpret_cast<const char*>(slot.getContentSlice().data()), slot.activeSize)) {
+                    if (!outFile.write(reinterpret_cast<const char*>(slot.getContentSlice().data()),
+                                       slot.activeSize)) {
                         std::cerr << "\n[Fatal] Failed to write to disk. Is the drive full?\n";
-                        running.store(false, std::memory_order_relaxed); // Trigger global app shutdown
+                        running.store(false,
+                                      std::memory_order_relaxed);  // Trigger global app shutdown
                         keepRunning = false;
                         break;
                     }
-                    
+
                     nextRead++;
                 }
                 ringBuffer.markConsumed(nextRead - 1);
@@ -169,7 +180,7 @@ int main() {
         auto transfer = [&](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
             if (status == UsbTransferStatus::Completed && !payload.empty()) {
                 auto seq_opt = ringBuffer.tryClaim();
-                
+
                 if (seq_opt.has_value()) {
                     int64_t seq = *seq_opt;
                     VideoFrame& slot = ringBuffer.getBySequence(seq);
@@ -181,15 +192,17 @@ int main() {
                     metrics.totalFramesDropped.fetch_add(1, std::memory_order_relaxed);
                 }
             }
-            return running.load(std::memory_order_relaxed) && status != UsbTransferStatus::Disconnected; 
+            return running.load(std::memory_order_relaxed) &&
+                   status != UsbTransferStatus::Disconnected;
         };
 
         UsbDriver driver(transfer, &running);
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
         driver.start(camera);
 
-        std::cout << "[Server Core] System fully operational. Awaiting network events. Press Ctrl+C to stop.\n";
-        
+        std::cout << "[Server Core] System fully operational. Awaiting network events. Press "
+                     "Ctrl+C to stop.\n";
+
         while (running.load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
@@ -199,7 +212,7 @@ int main() {
         driver.stop();
 
         int64_t seq = ringBuffer.claim();
-        ringBuffer.getBySequence(seq).activeSize = 0; 
+        ringBuffer.getBySequence(seq).activeSize = 0;
         ringBuffer.publish(seq);
 
         return EXIT_SUCCESS;

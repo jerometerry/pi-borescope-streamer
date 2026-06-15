@@ -1,25 +1,28 @@
 #pragma once
-#include <utility>
 #include <concepts>
+#include <utility>
 
 /**
- * @brief IntrusivePtr exists to eliminate malloc calls associated with std::shared_ptr for reference counting. 
- * 
- * @tparam T - the type to wrap with an IntrusivePtr, to give it referencing counting / auto deletion. 
+ * @brief IntrusivePtr exists to eliminate malloc calls associated with std::shared_ptr for
+ * reference counting.
  *
- * @details  Buffer is wrapped in an IntrusivePtr<Buffer>, which is typedefed to BufferPtr = IntrusivePtr<Buffer>.
- * IntrusivePtr implements the intrusive pointer pattern, which embeds the reference count inside the IntrusivePtr 
- * class. BufferPool returns instances of BufferPtr (aka IntrusivePtr<Buffer>), which are allocated on the stack,
- * avoiding heap allocations (via malloc) which occur when using std::shared_ptr<Buffer>.
+ * @tparam T - the type to wrap with an IntrusivePtr, to give it referencing counting / auto
+ * deletion.
  *
- * std::shared_ptr<Buffer> is perfectly fine to use, if you don't mind a small amount of memory being allocated on the 
- * heap for the internal control block that shared_ptr uses. Arguably for this project the intrusive pointer pattern 
- * is overkill. I wanted to see if I could get zero allocations on the hot path, and this was the last hurdle to
- * overcome.
+ * @details  Buffer is wrapped in an IntrusivePtr<Buffer>, which is typedefed to BufferPtr =
+ * IntrusivePtr<Buffer>. IntrusivePtr implements the intrusive pointer pattern, which embeds the
+ * reference count inside the IntrusivePtr class. BufferPool returns instances of BufferPtr (aka
+ * IntrusivePtr<Buffer>), which are allocated on the stack, avoiding heap allocations (via malloc)
+ * which occur when using std::shared_ptr<Buffer>.
+ *
+ * std::shared_ptr<Buffer> is perfectly fine to use, if you don't mind a small amount of memory
+ * being allocated on the heap for the internal control block that shared_ptr uses. Arguably for
+ * this project the intrusive pointer pattern is overkill. I wanted to see if I could get zero
+ * allocations on the hot path, and this was the last hurdle to overcome.
  */
 template <typename T>
 class IntrusivePtr {
-public:
+   public:
     using element_type = T;
 
     constexpr IntrusivePtr() noexcept : ptr_(nullptr) {}
@@ -74,10 +77,18 @@ public:
         }
     }
 
-    T* get() const noexcept { return ptr_; }
-    T& operator*() const noexcept { return *ptr_; }
-    T* operator->() const noexcept { return ptr_; }
-    explicit operator bool() const noexcept { return ptr_ != nullptr; }
+    T* get() const noexcept {
+        return ptr_;
+    }
+    T& operator*() const noexcept {
+        return *ptr_;
+    }
+    T* operator->() const noexcept {
+        return ptr_;
+    }
+    explicit operator bool() const noexcept {
+        return ptr_ != nullptr;
+    }
 
     void reset() {
         IntrusivePtr().swap(*this);
@@ -91,7 +102,7 @@ public:
         std::swap(ptr_, other.ptr_);
     }
 
-private:
+   private:
     T* ptr_ = nullptr;
 };
 
@@ -101,40 +112,48 @@ void swap(IntrusivePtr<T>& lhs, IntrusivePtr<T>& rhs) noexcept {
 }
 
 template <typename T, typename U>
-requires requires(T* t, U* u) { t == u; }
-bool operator==(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept { 
-    return lhs.get() == rhs.get(); 
+    requires requires(T* t, U* u) { t == u; }
+bool operator==(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept {
+    return lhs.get() == rhs.get();
 }
 
 template <typename T, typename U>
-requires requires(T* t, U* u) { t != u; }
-bool operator!=(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept { 
-    return lhs.get() != rhs.get(); 
+    requires requires(T* t, U* u) { t != u; }
+bool operator!=(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept {
+    return lhs.get() != rhs.get();
 }
 
 template <typename T, typename U>
-requires requires(T* t, U* u) { t < u; }
-bool operator<(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept { 
-    return lhs.get() < rhs.get(); 
+    requires requires(T* t, U* u) { t < u; }
+bool operator<(const IntrusivePtr<T>& lhs, const IntrusivePtr<U>& rhs) noexcept {
+    return lhs.get() < rhs.get();
 }
 
 template <typename T>
-bool operator==(const IntrusivePtr<T>& lhs, std::nullptr_t) noexcept { return lhs.get() == nullptr; }
+bool operator==(const IntrusivePtr<T>& lhs, std::nullptr_t) noexcept {
+    return lhs.get() == nullptr;
+}
 
 template <typename T>
-bool operator!=(const IntrusivePtr<T>& lhs, std::nullptr_t) noexcept { return lhs.get() != nullptr; }
+bool operator!=(const IntrusivePtr<T>& lhs, std::nullptr_t) noexcept {
+    return lhs.get() != nullptr;
+}
 
 template <typename T>
-bool operator==(std::nullptr_t, const IntrusivePtr<T>& rhs) noexcept { return nullptr == rhs.get(); }
+bool operator==(std::nullptr_t, const IntrusivePtr<T>& rhs) noexcept {
+    return nullptr == rhs.get();
+}
 
 template <typename T>
-bool operator!=(std::nullptr_t, const IntrusivePtr<T>& rhs) noexcept { return nullptr != rhs.get(); }
+bool operator!=(std::nullptr_t, const IntrusivePtr<T>& rhs) noexcept {
+    return nullptr != rhs.get();
+}
 
 namespace std {
-    template <typename T>
-    struct hash<IntrusivePtr<T>> {
-        size_t operator()(const IntrusivePtr<T>& p) const noexcept {
-            return std::hash<T*>{}(p.get());
-        }
-    };
-}
+template <typename T>
+struct hash<IntrusivePtr<T>> {
+    size_t operator()(const IntrusivePtr<T>& p) const noexcept {
+        return std::hash<T*>{}(p.get());
+    }
+};
+}  // namespace std

@@ -1,26 +1,29 @@
+#include "v4l2_publisher.hpp"
+
 #include <fcntl.h>
 #include <linux/videodev2.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <iostream>
 #include <span>
 #include <string>
-#include "video_frame.hpp"
-#include "v4l2.hpp"
-#include "v4l2_publisher.hpp"
 
-V4l2Publisher::V4l2Publisher(const V4L2::Config& config) 
+#include "v4l2.hpp"
+#include "video_frame.hpp"
+
+V4l2Publisher::V4l2Publisher(const V4L2::Config& config)
     : v4l2_fd_(open(config.devicePath.c_str(), O_RDWR)) {
-    
     if (v4l2_fd_ < 0) {
-        std::cerr << "[V4L2 Core] Failed to open " << config.devicePath << ". Is v4l2loopback loaded?\n";
+        std::cerr << "[V4L2 Core] Failed to open " << config.devicePath
+                  << ". Is v4l2loopback loaded?\n";
         return;
     }
 
     struct v4l2_format vid_format = {};
     vid_format.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-    
+
     // Suppress C++ union warnings because we are interfacing with a C Linux kernel API
     // NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
     vid_format.fmt.pix.width = config.width;
@@ -37,8 +40,8 @@ V4l2Publisher::V4l2Publisher(const V4L2::Config& config)
         return;
     }
 
-    std::cout << "[V4L2 Core] Virtual video device initialized at " 
-              << config.width << "x" << config.height << " on " << config.devicePath << ".\n";
+    std::cout << "[V4L2 Core] Virtual video device initialized at " << config.width << "x"
+              << config.height << " on " << config.devicePath << ".\n";
 }
 
 V4l2Publisher::~V4l2Publisher() {

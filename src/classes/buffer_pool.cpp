@@ -1,25 +1,23 @@
+#include "buffer_pool.hpp"
+
 #include <cstddef>
 #include <memory>
 #include <utility>
 #include <vector>
+
 #include "buffer.hpp"
-#include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
 #include "thread_safety_mutex.hpp"
 
-BufferPool::BufferPool(const BufferPoolArgs& args) 
-    : maxPoolSize_(args.maxPoolSize), 
-      initialPoolSize_(args.initialPoolSize), 
-      bufferReserveSize_(args.bufferReserveSize) {
-}
+BufferPool::BufferPool(const BufferPoolArgs& args)
+    : maxPoolSize_(args.maxPoolSize),
+      initialPoolSize_(args.initialPoolSize),
+      bufferReserveSize_(args.bufferReserveSize) {}
 
 std::shared_ptr<BufferPool> BufferPool::create() {
-    BufferPoolArgs args {
-        BufferPoolConfig::MAX_POOL_SIZE,
-        BufferPoolConfig::INITIAL_POOL_SIZE,
-        Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES
-    };
+    BufferPoolArgs args{BufferPoolConfig::MAX_POOL_SIZE, BufferPoolConfig::INITIAL_POOL_SIZE,
+                        Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES};
     return create(args);
 }
 
@@ -58,7 +56,7 @@ void BufferPool::recycle(Buffer* buffer) {
         return;
     }
 
-    buffer->clear(); 
+    buffer->clear();
 
     MutexLock lock(poolMutex_);
     if (pool_.size() < maxPoolSize_) {
@@ -72,12 +70,9 @@ void BufferPool::recycle(Buffer* buffer) {
 void BufferPool::initialize() {
     MutexLock lock(poolMutex_);
     pool_.reserve(maxPoolSize_);
-    
+
     for (size_t i = 0; i < initialPoolSize_; ++i) {
-        auto buffer = std::make_unique<Buffer>(
-            BufferPoolConfig::BUFFER_PADDING, 
-            this
-        );
+        auto buffer = std::make_unique<Buffer>(BufferPoolConfig::BUFFER_PADDING, this);
         buffer->reserve(bufferReserveSize_);
         pool_.push_back(std::move(buffer));
     }

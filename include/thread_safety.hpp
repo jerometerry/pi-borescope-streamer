@@ -1,15 +1,15 @@
 #pragma once
 
-// Enable Clang Thread Safety Analysis attributes. 
-// We must disable the macro-usage linter rule here because compiler attributes 
+// Enable Clang Thread Safety Analysis attributes.
+// We must disable the macro-usage linter rule here because compiler attributes
 // cannot be wrapped in standard C++ constexpr functions.
 // NOLINTBEGIN(cppcoreguidelines-macro-usage)
 
 // Enable Clang Thread Safety Analysis attributes
 #if defined(__clang__)
-    #define THREAD_ANNOTATION_ATTRIBUTE__(x)   __attribute__((x))
+#define THREAD_ANNOTATION_ATTRIBUTE__(x) __attribute__((x))
 #else
-    #define THREAD_ANNOTATION_ATTRIBUTE__(x)
+#define THREAD_ANNOTATION_ATTRIBUTE__(x)
 #endif
 
 // Class-level capability (identifies a class as a Mutex)

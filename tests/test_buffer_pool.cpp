@@ -1,15 +1,17 @@
-#include <algorithm>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <memory>
 #include <utility>
 #include <vector>
+
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
@@ -17,7 +19,8 @@
 #include "intrusive_ptr.hpp"
 #include "mjpeg_frame_queue.hpp"
 
-static void pushFrame (MjpegFrameQueue& q, const std::shared_ptr<BufferPool>& bp, std::vector<uint8_t>& data) {
+static void pushFrame(MjpegFrameQueue& q, const std::shared_ptr<BufferPool>& bp,
+                      std::vector<uint8_t>& data) {
     BufferPtr frame = bp->borrow();
     frame->insertContent(data);
     q.push(frame);
@@ -28,7 +31,7 @@ TEST(BufferPoolTest, BoundedPoolGrowth) {
     MjpegFrameQueue frameQueue;
 
     std::vector<BufferPtr> slowConsumers;
-    std::vector<uint8_t> dummyFrame = { 0xDE, 0xAD, 0xBE, 0xEF };
+    std::vector<uint8_t> dummyFrame = {0xDE, 0xAD, 0xBE, 0xEF};
 
     constexpr int SPIKE_SIZE = 10;
 
@@ -41,21 +44,20 @@ TEST(BufferPoolTest, BoundedPoolGrowth) {
     slowConsumers.clear();
 
     size_t currentPoolSize = bufferPool->getFreeBuffers();
-    
+
     EXPECT_EQ(currentPoolSize, BufferPoolConfig::MAX_POOL_SIZE);
 }
 
 TEST(BufferPoolTest, DefaultTotalCapacity128K) {
     auto bufferPool = BufferPool::create();
     auto frame = bufferPool->borrow();
-    auto expectedCapacity = Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES + BufferPoolConfig::BUFFER_PADDING;
+    auto expectedCapacity =
+        Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES + BufferPoolConfig::BUFFER_PADDING;
     EXPECT_EQ(frame->totalCapacity(), expectedCapacity);
 }
 
 TEST(BufferPoolTest, FrameReserveAddsPaddingSize) {
-    BufferPool::BufferPoolArgs args = {
-        3, 1, Units::ONE_KILOBYTE
-    };
+    BufferPool::BufferPoolArgs args = {3, 1, Units::ONE_KILOBYTE};
     auto bufferPool = BufferPool::create(args);
     auto frame = bufferPool->borrow();
     auto expectedCapacity = args.bufferReserveSize + BufferPoolConfig::BUFFER_PADDING;
@@ -63,9 +65,7 @@ TEST(BufferPoolTest, FrameReserveAddsPaddingSize) {
 }
 
 TEST(BufferPoolTest, RawBufferPointerManipulation) {
-    BufferPool::BufferPoolArgs args = {
-        3, 1, Units::ONE_KILOBYTE
-    };
+    BufferPool::BufferPoolArgs args = {3, 1, Units::ONE_KILOBYTE};
 
     auto bufferPool = BufferPool::create(args);
 
@@ -99,16 +99,12 @@ TEST(BufferPoolTest, RawBufferPointerManipulation) {
 
     auto actualData = frame->all();
 
-    EXPECT_THAT(
-        actualData, 
-        ::testing::ElementsAreArray(expectedData.begin(), expectedData.end())
-    ) << "BufferPtr memory management error";
+    EXPECT_THAT(actualData, ::testing::ElementsAreArray(expectedData.begin(), expectedData.end()))
+        << "BufferPtr memory management error";
 }
 
 TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
-    BufferPool::BufferPoolArgs args {
-        4, 4, 128
-    };
+    BufferPool::BufferPoolArgs args{4, 4, 128};
     auto bufferPool = BufferPool::create(args);
 
     size_t initialFree = bufferPool->getFreeBuffers();
@@ -118,22 +114,22 @@ TEST(BufferPoolTest, FrameReferenceCountingForMulticast) {
         EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1) << "Buffer not removed from pool";
 
         {
-            BufferPtr viewer1Frame = masterFrame; 
-            BufferPtr viewer2Frame = masterFrame; 
+            BufferPtr viewer1Frame = masterFrame;
+            BufferPtr viewer2Frame = masterFrame;
 
             masterFrame = bufferPool->borrow();
-            EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 2) << "Second buffer not acquired";
+            EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 2)
+                << "Second buffer not acquired";
         }
-        EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1) << "Buffer not automatically recycled after all references dropped";
+        EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree - 1)
+            << "Buffer not automatically recycled after all references dropped";
     }
 
     EXPECT_EQ(bufferPool->getFreeBuffers(), initialFree) << "Pool leak detected";
 }
 
 TEST(BufferPoolTest, FrameMoveSemantics) {
-    BufferPool::BufferPoolArgs args {
-        3, 1, 128
-    };
+    BufferPool::BufferPoolArgs args{3, 1, 128};
     auto bufferPool = BufferPool::create(args);
 
     size_t initialFree = bufferPool->getFreeBuffers();
@@ -143,7 +139,7 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
 
     BufferPtr movedFrame = std::move(original);
 
-    bool is_valid = static_cast<bool>(original); // NOLINT(bugprone-use-after-move)
+    bool is_valid = static_cast<bool>(original);  // NOLINT(bugprone-use-after-move)
     EXPECT_FALSE(is_valid) << "Moved-from frame still holds a valid state";
 
     EXPECT_EQ(movedFrame.get(), underlyingPtr) << "Underlying buffer pointer shifted during move";
@@ -152,19 +148,18 @@ TEST(BufferPoolTest, FrameMoveSemantics) {
 }
 
 TEST(BufferPoolTest, PaddingAndContentSliceBoundaries) {
-    BufferPool::BufferPoolArgs args {
-        3, 1, 128
-    };
+    BufferPool::BufferPoolArgs args{3, 1, 128};
     auto bufferPool = BufferPool::create(args);
 
     BufferPtr frame = bufferPool->borrow();
     auto* buffer = frame.get();
 
-    std::vector<uint8_t> mockData = { 0xAA, 0xBB, 0xCC, 0xDD };
+    std::vector<uint8_t> mockData = {0xAA, 0xBB, 0xCC, 0xDD};
     buffer->insertContent(mockData);
 
     EXPECT_EQ(buffer->contentSize(), mockData.size()) << "Content size calculation is incorrect";
-    EXPECT_EQ(buffer->totalSize(), BufferPoolConfig::BUFFER_PADDING + mockData.size()) << "Total size does not account for reserved prefix";
+    EXPECT_EQ(buffer->totalSize(), BufferPoolConfig::BUFFER_PADDING + mockData.size())
+        << "Total size does not account for reserved prefix";
 
     auto contentSlice = buffer->getContentSlice();
     EXPECT_EQ(contentSlice.size(), mockData.size());
@@ -175,15 +170,13 @@ TEST(BufferPoolTest, PaddingAndContentSliceBoundaries) {
 }
 
 TEST(BufferPoolTest, BufferTrimMaintainsPadding) {
-    BufferPool::BufferPoolArgs args {
-        3, 1, 128
-    };
+    BufferPool::BufferPoolArgs args{3, 1, 128};
     auto bufferPool = BufferPool::create(args);
 
     BufferPtr frame = bufferPool->borrow();
     auto* buffer = frame.get();
 
-    std::vector<uint8_t> streamData = { 0x00, 0x01, 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9, 0x02, 0x03 };
+    std::vector<uint8_t> streamData = {0x00, 0x01, 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9, 0x02, 0x03};
     buffer->insertContent(streamData);
 
     size_t soiOffset = 2;
@@ -191,25 +184,20 @@ TEST(BufferPoolTest, BufferTrimMaintainsPadding) {
 
     buffer->trim(soiOffset, eoiOffset);
 
-    std::vector<uint8_t> expectedContent = { 0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9 };
+    std::vector<uint8_t> expectedContent = {0xFF, 0xD8, 0x4A, 0x50, 0xFF, 0xD9};
     auto resultSlice = buffer->getContentSlice();
 
     EXPECT_EQ(buffer->contentSize(), expectedContent.size());
-    EXPECT_THAT(
-        std::vector<uint8_t>(resultSlice.begin(), resultSlice.end()),
-        ::testing::ElementsAreArray(expectedContent)
-    ) << "Trim algorithm corrupted the internal payload";
+    EXPECT_THAT(std::vector<uint8_t>(resultSlice.begin(), resultSlice.end()),
+                ::testing::ElementsAreArray(expectedContent))
+        << "Trim algorithm corrupted the internal payload";
 
-    EXPECT_EQ(
-        buffer->getPaddingSlice().size(), 
-        BufferPoolConfig::BUFFER_PADDING
-    ) << "Trim operation corrupted the reserved padding memory";
+    EXPECT_EQ(buffer->getPaddingSlice().size(), BufferPoolConfig::BUFFER_PADDING)
+        << "Trim operation corrupted the reserved padding memory";
 }
 
 TEST(BufferPoolTest, BufferClearRestoresState) {
-    BufferPool::BufferPoolArgs args {
-        3, 1, 128
-    };
+    BufferPool::BufferPoolArgs args{3, 1, 128};
     auto bufferPool = BufferPool::create(args);
 
     Buffer* underlyingPtr = nullptr;
@@ -227,52 +215,49 @@ TEST(BufferPoolTest, BufferClearRestoresState) {
     EXPECT_EQ(reusedFrame.get(), underlyingPtr) << "Pool did not return the recycled buffer";
 
     EXPECT_TRUE(reusedFrame.get()->empty()) << "Recycled buffer was not cleanly wiped";
-    EXPECT_EQ(reusedFrame.get()->totalSize(), BufferPoolConfig::BUFFER_PADDING) << "Recycled buffer lost its prefix reservation";
+    EXPECT_EQ(reusedFrame.get()->totalSize(), BufferPoolConfig::BUFFER_PADDING)
+        << "Recycled buffer lost its prefix reservation";
 }
 
-
 TEST(BufferPoolTest, OutOfBoundsTrimThrowsException) {
-    BufferPool::BufferPoolArgs args {
-        3, 1, 128
-    };
+    BufferPool::BufferPoolArgs args{3, 1, 128};
     auto bufferPool = BufferPool::create(args);
     BufferPtr frame = bufferPool->borrow();
     auto* buffer = frame.get();
 
-    std::vector<uint8_t> content = { 0x01, 0x02, 0x03, 0x04 };
+    std::vector<uint8_t> content = {0x01, 0x02, 0x03, 0x04};
     buffer->insertContent(content);
 
-    EXPECT_THROW({
-        buffer->trim(1, 10);
-    }, std::out_of_range) << "Failed to throw on end boundary violation";
+    EXPECT_THROW(
+        { buffer->trim(1, 10); }, std::out_of_range)
+        << "Failed to throw on end boundary violation";
 
-    EXPECT_THROW({
-        buffer->trim(3, 2);
-    }, std::out_of_range) << "Failed to throw on inverted boundary violation";
+    EXPECT_THROW(
+        { buffer->trim(3, 2); }, std::out_of_range)
+        << "Failed to throw on inverted boundary violation";
 }
 
 TEST(BufferPoolTest, FrontOnEmptyBufferThrowsException) {
-    BufferPool::BufferPoolArgs args {
-        3, 1, 128
-    };
+    BufferPool::BufferPoolArgs args{3, 1, 128};
     auto bufferPool = BufferPool::create(args);
     BufferPtr frame = bufferPool->borrow();
 
-    EXPECT_THROW({
-        const auto* buffer = frame.get();
-        buffer->front();
-    }, std::out_of_range) << "Failed to throw when accessing front of empty payload";
+    EXPECT_THROW(
+        {
+            const auto* buffer = frame.get();
+            buffer->front();
+        },
+        std::out_of_range)
+        << "Failed to throw when accessing front of empty payload";
 }
 
 TEST(BufferPoolTest, BufferPointerMath_InsertContentDoesNotChangePointer) {
-    BufferPool::BufferPoolArgs args {
-        3, 1, 128
-    };
+    BufferPool::BufferPoolArgs args{3, 1, 128};
     auto bufferPool = BufferPool::create(args);
     auto frame = bufferPool->borrow();
 
     auto* buffer = frame.get();
-    std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
+    std::vector<uint8_t> payload = {0xDE, 0xAD, 0xBE, 0xEF};
 
     char* paddingStartPtr1 = reinterpret_cast<char*>(frame->getMutablePaddingSlice().data());
     char* contentStartPtr1 = reinterpret_cast<char*>(frame->getMutableContentSlice().data());
@@ -293,19 +278,19 @@ TEST(BufferPoolTest, BufferPointerMath_InsertContentDoesNotChangePointer) {
 }
 
 TEST(BufferPoolTest, BufferPointerMath_ContentPtrOffsetFromPaddingPtr) {
-    BufferPool::BufferPoolArgs args {
-        3, 1, 128
-    };
+    BufferPool::BufferPoolArgs args{3, 1, 128};
     auto bufferPool = BufferPool::create(args);
     auto frame = bufferPool->borrow();
 
     auto* buffer = frame.get();
-    std::vector<uint8_t> payload = { 0xDE, 0xAD, 0xBE, 0xEF };
+    std::vector<uint8_t> payload = {0xDE, 0xAD, 0xBE, 0xEF};
 
     frame->insertContent(payload);
- 
-    const char* contentStartPtr = reinterpret_cast<const char*>(buffer->getMutableContentSlice().data());
-    const char* paddingStartPtr = reinterpret_cast<const char*>(buffer->getMutablePaddingSlice().data());
+
+    const char* contentStartPtr =
+        reinterpret_cast<const char*>(buffer->getMutableContentSlice().data());
+    const char* paddingStartPtr =
+        reinterpret_cast<const char*>(buffer->getMutablePaddingSlice().data());
 
     auto expectedContentStartPtr = paddingStartPtr + buffer->paddingSize();
     EXPECT_EQ(contentStartPtr, expectedContentStartPtr);

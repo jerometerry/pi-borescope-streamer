@@ -1,23 +1,25 @@
 #pragma once
 #include <libusb.h>
+
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <span>
 #include <thread>
 #include <vector>
-#include <span>
+
 #include "constants.hpp"
 #include "usb_camera.hpp"
 #include "usb_device_info.hpp"
 
 /**
  * @brief A zero-cost wrapper that manages the libusb asynchronous event loop.
- * @details Isolates the raw libusb C-API from the application logic, handling DMA memory 
+ * @details Isolates the raw libusb C-API from the application logic, handling DMA memory
  * allocation, bulk transfer submissions, and safe teardown mechanics.
  */
 class UsbDriver {
-public:
+   public:
     /**
      * @brief Signature for the callback fired when a USB payload arrives.
      * @return true to automatically re-submit the transfer request, false to halt the loop.
@@ -44,7 +46,7 @@ public:
      */
     void stop();
 
-private:
+   private:
     TransferHandler transferHandler_;
     std::atomic<bool>* running_;
     std::atomic<int> activeTransfers_{0};

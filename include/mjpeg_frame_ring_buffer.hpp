@@ -4,11 +4,12 @@
 #include <cstddef>
 #include <mutex>
 #include <vector>
+
 #include "buffer.hpp"
 #include "buffer_ptr.hpp"
 
 class MjpegFrameRingBuffer {
-public:
+   public:
     explicit MjpegFrameRingBuffer(size_t size, const std::atomic<bool>& running);
 
     void push(BufferPtr frame);
@@ -16,12 +17,12 @@ public:
     BufferPtr pop();
 
     /**
-     * @brief Pokes the condition variable to wake up any blocked consumer threads 
+     * @brief Pokes the condition variable to wake up any blocked consumer threads
      * during a system teardown.
      */
     void shutdown();
 
-private:
+   private:
     std::vector<BufferPtr> pool_;
 
     size_t head_ = 0;

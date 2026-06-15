@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -15,6 +16,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+
 #include "buffer.hpp"
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
@@ -23,41 +25,37 @@
 #include "mjpeg_frame_queue.hpp"
 
 namespace {
-    constexpr int TEST_PORT = 18080; 
+constexpr int TEST_PORT = 18080;
 
-    std::string toLowerString(std::string str) {
-        std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c){ return std::tolower(c); });
-        return str;
-    }
+std::string toLowerString(std::string str) {
+    std::transform(str.begin(), str.end(), str.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return str;
 }
+}  // namespace
 
 class BufferedMjpegServerTest : public ::testing::Test {
-private:
+   private:
     std::atomic<bool> running_{true};
     std::shared_ptr<BufferPool> bufferPool_;
     std::shared_ptr<MjpegFrameQueue> frameBuffer_;
     std::unique_ptr<BufferedMjpegServer> server_;
 
-protected:
+   protected:
     void SetUp() override {
         bufferPool_ = BufferPool::create();
         frameBuffer_ = std::make_shared<MjpegFrameQueue>();
 
         server_ = std::make_unique<BufferedMjpegServer>(
-            TEST_PORT, 
-            running_, 
-            [this](uint32_t& id) {
-                return frameBuffer_->pop(id); 
-            }
-        );
-        
+            TEST_PORT, running_, [this](uint32_t& id) { return frameBuffer_->pop(id); });
+
         server_->start();
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
     void TearDown() override {
         running_ = false;
-        server_.reset(); 
+        server_.reset();
     }
 
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
@@ -74,7 +72,7 @@ protected:
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) return "";
 
-        struct timeval timeout{}; 
+        struct timeval timeout{};
         timeout.tv_sec = 2;
         timeout.tv_usec = 0;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
@@ -89,10 +87,11 @@ protected:
             return "";
         }
 
-        std::string requestPayload = "GET " + route + " HTTP/1.1\r\n"
+        std::string requestPayload = "GET " + route +
+                                     " HTTP/1.1\r\n"
                                      "Host: 127.0.0.1\r\n"
                                      "Connection: close\r\n\r\n";
-                                     
+
         send(sock, requestPayload.c_str(), requestPayload.length(), 0);
 
         std::string response;
@@ -103,10 +102,10 @@ protected:
             if (bytesRead > 0) {
                 response.append(buffer, bytesRead);
             } else {
-                break; 
+                break;
             }
         }
-        
+
         close(sock);
         return response;
     }
@@ -115,7 +114,7 @@ protected:
 TEST_F(BufferedMjpegServerTest, Returns404ForUnknownRoutes) {
     std::string response = fetchFromLocalhost("/invalid-route");
     std::string lowerResponse = toLowerString(response);
-    
+
     EXPECT_FALSE(response.empty());
     EXPECT_NE(lowerResponse.find("404 not found"), std::string::npos);
 }
@@ -123,10 +122,10 @@ TEST_F(BufferedMjpegServerTest, Returns404ForUnknownRoutes) {
 TEST_F(BufferedMjpegServerTest, ReturnsFaviconNotFoundWithCacheHeaders) {
     std::string response = fetchFromLocalhost("/favicon.ico");
     std::string lowerResponse = toLowerString(response);
-    
+
     EXPECT_FALSE(response.empty());
     EXPECT_NE(lowerResponse.find("404 not found"), std::string::npos);
-    EXPECT_NE(lowerResponse.find("max-age=31536000"), std::string::npos); 
+    EXPECT_NE(lowerResponse.find("max-age=31536000"), std::string::npos);
 }
 
 TEST_F(BufferedMjpegServerTest, ServesWebDashboard) {
@@ -142,7 +141,7 @@ TEST_F(BufferedMjpegServerTest, ServesContinuousMjpegStream) {
     ASSERT_GE(sock, 0);
 
     struct timeval timeout{};
-    timeout.tv_sec = 2; 
+    timeout.tv_sec = 2;
     timeout.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
@@ -162,7 +161,7 @@ TEST_F(BufferedMjpegServerTest, ServesContinuousMjpegStream) {
     std::string chunkResponse;
     std::string payloadString(mockVideoFrame.begin(), mockVideoFrame.end());
     char buffer[4096];
-    
+
     auto startTime = std::chrono::steady_clock::now();
 
     while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(2)) {
@@ -175,13 +174,14 @@ TEST_F(BufferedMjpegServerTest, ServesContinuousMjpegStream) {
             break;
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(5)); 
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 
     std::string lowerResponse = toLowerString(chunkResponse);
     EXPECT_NE(lowerResponse.find("--mjpegstream"), std::string::npos);
     EXPECT_NE(lowerResponse.find("content-type: image/jpeg"), std::string::npos);
-    EXPECT_NE(chunkResponse.find(payloadString), std::string::npos) << "Stream chunk payload corrupted or incomplete.";
+    EXPECT_NE(chunkResponse.find(payloadString), std::string::npos)
+        << "Stream chunk payload corrupted or incomplete.";
 
     close(sock);
 }
