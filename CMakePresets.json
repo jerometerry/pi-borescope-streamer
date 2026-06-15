@@ -45,7 +45,8 @@
 			"binaryDir": "${sourceDir}/out/build/${presetName}",
 			"cacheVariables": {
 				"BUILD_TESTING": "ON",
-				"ENABLE_COVERAGE": "ON"
+				"ENABLE_COVERAGE": "ON",
+				"ENABLE_SANITIZERS": "ON"
 			}
 		},
 		{

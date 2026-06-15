@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(pi-borescope-streamer VERSION 0.1.0 LANGUAGES C CXX)
 
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    message(STATUS "ccache found and enabled")
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -28,7 +35,7 @@ set(GENERATED_HPP "${CMAKE_CURRENT_BINARY_DIR}/generated/index_html.hpp")
 
 add_custom_command(
     OUTPUT "${GENERATED_HPP}"
-    COMMAND ${CMAKE_COMMAND} 
+    COMMAND ${CMAKE_COMMAND}
         -D INPUT_HTML="${HTML_FILE}"
         -D OUTPUT_HPP="${GENERATED_HPP}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/GenerateHeader.cmake"
@@ -38,11 +45,11 @@ add_custom_command(
 
 # --- Static Analysis (Opt-In) ---
 if(ENABLE_CLANG_TIDY)
-    find_program(CLANG_TIDY_EXE NAMES "clang-tidy" 
+    find_program(CLANG_TIDY_EXE NAMES "clang-tidy"
         PATHS "/opt/homebrew/opt/llvm/bin" "/usr/bin" "/usr/local/bin"
     )
     if(CLANG_TIDY_EXE)
-        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}" 
+        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}"
             "-checks=-*,performance-*,concurrency-*,bugprone-*,modernize-*,cppcoreguidelines-*,-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-avoid-c-arrays,-modernize-avoid-c-arrays,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-non-const-global-variables,-bugprone-throwing-static-initialization,-modernize-use-designated-initializers,-modernize-use-integer-sign-comparison,-modernize-use-auto,-modernize-use-ranges,-bugprone-narrowing-conversions,-cppcoreguidelines-narrowing-conversions,-modernize-avoid-c-style-cast,-cppcoreguidelines-pro-type-const-cast,-modernize-use-nodiscard,-modernize-use-equals-default,-cppcoreguidelines-special-member-functions,-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access"
             "-warnings-as-errors=*"
         )
@@ -52,7 +59,7 @@ if(ENABLE_CLANG_TIDY)
 endif()
 
 if(ENABLE_CPPCHECK)
-    find_program(CPPCHECK_EXE NAMES "cppcheck" 
+    find_program(CPPCHECK_EXE NAMES "cppcheck"
         PATHS "/opt/homebrew/bin" "/usr/bin" "/usr/local/bin"
     )
 
@@ -76,10 +83,10 @@ if(ENABLE_CPPCHECK)
             add_custom_command(
                 TARGET run_cppcheck POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${CPPCHECK_HTML_DIR}"
-                COMMAND "${CPPCHECK_HTML_EXE}" 
-                    --file=${CPPCHECK_XML_DIR}/cppcheck_report.xml 
-                    --report-dir=${CPPCHECK_HTML_DIR} 
-                    --source-dir=${PROJECT_SOURCE_DIR}/src 
+                COMMAND "${CPPCHECK_HTML_EXE}"
+                    --file=${CPPCHECK_XML_DIR}/cppcheck_report.xml
+                    --report-dir=${CPPCHECK_HTML_DIR}
+                    --source-dir=${PROJECT_SOURCE_DIR}/src
                     --title=${PROJECT_NAME}
                 COMMENT "Converting Cppcheck XML to HTML report..."
                 VERBATIM
@@ -87,7 +94,7 @@ if(ENABLE_CPPCHECK)
         else()
             message(WARNING "cppcheck-htmlreport not found. Only the XML report will be generated.")
         endif()
-        
+
     else()
         message(WARNING "cppcheck enabled but not found!")
     endif()
@@ -105,19 +112,19 @@ if(ENABLE_IWYU)
         endif()
 
         if(NOT APPLE AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-            find_file(GCC_MAP_FILE 
+            find_file(GCC_MAP_FILE
                 NAMES stdcxx.imp
-                PATHS "/usr/share/include-what-you-use" 
+                PATHS "/usr/share/include-what-you-use"
                       "/usr/local/share/include-what-you-use"
                       "/usr/share/llvm/include-what-you-use"
             )
             if(GCC_MAP_FILE)
-                list(APPEND IWYU_ARGS 
+                list(APPEND IWYU_ARGS
                     "-Xiwyu" "--mapping_file=${GCC_MAP_FILE}"
                     "-Xiwyu" "--no_default_mappings"
                 )
             endif()
-            list(APPEND IWYU_ARGS 
+            list(APPEND IWYU_ARGS
                 "-Xiwyu" "--no_fwd_decls"
                 "-Xiwyu" "--no_comments"
                 "-Qunused-arguments"
@@ -134,23 +141,35 @@ add_library(project_warnings INTERFACE)
 target_compile_options(project_warnings INTERFACE -Wall -Wextra)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang")
-    target_compile_options(project_warnings INTERFACE 
-        -Wthread-safety 
+    target_compile_options(project_warnings INTERFACE
+        -Wthread-safety
         -Werror=thread-safety
     )
 endif()
 
 if(NOT APPLE)
-    target_compile_options(project_warnings INTERFACE 
-        -g                        
-        -fno-omit-frame-pointer   
+    target_compile_options(project_warnings INTERFACE
+        -g
+        -fno-omit-frame-pointer
     )
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-        target_compile_options(project_warnings INTERFACE 
-            -mcpu=cortex-a76 
+        target_compile_options(project_warnings INTERFACE
+            -mcpu=cortex-a76
             -mtune=cortex-a76
         )
     endif()
+endif()
+
+option(ENABLE_SANITIZERS "Enable Address and Undefined Behavior Sanitizers" OFF)
+
+if(ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
+    target_compile_options(project_warnings INTERFACE
+        -fsanitize=address,undefined
+        -fno-omit-frame-pointer
+    )
+    target_link_options(project_warnings INTERFACE
+        -fsanitize=address,undefined
+    )
 endif()
 
 # --- Dependencies: uWebSockets & uSockets ---
@@ -177,8 +196,8 @@ FetchContent_MakeAvailable(uSockets)
 add_library(uNetworking INTERFACE)
 target_link_libraries(uNetworking INTERFACE uwebsockets_headers usockets ZLIB::ZLIB)
 
-file(GLOB USOCKETS_SOURCES 
-    "${usockets_SOURCE_DIR}/src/*.c" 
+file(GLOB USOCKETS_SOURCES
+    "${usockets_SOURCE_DIR}/src/*.c"
     "${usockets_SOURCE_DIR}/src/eventing/*.c"
 )
 
@@ -205,7 +224,7 @@ add_library(borescope_core STATIC
     src/classes/mjpeg_server.cpp
     src/classes/mjpeg_stream.cpp
     src/classes/mjpeg_stream_capture.cpp
-    src/classes/usb_camera.cpp 
+    src/classes/usb_camera.cpp
     src/classes/usb_context.cpp
     src/classes/usb_device_finder.cpp
     src/classes/usb_driver.cpp
@@ -215,16 +234,16 @@ add_library(borescope_core STATIC
 )
 add_library(Borescope::Core ALIAS borescope_core)
 
-target_include_directories(borescope_core 
+target_include_directories(borescope_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
-target_link_libraries(borescope_core 
-    PUBLIC 
+target_link_libraries(borescope_core
+    PUBLIC
         PkgConfig::LIBUSB
         uNetworking
-    PRIVATE 
+    PRIVATE
         project_warnings
 )
 
@@ -254,11 +273,11 @@ target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warn
 
 # --- Linux-Specific Targets ---
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_sources(borescope_core PRIVATE 
+    target_sources(borescope_core PRIVATE
         src/classes/buffered_v4l2_publisher.cpp
         src/classes/v4l2_publisher.cpp
     )
-    
+
     add_executable(v4l2-borescope-daemon
         src/classes/v4l2.cpp
         src/classes/buffered_v4l2_publisher.cpp
@@ -300,7 +319,7 @@ if(BUILD_DOC)
         set(DOXYGEN_HAVE_DOT YES)
         set(DOXYGEN_DOT_NUM_THREADS 0)
 
-        doxygen_add_docs(docs 
+        doxygen_add_docs(docs
             ${PROJECT_SOURCE_DIR}/src
             ${PROJECT_SOURCE_DIR}/include
             COMMENT "Generating API documentation"
@@ -335,7 +354,7 @@ if(BUILD_TESTING)
 
     target_link_libraries(borescope_core PRIVATE GTest::gtest)
 
-    add_executable(run_project_tests 
+    add_executable(run_project_tests
         tests/test_buffer.cpp
         tests/test_buffer_pool.cpp
         tests/test_buffered_mjpeg_server.cpp
@@ -352,8 +371,8 @@ if(BUILD_TESTING)
 
     target_include_directories(run_project_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
-    target_link_libraries(run_project_tests 
-        PRIVATE 
+    target_link_libraries(run_project_tests
+        PRIVATE
             borescope_core
             project_warnings
             gtest_main
@@ -392,7 +411,29 @@ if(BUILD_BENCHMARKS)
     )
 
     add_executable(mjpeg_pipeline.bench benchmark/mjpeg_pipeline_benchmark.cpp)
-    target_link_libraries(mjpeg_pipeline.bench 
+    target_link_libraries(mjpeg_pipeline.bench
         PRIVATE Borescope::Core benchmark::benchmark_main Threads::Threads project_warnings
+    )
+endif()
+
+find_program(CLANG_FORMAT_EXE NAMES "clang-format")
+if(CLANG_FORMAT_EXE)
+    file(GLOB_RECURSE FORMAT_SRCS
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+    )
+
+    add_custom_target(format
+        COMMAND "${CLANG_FORMAT_EXE}" -i ${FORMAT_SRCS}
+        COMMENT "Formatting C++ code with clang-format"
+        VERBATIM
+    )
+
+    add_custom_target(check-format
+        COMMAND "${CLANG_FORMAT_EXE}" --dry-run --Werror ${FORMAT_SRCS}
+        COMMENT "Checking C++ code formatting"
+        VERBATIM
     )
 endif()
