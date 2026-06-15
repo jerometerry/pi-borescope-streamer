@@ -10,7 +10,7 @@ GIT_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "no-git")
 BUILD_DATE  := $(shell date +"%Y-%m-%d_%H:%M:%S")
 VERSION_STR := $(BUILD_DATE)-$(GIT_VERSION)
 KDIR ?= /lib/modules/$(shell uname -r)/build
-SMATCH := ~/github/smatch/smatch
+SMATCH := $(HOME)/github/smatch/smatch
 PWD  := $(shell pwd)
 
 ccflags-y += -I$(src)/include
@@ -25,7 +25,7 @@ default:
 	$(MAKE) C=1 -C $(KDIR) M=$(PWD) W=1 modules
 
 smatch:
-	$(MAKE) CHECK="$(SMATCH) -p=kernel --param-mapper" C=1 -C $(KDIR) M=$(PWD) modules
+	$(MAKE) CHECK="$(SMATCH)" SMATCHARGS="-p=kernel --param-mapper" C=1 -C $(KDIR) M=$(PWD) modules
 
 static-check:
 	$(MAKE) EXTRA_CFLAGS="-fanalyzer -Wanalyzer-infinite-loop -Warray-bounds=2" C=1 -C $(KDIR) M=$(PWD) modules
