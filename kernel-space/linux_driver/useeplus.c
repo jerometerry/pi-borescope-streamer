@@ -56,7 +56,9 @@ static void up_finalize_active_frame(struct up_drv_data *drv_data)
 	vaddr = vb2_plane_vaddr(vb, 0);
 	eoi_off = drv_data->active_pl_len;
 
-	/* Scan backwards strictly within the bounds of what we wrote for EOI */
+	/*
+	 * Scan backwards strictly within the bounds of what we wrote for EOI
+	 */
 	for (j = drv_data->active_pl_len; j >= 2; j--) {
 		if (vaddr[j - 2] == JPEG_DEL && vaddr[j - 1] == JPEG_EOI) {
 			eoi_off = j;
@@ -73,23 +75,110 @@ static void up_finalize_active_frame(struct up_drv_data *drv_data)
 		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 		drv_data->dbg_frames_delivered++;
 
-		/* Safely release ownership of the buffer back to VB2 */
+		/*
+		 * Safely release ownership of the buffer back to VB2
+		 */
 		drv_data->active_buf = NULL;
 	} else {
-		/* Recycle the buffer if corrupted/incomplete */
+		/*
+		 * Recycle the buffer if corrupted/incomplete
+		 */
 		drv_data->dbg_frames_dropped_eoi++;
 	}
 
-	/* Clear state for the next frame */
+	/*
+	 * Clear state for the next frame
+	 */
 	drv_data->active_pl_len = 0;
+}
+
+static bool up_trim_preamble(u8 **pl_src, size_t *pl_size)
+{
+	size_t limit, i;
+
+	/*
+	 * Prevent unsigned integer underflow on bounds check
+	 */
+	if (*pl_size < 2)
+		return false;
+
+	limit = min_t(size_t, JPEG_SOI_MAX_POS, *pl_size - 1);
+
+	for (i = 0; i < limit; i++) {
+		if ((*pl_src)[i] == JPEG_DEL && (*pl_src)[i + 1] == JPEG_SOI) {
+			*pl_src += i;
+			*pl_size -= i;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void up_process_video_payload(struct up_drv_data *drv_data,
+				     struct up_parse_ctx *ctx, u8 *pl_src,
+				     size_t pl_size)
+{
+	struct up_buffer *up_buf;
+	u8 *vaddr;
+
+	if (pl_size == 0)
+		return;
+
+	/*
+	 * Grab a new buffer if we don't have one
+	 */
+	if (!drv_data->active_buf) {
+		spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
+		if (!list_empty(&drv_data->ready_queue)) {
+			up_buf = list_first_entry(&drv_data->ready_queue,
+						  struct up_buffer, list);
+			drv_data->active_buf = up_buf;
+			list_del(&drv_data->active_buf->list);
+		}
+		spin_unlock_irqrestore(&drv_data->ready_queue_lock, ctx->flags);
+	}
+
+	if (!drv_data->active_buf) {
+		/*
+		  * Dropping frame, no buffers available
+		  */
+		return;
+	}
+
+	vaddr = vb2_plane_vaddr(&drv_data->active_buf->vb2_buffer.vb2_buf, 0);
+
+	/*
+	 * Preamble Trimming: Hunt for SOI on the first payload chunk
+	 */
+	if (drv_data->active_pl_len == 0) {
+		if (!up_trim_preamble(&pl_src, &pl_size)) {
+			/*
+			  * Drop fragment, wait for SOI
+			  */
+			return;
+		}
+	}
+
+	/*
+	 * Direct copy to the mapped memory space
+	 */
+	if (drv_data->active_pl_len + pl_size <= MAX_FRAME_SIZE) {
+		memcpy(vaddr + drv_data->active_pl_len, pl_src, pl_size);
+		drv_data->active_pl_len += pl_size;
+	} else {
+		/*
+		 * Overflow protection
+		 */
+		drv_data->active_pl_len = 0;
+	}
 }
 
 void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 {
 	u8 current_frame_id, current_camera_number, current_flags, other_flags;
-	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off, limit, i;
-	u8 *hdr_ptr, *pl_src, *vaddr;
-	struct up_buffer *up_buf;
+	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off;
+	u8 *hdr_ptr, *pl_src;
 	struct up_pl_hdr *payload;
 	struct up_pkt_hdr *pkt;
 	bool has_gravity_sensor;
@@ -157,69 +246,10 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 			pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
 			pl_src = drv_data->decode_buf + pl_start;
 
-			/*
-			 * Grab a new buffer if we don't have one
-			 */
-			if (!drv_data->active_buf) {
-				spin_lock_irqsave(&drv_data->ready_queue_lock,
-						  ctx->flags);
-				if (!list_empty(&drv_data->ready_queue)) {
-					up_buf = list_first_entry(&drv_data->ready_queue,
-								  struct up_buffer, list);
-					drv_data->active_buf = up_buf;
-					list_del(&drv_data->active_buf->list);
-				}
-				spin_unlock_irqrestore(&drv_data->ready_queue_lock, ctx->flags);
-			}
-
-			if (drv_data->active_buf) {
-				vaddr = vb2_plane_vaddr(&drv_data->active_buf->vb2_buffer.vb2_buf,
-							0);
-
-				/*
-				 * Preamble Trimming: Hunt for SOI on the first payload chunk
-				 */
-				if (drv_data->active_pl_len == 0) {
-					bool found_soi = false;
-
-					limit = min_t(size_t, JPEG_SOI_MAX_POS,
-						      pl_size - 1);
-
-					for (i = 0; i < limit; i++) {
-						if (pl_src[i] == JPEG_DEL &&
-						    pl_src[i + 1] == JPEG_SOI) {
-							pl_src += i;
-							pl_size -= i;
-							found_soi = true;
-							break;
-						}
-					}
-					if (!found_soi) {
-						/*
-						 * Drop fragment, wait for SOI
-						 */
-						goto skip_chunk;
-					}
-				}
-
-				/*
-				 * Direct copy to the mapped memory space
-				 */
-				if (drv_data->active_pl_len + pl_size <=
-				    MAX_FRAME_SIZE) {
-					memcpy(vaddr + drv_data->active_pl_len,
-					       pl_src, pl_size);
-					drv_data->active_pl_len += pl_size;
-				} else {
-					/*
-					 * Overflow protection
-					 */
-					drv_data->active_pl_len = 0;
-				}
-			}
+			up_process_video_payload(drv_data, ctx, pl_src,
+						 pl_size);
 		}
 
-skip_chunk:
 		ctx->index += pkt_size;
 	}
 }
