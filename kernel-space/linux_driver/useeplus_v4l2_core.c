@@ -610,7 +610,8 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	}
 
 	if (drv_data->active_buf) {
-		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
+		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+				VB2_BUF_STATE_ERROR);
 		drv_data->active_buf = NULL;
 		drv_data->active_pl_len = 0;
 	}

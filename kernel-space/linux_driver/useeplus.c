@@ -26,7 +26,8 @@ static bool up_check_ghost_header(struct up_drv_data *drv_data,
 	size_t o;
 
 	buf_len = drv_data->decode_buf_len;
-	limit = min_t(size_t, MAX_GHOST_HEADER_OFFSET, buf_len - ctx->index - 3);
+	limit = min_t(size_t, MAX_GHOST_HEADER_OFFSET,
+		      buf_len - ctx->index - 3);
 
 	for (o = UP_PKT_HDR_SIZE; o <= limit; o++) {
 		o_hdr_ptr = drv_data->decode_buf + ctx->index + o;
@@ -67,7 +68,8 @@ static void up_finalize_active_frame(struct up_drv_data *drv_data)
 	if (found_eoi) {
 		vb2_set_plane_payload(vb, 0, eoi_off);
 		vb->timestamp = ktime_get_ns();
-		drv_data->active_buf->vb2_buffer.sequence = drv_data->sequence++;
+		drv_data->active_buf->vb2_buffer.sequence =
+			drv_data->sequence++;
 		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 		drv_data->dbg_frames_delivered++;
 	} else {
@@ -85,6 +87,7 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 	u8 current_frame_id, current_camera_number, current_flags, other_flags;
 	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off, limit, i;
 	u8 *hdr_ptr, *pl_src, *vaddr;
+	struct up_buffer *up_buf;
 	struct up_pl_hdr *payload;
 	struct up_pkt_hdr *pkt;
 	bool has_gravity_sensor;
@@ -134,9 +137,9 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		/*
 		 * Frame Boundary Detected
 		 */
-		if (drv_data->building_frame && drv_data->frame_id != current_frame_id) {
+		if (drv_data->building_frame &&
+		    drv_data->frame_id != current_frame_id)
 			up_finalize_active_frame(drv_data);
-		}
 
 		drv_data->frame_id = current_frame_id;
 		drv_data->building_frame = true;
@@ -146,7 +149,8 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		/*
 		 * Process Video Feed Only
 		 */
-		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
+		if (!has_gravity_sensor && other_flags == 0 &&
+		    current_camera_number < 2) {
 			pl_start = ctx->index + TOTAL_USB_HEADER_SIZE;
 			pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
 			pl_src = drv_data->decode_buf + pl_start;
@@ -155,26 +159,37 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 			 * Grab a new buffer if we don't have one
 			 */
 			if (!drv_data->active_buf) {
-				spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
+				spin_lock_irqsave(&drv_data->ready_queue_lock,
+						  ctx->flags);
 				if (!list_empty(&drv_data->ready_queue)) {
-					drv_data->active_buf = list_first_entry(&drv_data->ready_queue, struct up_buffer, list);
+					up_buf = list_first_entry(
+						&drv_data->ready_queue,
+						struct up_buffer, list);
+					drv_data->active_buf = up_buf;
 					list_del(&drv_data->active_buf->list);
 				}
-				spin_unlock_irqrestore(&drv_data->ready_queue_lock, ctx->flags);
+				spin_unlock_irqrestore(
+					&drv_data->ready_queue_lock,
+					ctx->flags);
 			}
 
 			if (drv_data->active_buf) {
-				vaddr = vb2_plane_vaddr(&drv_data->active_buf->vb2_buffer.vb2_buf, 0);
+				vaddr = vb2_plane_vaddr(
+					&drv_data->active_buf->vb2_buffer
+						 .vb2_buf,
+					0);
 
 				/*
 				 * Preamble Trimming: Hunt for SOI on the first payload chunk
 				 */
 				if (drv_data->active_pl_len == 0) {
 					bool found_soi = false;
-					limit = min_t(size_t, JPEG_SOI_MAX_POS, pl_size - 1);
+					limit = min_t(size_t, JPEG_SOI_MAX_POS,
+						      pl_size - 1);
 
 					for (i = 0; i < limit; i++) {
-						if (pl_src[i] == JPEG_DEL && pl_src[i + 1] == JPEG_SOI) {
+						if (pl_src[i] == JPEG_DEL &&
+						    pl_src[i + 1] == JPEG_SOI) {
 							pl_src += i;
 							pl_size -= i;
 							found_soi = true;
@@ -192,8 +207,10 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 				/*
 				 * Direct copy to the mapped memory space
 				 */
-				if (drv_data->active_pl_len + pl_size <= MAX_FRAME_SIZE) {
-					memcpy(vaddr + drv_data->active_pl_len, pl_src, pl_size);
+				if (drv_data->active_pl_len + pl_size <=
+				    MAX_FRAME_SIZE) {
+					memcpy(vaddr + drv_data->active_pl_len,
+					       pl_src, pl_size);
 					drv_data->active_pl_len += pl_size;
 				} else {
 					/*
