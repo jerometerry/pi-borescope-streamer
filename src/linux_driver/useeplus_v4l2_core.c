@@ -79,9 +79,9 @@ static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 	struct usb_device *u_dev = drv_data->usb_dev;
 	u8 *urb_buf;
 	dma_addr_t dma_addr;
-	if (!drv_data->urbs[urb_index]) {
+
+	if (!drv_data->urbs[urb_index])
 		return;
-	}
 	urb_buf = drv_data->urb_buffers[urb_index] dma_addr =
 		drv_data->urb_dma_addrs[urb_index];
 	if (urb_buf) {
@@ -102,9 +102,8 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 	for (i = 0; i < NUM_URBS; ++i)
 		usb_kill_urb(drv_data->urbs[i]);
 	/* Release URB resources */
-	for (i = 0; i < NUM_URBS; ++i) {
+	for (i = 0; i < NUM_URBS; ++i)
 		up_free_urb(drv_data, i);
-	}
 }
 
 static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
@@ -129,6 +128,7 @@ static int up_iap_auth(struct up_drv_data *data)
 {
 	int ep = drv_data->iap_out_ep;
 	size_t size = sizeof(iap_auth_handshake);
+
 	return up_write_msg(drv_data, ep, iap_auth_handshake, size);
 }
 
@@ -136,6 +136,7 @@ static int up_start_video(struct up_drv_data *data)
 {
 	int ep = drv_data->video_out_ep;
 	size_t size = sizeof(start_video_command);
+
 	return up_write_msg(drv_data, ep, start_video_command, size);
 }
 
@@ -501,12 +502,14 @@ static int up_resume(struct usb_interface *intf)
 static void up_disconnect(struct usb_interface *interface)
 {
 	struct up_drv_data *drv_data = usb_get_intfdata(interface);
+	int ifNum = interface->cur_altsetting->desc.bInterfaceNumber;
 
 	usb_set_intfdata(interface, NULL);
-	/* Ignore the iAP interface disconnect. */
-	/* The Video Interface disconnect handles the full device teardown. */
-	if (interface->cur_altsetting->desc.bInterfaceNumber ==
-	    UP_IAP_INTERFACE)
+	/*
+	 * Ignore the iAP interface disconnect.
+	 * The Video Interface disconnect handles the full device teardown.
+	 */
+	if (ifNUm == UP_IAP_INTERFACE)
 		return;
 	if (drv_data) {
 		up_free_urbs(drv_data);
@@ -515,8 +518,7 @@ static void up_disconnect(struct usb_interface *interface)
 			video_unregister_device(&drv_data->video_dev);
 		v4l2_device_disconnect(&drv_data->v4l2_dev);
 		v4l2_device_put(&drv_data->v4l2_dev);
-		dev_info(&interface->dev,
-			 "Useeplus protocol borescope detached.\n");
+		dev_info(&interface->dev, "Device disconnected.\n");
 	}
 }
 
@@ -553,7 +555,7 @@ static int up_probe(struct usb_interface *interface,
 	struct up_drv_data *drv_data = NULL;
 	struct vb2_queue *q;
 	int i, retval, hb_bytes, vid_in_pipe, iap_in_pipe;
-	u8 *hb_sink;
+	u8 *hb_sink, ep;
 	/* Only bind the driver when the Video Interface is probed */
 	if (interface->cur_altsetting->desc.bInterfaceNumber !=
 	    UP_VIDEO_INTERFACE)
@@ -606,30 +608,28 @@ static int up_probe(struct usb_interface *interface,
 	}
 	for (i = 0; i < video_alt->desc.bNumEndpoints; ++i) {
 		ep_desc = &video_alt->endpoint[i].desc;
+		ep = ep_desc->bEndpointAddress;
 		if (usb_endpoint_num(ep_desc) == UP_VIDEO_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
-				drv_data->video_in_ep =
-					ep_desc->bEndpointAddress;
+				drv_data->video_in_ep = ep;
 			else
-				drv_data->video_out_ep =
-					ep_desc->bEndpointAddress;
+				drv_data->video_out_ep = ep;
 		}
 	}
 	/* Dynamically Map Endpoints for iAP interface */
 	for (i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; ++i) {
 		ep_desc = &iap_intf->cur_altsetting->endpoint[i].desc;
+		ep = ep_desc->bEndpointAddress;
 		if (usb_endpoint_num(ep_desc) == UP_IAP_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
-				drv_data->iap_in_ep = ep_desc->bEndpointAddress;
+				drv_data->iap_in_ep = ep;
 			else
-				drv_data->iap_out_ep =
-					ep_desc->bEndpointAddress;
+				drv_data->iap_out_ep = ep;
 		}
 	}
 	if (!drv_data->video_in_ep || !drv_data->video_out_ep ||
 	    !drv_data->iap_in_ep || !drv_data->iap_out_ep) {
-		dev_err(&interface->dev,
-			"Could not map all 4 required bulk endpoints\n");
+		dev_err(&interface->dev, "Could not map all endpoints\n");
 		retval = -ENODEV;
 		goto error_release_iap;
 	}
