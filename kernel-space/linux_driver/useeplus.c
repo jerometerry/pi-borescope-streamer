@@ -120,13 +120,14 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 				     size_t pl_size)
 {
 	struct up_buffer *up_buf;
+	size_t current_len;
 	u8 *vaddr;
 
-	if (pl_size == 0)
+	if (unlikely(pl_size == 0 || !pl_src))
 		return;
 
 	/*
-	 * Grab a new buffer if we don't have one
+	 * Secure a fresh buffer if needed
 	 */
 	if (!drv_data->active_buf) {
 		spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
@@ -146,12 +147,24 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 		return;
 	}
 
+	/*
+	 * Sanitize and snapshot the state variable to protect against EMI mid-run
+	 */
+	current_len = drv_data->active_pl_len;
+	if (unlikely(current_len >= MAX_FRAME_SIZE)) {
+		goto overflow_reset;
+	}
+
 	vaddr = vb2_plane_vaddr(&drv_data->active_buf->vb2_buffer.vb2_buf, 0);
+	if (unlikely(!vaddr)) {
+		drv_data->active_buf = NULL;
+		return;
+	}
 
 	/*
-	 * Preamble Trimming: Hunt for SOI on the first payload chunk
+	 * Preamble Trimming on first payload chunk
 	 */
-	if (drv_data->active_pl_len == 0) {
+	if (current_len == 0) {
 		if (!up_trim_preamble(&pl_src, &pl_size)) {
 			/*
 			 * Drop fragment, wait for SOI
@@ -161,17 +174,39 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 	}
 
 	/*
-	 * Direct copy to the mapped memory space
+	 * Overflow-Safe Math Check */
 	 */
-	if (drv_data->active_pl_len + pl_size <= MAX_FRAME_SIZE) {
-		memcpy(vaddr + drv_data->active_pl_len, pl_src, pl_size);
-		drv_data->active_pl_len += pl_size;
-	} else {
+	if (likely(pl_size <= (MAX_FRAME_SIZE - current_len))) {
 		/*
-		 * Overflow protection
+		 * Secondary mid-execution invariant guard for pointer math
 		 */
-		drv_data->active_pl_len = 0;
+		if (unlikely((current_len + pl_size) > MAX_FRAME_SIZE))
+			goto overflow_reset;
+
+		memcpy(vaddr + current_len, pl_src, pl_size);
+		drv_data->active_pl_len = current_len + pl_size;
+	} else {
+		goto overflow_reset;
 	}
+
+	return;
+
+overflow_reset:
+	/*
+	 * Hard, fail-secure rollback of the driver state
+	 */
+	dev_err_ratelimited(&drv_data->itf->dev,
+		"useeplus: Stream overflow or state corruption prevented! Size: %zu, Current: %zu\n",
+		pl_size, current_len);
+
+	drv_data->active_pl_len = 0;
+	drv_data->building_frame = false;
+	drv_data->dbg_frames_dropped_soi++;
+
+	/*
+	 * Recycle or decouple the corrupted buffer state safely
+	 */
+	drv_data->active_buf = NULL;
 }
 
 void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
