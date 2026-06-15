@@ -141,8 +141,8 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 
 	if (!drv_data->active_buf) {
 		/*
-		  * Dropping frame, no buffers available
-		  */
+		 * Dropping frame, no buffers available
+		 */
 		return;
 	}
 
@@ -154,8 +154,8 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 	if (drv_data->active_pl_len == 0) {
 		if (!up_trim_preamble(&pl_src, &pl_size)) {
 			/*
-			  * Drop fragment, wait for SOI
-			  */
+			 * Drop fragment, wait for SOI
+			 */
 			return;
 		}
 	}
