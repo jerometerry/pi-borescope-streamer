@@ -125,14 +125,16 @@ static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
 	return retval;
 }
 
-static int up_iap_auth(struct up_drv_data *data) {
+static int up_iap_auth(struct up_drv_data *data)
+{
 	int ep = drv_data->iap_out_ep;
 	size_t size = sizeof(iap_auth_handshake);
 	return up_write_msg(drv_data, ep, iap_auth_handshake, size);
 }
 
-static int up_start_video(struct up_drv_data *data) {
-	int ep = drv_data->video_out_ep
+static int up_start_video(struct up_drv_data *data)
+{
+	int ep = drv_data->video_out_ep;
 	size_t size = sizeof(start_video_command);
 	return up_write_msg(drv_data, ep, start_video_command, size);
 }
@@ -140,6 +142,7 @@ static int up_start_video(struct up_drv_data *data) {
 static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct up_drv_data *drv_data = vb2_get_drv_priv(vq);
+	struct usb_interface *itf = drv_data->itf;
 	struct up_buffer *buf;
 	unsigned long flags;
 	int urbs_submitted = 0;
@@ -155,12 +158,12 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	/* Send hardware initialization commands */
 	retval = up_iap_auth(drv_data);
 	if (retval) {
-		dev_err(&drv_data->itf->dev, "up_write_msg init failed: %d\n", retval);
+		dev_err(&itf->dev, "up_write_msg init failed: %d\n", retval);
 		goto error_start;
 	}
 	retval = up_start_video(drv_data);
 	if (retval) {
-		dev_err(&drv_data->itf->dev, "up_write_msg start failed: %d\n", retval);
+		dev_err(&itf->dev, "up_write_msg start failed: %d\n", retval);
 		goto error_start;
 	}
 	/*
