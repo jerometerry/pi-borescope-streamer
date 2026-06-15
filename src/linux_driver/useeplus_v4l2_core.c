@@ -502,14 +502,14 @@ static int up_resume(struct usb_interface *intf)
 static void up_disconnect(struct usb_interface *interface)
 {
 	struct up_drv_data *drv_data = usb_get_intfdata(interface);
-	int ifNum = interface->cur_altsetting->desc.bInterfaceNumber;
+	int itf_num = interface->cur_altsetting->desc.bInterfaceNumber;
 
 	usb_set_intfdata(interface, NULL);
 	/*
 	 * Ignore the iAP interface disconnect.
 	 * The Video Interface disconnect handles the full device teardown.
 	 */
-	if (ifNUm == UP_IAP_INTERFACE)
+	if (itf_num == UP_IAP_INTERFACE)
 		return;
 	if (drv_data) {
 		up_free_urbs(drv_data);
