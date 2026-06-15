@@ -27,6 +27,9 @@ MODULE_VERSION("0.1.0");
 #define V4L2_INPUT_NAME "Borescope Lens Channel 0"
 
 static struct usb_driver up_driver;
+static struct v4l2_ioctl_ops up_v4l2_ioctl_ops;
+static struct v4l2_file_operations up_v4l2_fops;
+static struct vb2_ops up_vb2_ops;
 
 static const struct usb_device_id up_table[] = { { USB_DEVICE(0x0329, 0x2022) },
 						 { USB_DEVICE(0x2ce3, 0x3828) },
@@ -106,11 +109,15 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
 
-	/* Ensure every callback is stopped and no new ones can be submitted. */
+	/*
+	 * Ensure every callback is stopped and no new ones can be submitted.
+	 */
 	for (i = 0; i < NUM_URBS; i++)
 		usb_kill_urb(drv_data->urbs[i]);
 
-	/* Release URB resources */
+	/*
+	 * Release URB resources
+	 */
 	for (i = 0; i < NUM_URBS; i++)
 		up_free_urb(drv_data, i);
 }
@@ -166,7 +173,9 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	drv_data->building_frame = false;
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 
-	/* Send hardware initialization commands */
+	/*
+	 * Send hardware initialization commands
+	 */
 	retval = up_iap_auth(drv_data);
 	if (retval) {
 		dev_err(&itf->dev, "up_write_msg init failed: %d\n", retval);
@@ -192,7 +201,9 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	 */
 	smp_mb__after_atomic();
 
-	/* Submit the URBs */
+	/*
+	 * Submit the URBs
+	 */
 	for (urbs_submitted = 0; urbs_submitted < NUM_URBS; urbs_submitted++) {
 		retval = usb_submit_urb(drv_data->urbs[urbs_submitted],
 					GFP_KERNEL);
@@ -206,25 +217,35 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	return 0;
 
 error_start:
-	/* Clear the client-ready bit immediately to block incoming URB data paths */
+	/*
+	 * Clear the client-ready bit immediately to block incoming URB data paths
+	 */
 	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 
-	/* Free any URBs that were successfully submitted before the failure */
+	/*
+	 * Free any URBs that were successfully submitted before the failure
+	 */
 	for (i = 0; i < urbs_submitted; i++)
 		usb_kill_urb(drv_data->urbs[i]);
 
-	/* Drain the queue and return buffers to userspace per V4L2 spec */
+	/*
+	 * Drain the queue and return buffers to userspace per V4L2 spec
+	 */
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
 	while (!list_empty(&drv_data->ready_queue)) {
 		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
 				       list);
 		list_del(&buf->list);
-		/* Buffers correctly marked as queued for V4L2 cleanup on start error */
+		/*
+		 * Buffers correctly marked as queued for V4L2 cleanup on start error
+		 */
 		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_QUEUED);
 	}
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 
-	/* Clear the HW guard last so a future start_streaming invocation can re-attempt */
+	/*
+	 * Clear the HW guard last so a future start_streaming invocation can re-attempt
+	 */
 	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
 
 	return retval;
@@ -237,7 +258,9 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	unsigned long flags;
 	int i;
 
-	/* Signal the callback to STOP processing and STOP resubmitting immediately. */
+	/*
+	 * Signal the callback to STOP processing and STOP resubmitting immediately.
+	 */
 	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 
 	/*
@@ -269,21 +292,13 @@ static void up_stop_streaming(struct vb2_queue *vq)
 		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
 				       list);
 		list_del(&buf->list);
-		/* Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR */
+		/*
+		 * Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR
+		 */
 		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
-
-static const struct vb2_ops up_vb2_ops = {
-	.queue_setup = up_queue_setup,
-	.buf_prepare = up_buf_prepare,
-	.buf_queue = up_buf_queue,
-	.start_streaming = up_start_streaming,
-	.stop_streaming = up_stop_streaming,
-	.wait_prepare = vb2_ops_wait_prepare,
-	.wait_finish = vb2_ops_wait_finish,
-};
 
 static int up_v4l2_open(struct file *file)
 {
@@ -294,16 +309,6 @@ static int up_v4l2_release(struct file *file)
 {
 	return _vb2_fop_release(file, NULL);
 }
-
-static const struct v4l2_file_operations up_v4l2_fops = {
-	.owner = THIS_MODULE,
-	.open = up_v4l2_open,
-	.release = up_v4l2_release,
-	.read = vb2_fop_read,
-	.poll = vb2_fop_poll,
-	.mmap = vb2_fop_mmap,
-	.unlocked_ioctl = video_ioctl2,
-};
 
 static int up_vidioc_querycap(struct file *file, void *priv,
 			      struct v4l2_capability *cap)
@@ -390,25 +395,6 @@ static int up_vidioc_s_parm(struct file *file, void *priv,
 	return up_vidioc_g_parm(file, priv, sp);
 }
 
-static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
-	.vidioc_querycap = up_vidioc_querycap,
-	.vidioc_g_fmt_vid_cap = up_vidioc_fmt_vid_cap,
-	.vidioc_s_fmt_vid_cap = up_vidioc_fmt_vid_cap,
-	.vidioc_try_fmt_vid_cap = up_vidioc_fmt_vid_cap,
-	.vidioc_enum_fmt_vid_cap = up_vidioc_enum_fmt_vid_cap,
-	.vidioc_enum_input = up_vidioc_enum_input,
-	.vidioc_g_input = up_vidioc_g_input,
-	.vidioc_s_input = up_vidioc_s_input,
-	.vidioc_g_parm = up_vidioc_g_parm,
-	.vidioc_s_parm = up_vidioc_s_parm,
-	.vidioc_reqbufs = vb2_ioctl_reqbufs,
-	.vidioc_querybuf = vb2_ioctl_querybuf,
-	.vidioc_qbuf = vb2_ioctl_qbuf,
-	.vidioc_dqbuf = vb2_ioctl_dqbuf,
-	.vidioc_streamon = vb2_ioctl_streamon,
-	.vidioc_streamoff = vb2_ioctl_streamoff,
-};
-
 static void up_read_bulk_callback(struct urb *urb)
 {
 	struct up_drv_data *drv_data = urb->context;
@@ -417,11 +403,15 @@ static void up_read_bulk_callback(struct urb *urb)
 	u8 *dcp;
 	int retval;
 
-	/* Concurrency safety guard */
+	/*
+	 * Concurrency safety guard
+	 */
 	if (!test_bit(STREAM_CLIENT_READY, &drv_data->streaming))
 		return;
 
-	/* Handle URB completion status codes */
+	/*
+	 * Handle URB completion status codes
+	 */
 	if (urb->status) {
 		switch (urb->status) {
 		case -ENOENT:
@@ -451,7 +441,9 @@ static void up_read_bulk_callback(struct urb *urb)
 	}
 
 	drv_data->dbg_urbs_processed++;
-	/* Diagnostic logging throttle */
+	/*
+	 * Diagnostic logging throttle
+	 */
 	if (drv_data->dbg_urbs_processed % DIAG_LOG_ITERATIONS == 0) {
 		dev_dbg(&drv_data->itf->dev, DIAG_DATA_FORMAT,
 			drv_data->dbg_urbs_processed, drv_data->dbg_usb_errors,
@@ -463,7 +455,9 @@ static void up_read_bulk_callback(struct urb *urb)
 			drv_data->dbg_ghost_headers);
 	}
 
-	/* Append incoming block to decoding workspace */
+	/*
+	 * Append incoming block to decoding workspace
+	 */
 	if (drv_data->decode_buf_len + urb->actual_length <= URB_SIZE * 2) {
 		memcpy(drv_data->decode_buf + drv_data->decode_buf_len,
 		       urb->transfer_buffer, urb->actual_length);
@@ -474,10 +468,14 @@ static void up_read_bulk_callback(struct urb *urb)
 		drv_data->decode_buf_len = 0;
 	}
 
-	/* Run the decoupled Protocol Decoding Machine */
+	/*
+	 * Run the decoupled Protocol Decoding Machine
+	 */
 	up_decode_packets(drv_data, &ctx);
 
-	/* Shift fractional remaining elements down to the buffer head */
+	/*
+	 * Shift fractional remaining elements down to the buffer head
+	 */
 	if (ctx.index < drv_data->decode_buf_len) {
 		remaining = drv_data->decode_buf_len - ctx.index;
 		dcp = drv_data->decode_buf;
@@ -488,7 +486,9 @@ static void up_read_bulk_callback(struct urb *urb)
 	}
 
 resubmit:
-	/* Safe Pipeline Resubmission check */
+	/*
+	 * Safe Pipeline Resubmission check
+	 */
 	if (test_bit(STREAM_CLIENT_READY, &drv_data->streaming)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval && retval != -ENODEV && retval != -ESHUTDOWN &&
@@ -610,13 +610,17 @@ static int up_probe(struct usb_interface *interface,
 	int i, retval, hb_bytes, vid_in_pipe, iap_in_pipe;
 	u8 ep;
 
-	/* Only bind the driver when the Video Interface is probed */
+	/*
+	 * Only bind the driver when the Video Interface is probed
+	 */
 	if (itf_num != UP_VIDEO_INTERFACE)
 		return -ENODEV;
 
 	dev_info(&interface->dev, "Useeplus borescope identified\n");
 
-	/* Allocate the device state FIRST so we have a valid pointer */
+	/*
+	 * Allocate the device state FIRST so we have a valid pointer
+	 */
 	drv_data = kzalloc(sizeof(*drv_data), GFP_KERNEL);
 	if (!drv_data)
 		return -ENOMEM;
@@ -634,7 +638,9 @@ static int up_probe(struct usb_interface *interface,
 	spin_lock_init(&drv_data->ready_queue_lock);
 	INIT_LIST_HEAD(&drv_data->ready_queue);
 
-	/* Grab and Claim the iAP Interface */
+	/*
+	 * Grab and Claim the iAP Interface
+	 */
 	iap_intf = usb_ifnum_to_if(usb_dev, UP_IAP_INTERFACE);
 	if (!iap_intf) {
 		dev_err(&interface->dev, "Could not find iAP interface\n");
@@ -683,7 +689,9 @@ static int up_probe(struct usb_interface *interface,
 		}
 	}
 
-	/* Dynamically Map Endpoints for iAP interface */
+	/*
+	 * Dynamically Map Endpoints for iAP interface
+	 */
 	for (i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; i++) {
 		ep_desc = &iap_intf->cur_altsetting->endpoint[i].desc;
 		ep = ep_desc->bEndpointAddress;
@@ -706,7 +714,9 @@ static int up_probe(struct usb_interface *interface,
 	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->video_in_ep);
 	iap_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->iap_in_ep);
 
-	/* V4L2 Device Registration */
+	/*
+	 * V4L2 Device Registration
+	 */
 	drv_data->v4l2_dev.release = up_device_release;
 	retval = v4l2_device_register(&interface->dev, &drv_data->v4l2_dev);
 	if (retval) {
@@ -746,7 +756,9 @@ static int up_probe(struct usb_interface *interface,
 					  V4L2_CAP_STREAMING;
 	video_set_drvdata(&drv_data->video_dev, drv_data);
 
-	/* Hardware Initialization (iAP Drain) */
+	/*
+	 * Hardware Initialization (iAP Drain)
+	 */
 	hb_sink = kmalloc(HB_BUF_SIZE, GFP_KERNEL);
 	if (!hb_sink) {
 		retval = -ENOMEM;
@@ -821,7 +833,46 @@ static void __exit up_exit(void)
 	usb_deregister(&up_driver);
 }
 
-static struct usb_driver up_driver = {
+static const struct vb2_ops up_vb2_ops = {
+	.queue_setup = up_queue_setup,
+	.buf_prepare = up_buf_prepare,
+	.buf_queue = up_buf_queue,
+	.start_streaming = up_start_streaming,
+	.stop_streaming = up_stop_streaming,
+	.wait_prepare = vb2_ops_wait_prepare,
+	.wait_finish = vb2_ops_wait_finish,
+};
+
+static const struct v4l2_file_operations up_v4l2_fops = {
+	.owner = THIS_MODULE,
+	.open = up_v4l2_open,
+	.release = up_v4l2_release,
+	.read = vb2_fop_read,
+	.poll = vb2_fop_poll,
+	.mmap = vb2_fop_mmap,
+	.unlocked_ioctl = video_ioctl2,
+};
+
+static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
+	.vidioc_querycap = up_vidioc_querycap,
+	.vidioc_g_fmt_vid_cap = up_vidioc_fmt_vid_cap,
+	.vidioc_s_fmt_vid_cap = up_vidioc_fmt_vid_cap,
+	.vidioc_try_fmt_vid_cap = up_vidioc_fmt_vid_cap,
+	.vidioc_enum_fmt_vid_cap = up_vidioc_enum_fmt_vid_cap,
+	.vidioc_enum_input = up_vidioc_enum_input,
+	.vidioc_g_input = up_vidioc_g_input,
+	.vidioc_s_input = up_vidioc_s_input,
+	.vidioc_g_parm = up_vidioc_g_parm,
+	.vidioc_s_parm = up_vidioc_s_parm,
+	.vidioc_reqbufs = vb2_ioctl_reqbufs,
+	.vidioc_querybuf = vb2_ioctl_querybuf,
+	.vidioc_qbuf = vb2_ioctl_qbuf,
+	.vidioc_dqbuf = vb2_ioctl_dqbuf,
+	.vidioc_streamon = vb2_ioctl_streamon,
+	.vidioc_streamoff = vb2_ioctl_streamoff,
+};
+
+static const struct usb_driver up_driver = {
 	.name = "useeplus",
 	.id_table = up_table,
 	.probe = up_probe,
