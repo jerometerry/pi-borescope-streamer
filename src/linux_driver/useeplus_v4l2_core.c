@@ -756,7 +756,7 @@ static int up_probe(struct usb_interface *interface,
 		goto error_unreg_v4l2;
 	}
 
-	retval = usb_clear_halt(vid_in_pipe, usb_dev, vid_in_pipe);
+	retval = usb_clear_halt(usb_dev, vid_in_pipe);
 	if (retval)
 		dev_info(&interface->dev,
 			 "usb_clear_halt failed with error %d\n", retval);
