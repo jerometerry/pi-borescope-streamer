@@ -203,7 +203,7 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		}
 
 		drv_data->dbg_packets_found++;
-		if (pkt_len > (URB_SIZE * 2)) {
+		if (pkt_len > (MAX_WORKSPACE_SIZE)) {
 			dev_dbg(&drv_data->itf->dev,
 				"Corrupted pkt_len %u, skipping byte\n",
 				pkt_len);

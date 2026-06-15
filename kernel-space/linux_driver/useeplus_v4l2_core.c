@@ -85,6 +85,33 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 		up_free_urb(drv_data, i);
 }
 
+static void up_work_handler(struct work_struct *work)
+{
+	struct up_drv_data *drv_data = container_of(work, struct up_drv_data, work);
+	struct up_parse_ctx ctx = { .index = 0 };
+	unsigned int len;
+
+	len = kfifo_out(&drv_data->fifo, drv_data->decode_buf + drv_data->decode_buf_len,
+			MAX_WORKSPACE_SIZE - drv_data->decode_buf_len);
+
+	drv_data->decode_buf_len += len;
+
+	if (drv_data->decode_buf_len > 0) {
+		up_decode_packets(drv_data, &ctx);
+
+		/*
+		 * Shift the remaining fractional packet down
+		 */
+		if (ctx.index < drv_data->decode_buf_len) {
+			size_t remaining = drv_data->decode_buf_len - ctx.index;
+			memmove(drv_data->decode_buf, drv_data->decode_buf + ctx.index, remaining);
+			drv_data->decode_buf_len = remaining;
+		} else {
+			drv_data->decode_buf_len = 0;
+		}
+	}
+}
+
 static void up_read_bulk_callback(struct urb *urb)
 {
 	struct up_drv_data *drv_data = urb->context;
@@ -146,34 +173,23 @@ static void up_read_bulk_callback(struct urb *urb)
 	}
 
 	/*
-	 * Append incoming block to decoding workspace
+	 * Push data into the lockless ring buffer
 	 */
-	if (drv_data->decode_buf_len + urb->actual_length <= URB_SIZE * 2) {
-		memcpy(drv_data->decode_buf + drv_data->decode_buf_len,
-		       urb->transfer_buffer, urb->actual_length);
-		drv_data->decode_buf_len += urb->actual_length;
+	if (kfifo_avail(&drv_data->fifo) >= urb->actual_length) {
+		kfifo_in(&drv_data->fifo, urb->transfer_buffer, urb->actual_length);
 	} else {
-		dev_warn(&drv_data->itf->dev,
-			 "Parse buffer overflow, dropping data\n");
-		drv_data->decode_buf_len = 0;
+		dev_warn(&urb->dev->dev, "kfifo overflow, dropping URB payload\n");
 	}
 
 	/*
-	 * Run the decoupled Protocol Decoding Machine
+	 * Resubmit the URB immediately so the hardware never starves
 	 */
-	up_decode_packets(drv_data, &ctx);
+	usb_submit_urb(urb, GFP_ATOMIC);
 
 	/*
-	 * Shift fractional remaining elements down to the buffer head
+	 * Wake up the parser thread
 	 */
-	if (ctx.index < drv_data->decode_buf_len) {
-		remaining = drv_data->decode_buf_len - ctx.index;
-		dcp = drv_data->decode_buf;
-		memmove(dcp, dcp + ctx.index, remaining);
-		drv_data->decode_buf_len = remaining;
-	} else {
-		drv_data->decode_buf_len = 0;
-	}
+	queue_work(drv_data->wq, &drv_data->work);
 
 resubmit:
 	/*
@@ -230,6 +246,7 @@ static void up_device_release(struct v4l2_device *v4l2_dev)
 
 	drv_data = container_of(v4l2_dev, struct up_drv_data, v4l2_dev);
 
+	kfifo_free(&drv_data->fifo);
 	kfree(drv_data->decode_buf);
 	kfree(drv_data);
 }
@@ -292,8 +309,31 @@ static int up_probe(struct usb_interface *interface,
 		goto error_free_dev;
 	}
 
-	drv_data->decode_buf = kzalloc(URB_SIZE * 2, GFP_KERNEL);
+	drv_data->decode_buf = kzalloc(MAX_WORKSPACE_SIZE, GFP_KERNEL);
 	if (!drv_data->decode_buf) {
+		retval = -ENOMEM;
+		goto error_release_iap;
+	}
+
+	/*
+	 * Inside up_probe
+	 */
+	INIT_WORK(&drv_data->work, up_work_handler);
+
+	/*
+	 * Create a single-threaded, ordered workqueue for sequential parsing
+	 */
+	drv_data->wq = alloc_ordered_workqueue("useeplus_wq", WQ_MEM_RECLAIM);
+	if (!drv_data->wq) {
+		dev_err(&interface->dev, "Could not allocate workqueue\n");
+		retval = -ENOMEM;
+		goto error_release_iap;
+	}
+
+	/*
+	 * Allocate a 128KB ring buffer (must be a power of 2) */
+	if (kfifo_alloc(&drv_data->fifo, FIFO_Q_SIZE, GFP_KERNEL)) {
+		dev_err(&interface->dev, "Could not allocate FIFO queue\n");
 		retval = -ENOMEM;
 		goto error_release_iap;
 	}
@@ -444,6 +484,9 @@ error_unreg_v4l2:
 
 error_release_iap:
 	usb_driver_release_interface(&up_driver, iap_intf);
+	kfifo_free(&drv_data->fifo);
+	if (drv_data->wq)
+		destroy_workqueue(drv_data->wq);
 	kfree(drv_data->decode_buf);
 
 error_free_dev:
@@ -501,6 +544,8 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	drv_data->active_pl_len = 0;
 	drv_data->frame_id = -1;
 	drv_data->building_frame = false;
+	drv_data->decode_buf_len = 0;
+	kfifo_reset(&drv_data->fifo);
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 
 	/*
@@ -609,6 +654,8 @@ static void up_stop_streaming(struct vb2_queue *vq)
 			usb_kill_urb(drv_data->urbs[i]);
 	}
 
+	cancel_work_sync(&drv_data->work);
+
 	if (drv_data->active_buf) {
 		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
 				VB2_BUF_STATE_ERROR);
@@ -667,6 +714,12 @@ static void up_disconnect(struct usb_interface *interface)
 	}
 
 	up_free_urbs(drv_data);
+
+	cancel_work_sync(&drv_data->work);
+	if (drv_data->wq) {
+		destroy_workqueue(drv_data->wq);
+		drv_data->wq = NULL;
+	}
 
 	/*
 	 * Safely check if V4L2 actually registered before unregistering

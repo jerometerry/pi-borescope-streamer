@@ -8,6 +8,8 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/list.h>
+#include <linux/workqueue.h>
+#include <linux/kfifo.h>
 #include <media/v4l2-device.h>
 #include <media/videobuf2-v4l2.h>
 
@@ -15,6 +17,8 @@
 #define NUM_URBS 4
 #define URB_SIZE (16 * 1024)
 #define MAX_FRAME_SIZE (512 * 1024)
+#define MAX_WORKSPACE_SIZE (64 * 1024)
+#define FIFO_Q_SIZE (128 * 1024)
 
 #define UP_DEF_WIDTH 640
 #define UP_DEF_HEIGHT 480
@@ -118,10 +122,15 @@ struct up_drv_data {
 
 	unsigned long streaming;
 
+	struct workqueue_struct *wq;
+	struct work_struct work;
+
 	struct up_buffer *active_buf;
 	size_t active_pl_len;
 	int frame_id;
 	bool building_frame;
+
+	DECLARE_KFIFO_PTR(fifo, u8);
 
 	u8 *decode_buf;
 	size_t decode_buf_len;
