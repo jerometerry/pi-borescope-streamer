@@ -135,8 +135,6 @@ struct up_drv_data {
 	u8 *decode_buf;
 	size_t decode_buf_len;
 
-	unsigned int frame_counter;
-
 	unsigned long dbg_urbs_processed;
 	unsigned long dbg_ghost_headers;
 	unsigned long dbg_packets_found;
