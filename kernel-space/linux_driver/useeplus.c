@@ -69,71 +69,55 @@ static void up_find_jpeg_boundaries(struct up_drv_data *drv_data,
 	}
 }
 
-static void up_deliver_frame_to_client(struct up_drv_data *drv_data,
-				       struct up_parse_ctx *ctx)
+static void up_finalize_active_frame(struct up_drv_data *drv_data)
 {
-	size_t soi_offset, eoi_offset, img_size;
-	bool building_frame, found_eoi;
-	struct up_buffer *vbuf;
-	void *vaddr;
+	struct vb2_buffer *vb;
+	u8 *vaddr;
+	size_t eoi_off;
+	bool found_eoi = false;
+	int j;
 
-	drv_data->dbg_frames_found++;
-	up_find_jpeg_boundaries(drv_data, &soi_offset, &eoi_offset,
-				&building_frame, &found_eoi);
+	if (!drv_data->active_buf || drv_data->active_pl_len == 0)
+		return;
 
-	if (building_frame && found_eoi && soi_offset < eoi_offset) {
-		img_size = eoi_offset - soi_offset;
-		drv_data->frame_counter++;
+	vb = &drv_data->active_buf->vb2_buffer.vb2_buf;
+	vaddr = vb2_plane_vaddr(vb, 0);
+	eoi_off = drv_data->active_pl_len;
 
-		spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
-		if (!list_empty(&drv_data->ready_queue)) {
-			vbuf = list_first_entry(&drv_data->ready_queue,
-						struct up_buffer, list);
-			list_del(&vbuf->list);
-
-			vaddr = vb2_plane_vaddr(&vbuf->vb2_buffer.vb2_buf, 0);
-			if (vaddr) {
-				memcpy(vaddr, drv_data->frame_buf + soi_offset,
-				       img_size);
-				vb2_set_plane_payload(&vbuf->vb2_buffer.vb2_buf,
-						      0, img_size);
-
-				vbuf->vb2_buffer.vb2_buf.timestamp =
-					ktime_get_ns();
-				vbuf->vb2_buffer.sequence =
-					drv_data->sequence++;
-				vbuf->vb2_buffer.field = V4L2_FIELD_NONE;
-
-				vb2_buffer_done(&vbuf->vb2_buffer.vb2_buf,
-						VB2_BUF_STATE_DONE);
-				drv_data->dbg_frames_delivered++;
-			} else {
-				vb2_buffer_done(&vbuf->vb2_buffer.vb2_buf,
-						VB2_BUF_STATE_ERROR);
-				drv_data->dbg_frames_dropped_queue++;
-			}
-		} else {
-			drv_data->dbg_frames_dropped_queue++;
+	/* Scan backwards strictly within the bounds of what we wrote for EOI */
+	for (j = drv_data->active_pl_len; j >= 2; j--) {
+		if (vaddr[j - 2] == JPEG_DEL && vaddr[j - 1] == JPEG_EOI) {
+			eoi_off = j;
+			found_eoi = true;
+			break;
 		}
-		spin_unlock_irqrestore(&drv_data->ready_queue_lock, ctx->flags);
-	} else if (!building_frame) {
-		drv_data->dbg_frames_dropped_soi++;
-	} else if (!found_eoi || eoi_offset <= soi_offset) {
+	}
+
+	if (found_eoi) {
+		vb2_set_plane_payload(vb, 0, eoi_off);
+		vb->timestamp = ktime_get_ns();
+		drv_data->active_buf->vb2_buffer.sequence = drv_data->sequence++;
+		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
+		drv_data->dbg_frames_delivered++;
+	} else {
+		/* Recycle the buffer if corrupted/incomplete */
 		drv_data->dbg_frames_dropped_eoi++;
 	}
 
-	drv_data->frame_len = 0;
+	/* Clear state for the next frame */
+	drv_data->active_buf = NULL;
+	drv_data->active_pl_len = 0;
 }
 
 void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 {
 	u8 current_frame_id, current_camera_number, current_flags, other_flags;
-	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off;
+	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off, limit, i;
+	u8 *hdr_ptr, *pl_src, *vaddr;
 	struct up_pl_hdr *payload;
 	struct up_pkt_hdr *pkt;
 	bool has_gravity_sensor;
 	u16 pkt_len;
-	u8 *hdr_ptr;
 
 	while (ctx->index + TOTAL_USB_HEADER_SIZE <= drv_data->decode_buf_len) {
 		hdr_ptr = drv_data->decode_buf + ctx->index;
@@ -176,29 +160,80 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		current_camera_number = payload->le_camera_number;
 		current_flags = payload->le_flags;
 
-		if (drv_data->building_frame && drv_data->frame_len > 0 &&
-		    drv_data->frame_id != current_frame_id)
-			up_deliver_frame_to_client(drv_data, ctx);
+		/*
+		 * Frame Boundary Detected
+		 */
+		if (drv_data->building_frame && drv_data->frame_id != current_frame_id) {
+			up_finalize_active_frame(drv_data);
+		}
 
 		drv_data->frame_id = current_frame_id;
 		drv_data->building_frame = true;
 		has_gravity_sensor = (current_flags & 0x01) != 0;
 		other_flags = (current_flags >> 2) & 0x3F;
 
-		if (!has_gravity_sensor && other_flags == 0 &&
-		    current_camera_number < 2) {
+		/*
+		 * Process Video Feed Only
+		 */
+		if (!has_gravity_sensor && other_flags == 0 && current_camera_number < 2) {
 			pl_start = ctx->index + TOTAL_USB_HEADER_SIZE;
 			pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
+			pl_src = drv_data->decode_buf + pl_start;
 
-			if ((drv_data->frame_len + pl_size) <= MAX_FRAME_SIZE) {
-				memcpy(drv_data->frame_buf +
-					       drv_data->frame_len,
-				       drv_data->decode_buf + pl_start,
-				       pl_size);
-				drv_data->frame_len += pl_size;
+			/*
+			 * Grab a new buffer if we don't have one
+			 */
+			if (!drv_data->active_buf) {
+				spin_lock_irqsave(&drv_data->ready_queue_lock, ctx->flags);
+				if (!list_empty(&drv_data->ready_queue)) {
+					drv_data->active_buf = list_first_entry(&drv_data->ready_queue, struct up_buffer, list);
+					list_del(&drv_data->active_buf->list);
+				}
+				spin_unlock_irqrestore(&drv_data->ready_queue_lock, ctx->flags);
+			}
+
+			if (drv_data->active_buf) {
+				vaddr = vb2_plane_vaddr(&drv_data->active_buf->vb2_buffer.vb2_buf, 0);
+
+				/*
+				 * Preamble Trimming: Hunt for SOI on the first payload chunk
+				 */
+				if (drv_data->active_pl_len == 0) {
+					bool found_soi = false;
+					limit = min_t(size_t, JPEG_SOI_MAX_POS, pl_size - 1);
+
+					for (i = 0; i < limit; i++) {
+						if (pl_src[i] == JPEG_DEL && pl_src[i + 1] == JPEG_SOI) {
+							pl_src += i;
+							pl_size -= i;
+							found_soi = true;
+							break;
+						}
+					}
+					if (!found_soi) {
+						/*
+						 * Drop fragment, wait for SOI
+						 */
+						goto skip_chunk;
+					}
+				}
+
+				/*
+				 * Direct copy to the mapped memory space
+				 */
+				if (drv_data->active_pl_len + pl_size <= MAX_FRAME_SIZE) {
+					memcpy(vaddr + drv_data->active_pl_len, pl_src, pl_size);
+					drv_data->active_pl_len += pl_size;
+				} else {
+					/*
+					 * Overflow protection
+					 */
+					drv_data->active_pl_len = 0;
+				}
 			}
 		}
 
+skip_chunk:
 		ctx->index += pkt_size;
 	}
 }

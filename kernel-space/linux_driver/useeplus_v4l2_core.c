@@ -230,7 +230,6 @@ static void up_device_release(struct v4l2_device *v4l2_dev)
 
 	drv_data = container_of(v4l2_dev, struct up_drv_data, v4l2_dev);
 
-	vfree(drv_data->frame_buf);
 	kfree(drv_data->decode_buf);
 	kfree(drv_data);
 }
@@ -291,12 +290,6 @@ static int up_probe(struct usb_interface *interface,
 	if (retval) {
 		dev_err(&interface->dev, "Could not claim iAP interface\n");
 		goto error_free_dev;
-	}
-
-	drv_data->frame_buf = vzalloc(MAX_FRAME_SIZE);
-	if (!drv_data->frame_buf) {
-		retval = -ENOMEM;
-		goto error_release_iap;
 	}
 
 	drv_data->decode_buf = kzalloc(URB_SIZE * 2, GFP_KERNEL);
@@ -451,7 +444,6 @@ error_unreg_v4l2:
 
 error_release_iap:
 	usb_driver_release_interface(&up_driver, iap_intf);
-	vfree(drv_data->frame_buf);
 	kfree(drv_data->decode_buf);
 
 error_free_dev:
@@ -505,7 +497,8 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 		return 0;
 
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	drv_data->frame_len = 0;
+	drv_data->active_buf = NULL;
+	drv_data->active_pl_len = 0;
 	drv_data->frame_id = -1;
 	drv_data->building_frame = false;
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
@@ -616,8 +609,11 @@ static void up_stop_streaming(struct vb2_queue *vq)
 			usb_kill_urb(drv_data->urbs[i]);
 	}
 
-	/* Reset the hardware active guard state. */
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
+	if (drv_data->active_buf) {
+		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
+		drv_data->active_buf = NULL;
+		drv_data->active_pl_len = 0;
+	}
 
 	/*
 	 * Safely drain any buffers that were left over in the queue.
@@ -635,6 +631,11 @@ static void up_stop_streaming(struct vb2_queue *vq)
 		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
+	/*
+	 * Reset the hardware active guard state.
+	 */
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
 }
 
 static void up_disconnect(struct usb_interface *interface)

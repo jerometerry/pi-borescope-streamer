@@ -118,8 +118,8 @@ struct up_drv_data {
 
 	unsigned long streaming;
 
-	u8 *frame_buf;
-	size_t frame_len;
+	struct up_buffer *active_buf;
+	size_t active_pl_len;
 	int frame_id;
 	bool building_frame;
 
