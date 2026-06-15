@@ -151,9 +151,8 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 	 * Sanitize and snapshot the state variable to protect against EMI mid-run
 	 */
 	current_len = drv_data->active_pl_len;
-	if (unlikely(current_len >= MAX_FRAME_SIZE)) {
+	if (unlikely(current_len >= MAX_FRAME_SIZE))
 		goto overflow_reset;
-	}
 
 	vaddr = vb2_plane_vaddr(&drv_data->active_buf->vb2_buffer.vb2_buf, 0);
 	if (unlikely(!vaddr)) {
@@ -196,8 +195,7 @@ overflow_reset:
 	 * Hard, fail-secure rollback of the driver state
 	 */
 	dev_err_ratelimited(&drv_data->itf->dev,
-		"useeplus: Stream overflow or state corruption prevented! Size: %zu, Current: %zu\n",
-		pl_size, current_len);
+			    "useeplus: Stream overflow or state corruption prevented! Size: %zu, Current: %zu\n", pl_size, current_len);
 
 	drv_data->active_pl_len = 0;
 	drv_data->building_frame = false;
@@ -224,7 +222,6 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 
 	while (ctx->index <= max_buf_len &&
 	       (max_buf_len - ctx->index) >= TOTAL_USB_HEADER_SIZE) {
-
 		cur_index = ctx->index;
 		hdr_ptr = drv_data->decode_buf + cur_index;
 		pkt = (struct up_pkt_hdr *)(hdr_ptr);
@@ -255,11 +252,11 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 
 		if (up_check_ghost_header(drv_data, ctx, &hdr_off)) {
 			drv_data->dbg_ghost_headers++;
-			if (likely(hdr_off <= (max_buf_len - cur_index))) {
+			if (likely(hdr_off <= (max_buf_len - cur_index)))
 				ctx->index += hdr_off;
-			} else {
+			else
 				ctx->index++;
-			}
+
 			continue;
 		}
 
@@ -284,7 +281,8 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		/*
 		 * Verify pl_off structure alignment fits within safe boundaries
 		 */
-		if (unlikely(pl_off >= max_buf_len || (max_buf_len - pl_off) < sizeof(struct up_pl_hdr))) {
+		if (unlikely(pl_off >= max_buf_len ||
+			     (max_buf_len - pl_off) < sizeof(struct up_pl_hdr))) {
 			ctx->index += pkt_size;
 			continue;
 		}
@@ -297,9 +295,8 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 
 		/*
 		 * Frame Boundary Tracking
-		*/
-		if (drv_data->building_frame &&
-		    drv_data->frame_id != cur_frm_id)
+		 */
+		if (drv_data->building_frame && drv_data->frame_id != cur_frm_id)
 			up_finalize_active_frame(drv_data);
 
 		drv_data->frame_id = cur_frm_id;
@@ -310,14 +307,13 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		/*
 		 * Process Video Feed Only (Camera Stream ID 0x0B checked via up_is_valid_header)
 		 */
-		if (!has_gravity_sensor && other_flags == 0 &&
-		    cur_cam_num < 2) {
-
+		if (!has_gravity_sensor && other_flags == 0 && cur_cam_num < 2) {
 			if (likely(pkt_size >= TOTAL_USB_HEADER_SIZE)) {
 				pl_start = cur_index + TOTAL_USB_HEADER_SIZE;
 				pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
 
-				if (likely(pl_start < max_buf_len && pl_size <= (max_buf_len - pl_start))) {
+				if (likely(pl_start < max_buf_len && pl_size <=
+						(max_buf_len - pl_start))) {
 					pl_src = drv_data->decode_buf + pl_start;
 					up_process_video_payload(drv_data, ctx, pl_src, pl_size);
 				}
@@ -325,12 +321,11 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		}
 
 		/*
-		* Hard infinite loop defense against EMI register corruption
-		*/
-		if (unlikely(pkt_size == 0 || pkt_size > (max_buf_len - cur_index))) {
+		 * Hard infinite loop defense against EMI register corruption
+		 */
+		if (unlikely(pkt_size == 0 || pkt_size > (max_buf_len - cur_index)))
 			ctx->index++;
-		} else {
+		else
 			ctx->index += pkt_size;
-		}
 	}
 }
