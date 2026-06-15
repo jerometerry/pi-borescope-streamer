@@ -317,12 +317,9 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 				pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
 
 				if (likely(pl_start < max_buf_len &&
-					   pl_size <=
-						   (max_buf_len - pl_start))) {
-					pl_src =
-						drv_data->decode_buf + pl_start;
-					up_process_video_payload(
-						drv_data, ctx, pl_src, pl_size);
+					   pl_size <= (max_buf_len - pl_start))) {
+					pl_src = drv_data->decode_buf + pl_start;
+					up_process_video_payload(drv_data, ctx, pl_src, pl_size);
 				}
 			}
 		}

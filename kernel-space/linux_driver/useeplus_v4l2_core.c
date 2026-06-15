@@ -179,8 +179,7 @@ static void up_read_bulk_callback(struct urb *urb)
 	if (kfifo_avail(&drv_data->fifo) >= urb->actual_length) {
 		kfifo_in(&drv_data->fifo, urb->transfer_buffer,
 			 urb->actual_length);
-	}
-	else {
+	} else {
 		dev_warn(&urb->dev->dev,
 			 "kfifo overflow, dropping URB payload\n");
 	}
