@@ -87,12 +87,14 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 
 static void up_work_handler(struct work_struct *work)
 {
-	struct up_drv_data *drv_data = container_of(work, struct up_drv_data, work);
 	struct up_parse_ctx ctx = { .index = 0 };
+	struct up_drv_data *drv_data;
 	size_t remaining;
 	unsigned int len;
 
-	len = kfifo_out(&drv_data->fifo, drv_data->decode_buf + drv_data->decode_buf_len,
+	drv_data = container_of(work, struct up_drv_data, work);
+	len = kfifo_out(&drv_data->fifo,
+			drv_data->decode_buf + drv_data->decode_buf_len,
 			MAX_WORKSPACE_SIZE - drv_data->decode_buf_len);
 
 	drv_data->decode_buf_len += len;
@@ -105,7 +107,8 @@ static void up_work_handler(struct work_struct *work)
 		 */
 		if (ctx.index < drv_data->decode_buf_len) {
 			remaining = drv_data->decode_buf_len - ctx.index;
-			memmove(drv_data->decode_buf, drv_data->decode_buf + ctx.index, remaining);
+			memmove(drv_data->decode_buf,
+				drv_data->decode_buf + ctx.index, remaining);
 			drv_data->decode_buf_len = remaining;
 		} else {
 			drv_data->decode_buf_len = 0;
@@ -173,10 +176,14 @@ static void up_read_bulk_callback(struct urb *urb)
 	/*
 	 * Push data into the lockless ring buffer
 	 */
-	if (kfifo_avail(&drv_data->fifo) >= urb->actual_length)
-		kfifo_in(&drv_data->fifo, urb->transfer_buffer, urb->actual_length);
-	else
-		dev_warn(&urb->dev->dev, "kfifo overflow, dropping URB payload\n");
+	if (kfifo_avail(&drv_data->fifo) >= urb->actual_length) {
+		kfifo_in(&drv_data->fifo, urb->transfer_buffer,
+			 urb->actual_length);
+	}
+	else {
+		dev_warn(&urb->dev->dev,
+			 "kfifo overflow, dropping URB payload\n");
+	}
 
 	/*
 	 * Wake up the parser thread
