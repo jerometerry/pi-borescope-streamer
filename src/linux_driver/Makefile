@@ -100,10 +100,10 @@ check-patch:
 	useeplus_v4l2_core.c useeplus.c ./include/useeplus.h
 
 check-format:
-	@clang-format --dry-run --Werror useeplus_v4l2_core.c useeplus.c
+	@clang-format --dry-run --Werror useeplus_v4l2_core.c useeplus.c include/useeplus.h
 
 fix-format:
-	@clang-format -i useeplus_v4l2_core.c useeplus.c
+	@clang-format -i useeplus_v4l2_core.c useeplus.c include/useeplus.h
 
 check-includes:
-	$(KDIR)/scripts/checkincludes.pl *.c ./*.h
+	$(KDIR)/scripts/checkincludes.pl *.c includes/*.h
