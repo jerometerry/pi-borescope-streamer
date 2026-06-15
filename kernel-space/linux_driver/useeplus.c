@@ -44,7 +44,7 @@ static void up_find_jpeg_boundaries(struct up_drv_data *drv_data,
 				    size_t *soi_offset, size_t *eoi_offset,
 				    bool *building_frame, bool *found_eoi)
 {
-	size_t max_pos = min_t(size_t, JPEG_SOI_MAX_POS, drv_data->frame_len);
+	size_t max_pos = min_t(size_t, JPEG_SOI_MAX_POS, drv_data->active_pl_len);
 	size_t f_len = drv_data->active_pl_len;
 	u8 *f_buf = drv_data->active_buf;
 	long j;
