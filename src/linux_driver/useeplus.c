@@ -20,11 +20,13 @@ static bool up_is_valid_header(struct up_pkt_hdr *pkt)
 static bool up_check_ghost_header(struct up_drv_data *drv_data,
 				  struct up_parse_ctx *ctx, size_t *hdr_off)
 {
-	size_t limit = min_t(size_t, MAX_GHOST_HEADER_OFFSET, buf_len - ctx->index - 3);
-	size_t buf_len = drv_data->decode_buf_len;
+	size_t buf_len, limit;
 	struct up_pkt_hdr *o_pkt;
 	u8 *o_hdr_ptr;
 	size_t o;
+
+	buf_len = drv_data->decode_buf_len;
+	limit = min_t(size_t, MAX_GHOST_HEADER_OFFSET, buf_len - ctx->index - 3);
 
 	for (o = UP_PKT_HDR_SIZE; o <= limit; o++) {
 		o_hdr_ptr = drv_data->decode_buf + ctx->index + o;
