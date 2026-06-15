@@ -89,6 +89,7 @@ static void up_work_handler(struct work_struct *work)
 {
 	struct up_drv_data *drv_data = container_of(work, struct up_drv_data, work);
 	struct up_parse_ctx ctx = { .index = 0 };
+	size_t remaining;
 	unsigned int len;
 
 	len = kfifo_out(&drv_data->fifo, drv_data->decode_buf + drv_data->decode_buf_len,
@@ -103,7 +104,7 @@ static void up_work_handler(struct work_struct *work)
 		 * Shift the remaining fractional packet down
 		 */
 		if (ctx.index < drv_data->decode_buf_len) {
-			size_t remaining = drv_data->decode_buf_len - ctx.index;
+			remaining = drv_data->decode_buf_len - ctx.index;
 			memmove(drv_data->decode_buf, drv_data->decode_buf + ctx.index, remaining);
 			drv_data->decode_buf_len = remaining;
 		} else {
@@ -172,11 +173,10 @@ static void up_read_bulk_callback(struct urb *urb)
 	/*
 	 * Push data into the lockless ring buffer
 	 */
-	if (kfifo_avail(&drv_data->fifo) >= urb->actual_length) {
+	if (kfifo_avail(&drv_data->fifo) >= urb->actual_length)
 		kfifo_in(&drv_data->fifo, urb->transfer_buffer, urb->actual_length);
-	} else {
+	else
 		dev_warn(&urb->dev->dev, "kfifo overflow, dropping URB payload\n");
-	}
 
 	/*
 	 * Resubmit the URB immediately so the hardware never starves
@@ -328,7 +328,8 @@ static int up_probe(struct usb_interface *interface,
 	}
 
 	/*
-	 * Allocate a 128KB ring buffer (must be a power of 2) */
+	 * Allocate a 128KB ring buffer (must be a power of 2)
+	 */
 	if (kfifo_alloc(&drv_data->fifo, FIFO_Q_SIZE, GFP_KERNEL)) {
 		dev_err(&interface->dev, "Could not allocate FIFO queue\n");
 		retval = -ENOMEM;
