@@ -112,6 +112,24 @@
 			"targets": [
 				"clean"
 			]
+		},
+		{
+			"name": "check-format",
+			"displayName": "Check Code Formatting",
+			"description": "Runs a dry-run of clang-format to verify styling",
+			"configurePreset": "debug",
+			"targets": [
+				"check-format"
+			]
+		},
+		{
+			"name": "format",
+			"displayName": "Apply Code Formatting",
+			"description": "Formats all C++ source files using clang-format",
+			"configurePreset": "debug",
+			"targets": [
+				"format"
+			]
 		}
 	]
 }
