@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+
 
-#include "include/useeplus.h"
+#include "useeplus.h"
 #include <asm/byteorder.h>
 #include <linux/kernel.h>
 #include <linux/string.h>

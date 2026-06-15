@@ -13,6 +13,7 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 SMATCH := ~/github/smatch/smatch
 PWD  := $(shell pwd)
 
+ccflags-y += -I$(src)/include
 ccflags-y += -DBUILD_VER='"$(VERSION_STR)"'
 
 ifeq ($(DEBUG),1)
