@@ -162,28 +162,24 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 				spin_lock_irqsave(&drv_data->ready_queue_lock,
 						  ctx->flags);
 				if (!list_empty(&drv_data->ready_queue)) {
-					up_buf = list_first_entry(
-						&drv_data->ready_queue,
-						struct up_buffer, list);
+					up_buf = list_first_entry(&drv_data->ready_queue,
+								  struct up_buffer, list);
 					drv_data->active_buf = up_buf;
 					list_del(&drv_data->active_buf->list);
 				}
-				spin_unlock_irqrestore(
-					&drv_data->ready_queue_lock,
-					ctx->flags);
+				spin_unlock_irqrestore(&drv_data->ready_queue_lock, ctx->flags);
 			}
 
 			if (drv_data->active_buf) {
-				vaddr = vb2_plane_vaddr(
-					&drv_data->active_buf->vb2_buffer
-						 .vb2_buf,
-					0);
+				vaddr = vb2_plane_vaddr(&drv_data->active_buf->vb2_buffer.vb2_buf,
+							0);
 
 				/*
 				 * Preamble Trimming: Hunt for SOI on the first payload chunk
 				 */
 				if (drv_data->active_pl_len == 0) {
 					bool found_soi = false;
+
 					limit = min_t(size_t, JPEG_SOI_MAX_POS,
 						      pl_size - 1);
 
