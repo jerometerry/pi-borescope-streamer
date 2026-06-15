@@ -99,10 +99,10 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
 	/* Ensure every callback is stopped and no new ones can be submitted. */
-	for (i = 0; i < NUM_URBS; ++i)
+	for (i = 0; i < NUM_URBS; i++)
 		usb_kill_urb(drv_data->urbs[i]);
 	/* Release URB resources */
-	for (i = 0; i < NUM_URBS; ++i)
+	for (i = 0; i < NUM_URBS; i++)
 		up_free_urb(drv_data, i);
 }
 
@@ -179,7 +179,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	 */
 	smp_mb__after_atomic();
 	/* Submit the URBs */
-	for (urbs_submitted = 0; urbs_submitted < NUM_URBS; ++urbs_submitted) {
+	for (urbs_submitted = 0; urbs_submitted < NUM_URBS; urbs_submitted++) {
 		retval = usb_submit_urb(drv_data->urbs[urbs_submitted],
 					GFP_KERNEL);
 		if (retval) {
@@ -193,7 +193,7 @@ error_start:
 	/* Clear the client-ready bit immediately to block incoming URB data paths */
 	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
 	/* Free any URBs that were successfully submitted before the failure */
-	for (i = 0; i < urbs_submitted; ++i)
+	for (i = 0; i < urbs_submitted; i++)
 		usb_kill_urb(drv_data->urbs[i]);
 	/* Drain the queue and return buffers to userspace per V4L2 spec */
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
@@ -228,7 +228,7 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	 * Since STREAM_CLIENT_READY is now 0, the callback will exit without
 	 * resubmitting.
 	 */
-	for (i = 0; i < NUM_URBS; ++i) {
+	for (i = 0; i < NUM_URBS; i++) {
 		if (drv_data->urbs[i])
 			usb_kill_urb(drv_data->urbs[i]);
 	}
@@ -464,7 +464,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 	u8 *urb_ptr;
 	int i;
 
-	for (i = 0; i < NUM_URBS; ++i) {
+	for (i = 0; i < NUM_URBS; i++) {
 		drv_data->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
 		if (!drv_data->urbs[i]) {
 			dev_err(&interface->dev, "usb_alloc_urb failed\n");
@@ -606,7 +606,7 @@ static int up_probe(struct usb_interface *interface,
 		retval = -ENODEV;
 		goto error_release_iap;
 	}
-	for (i = 0; i < video_alt->desc.bNumEndpoints; ++i) {
+	for (i = 0; i < video_alt->desc.bNumEndpoints; i++) {
 		ep_desc = &video_alt->endpoint[i].desc;
 		ep = ep_desc->bEndpointAddress;
 		if (usb_endpoint_num(ep_desc) == UP_VIDEO_ENDPOINT) {
@@ -617,7 +617,7 @@ static int up_probe(struct usb_interface *interface,
 		}
 	}
 	/* Dynamically Map Endpoints for iAP interface */
-	for (i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; ++i) {
+	for (i = 0; i < iap_intf->cur_altsetting->desc.bNumEndpoints; i++) {
 		ep_desc = &iap_intf->cur_altsetting->endpoint[i].desc;
 		ep = ep_desc->bEndpointAddress;
 		if (usb_endpoint_num(ep_desc) == UP_IAP_ENDPOINT) {
@@ -677,7 +677,7 @@ static int up_probe(struct usb_interface *interface,
 		retval = -ENOMEM;
 		goto error_unreg_v4l2;
 	}
-	for (i = 0; i < HB_SINK_COUNT; ++i) {
+	for (i = 0; i < HB_SINK_COUNT; i++) {
 		usb_bulk_msg(usb_dev, iap_in_pipe, hb_sink, HB_BUF_SIZE,
 			     &hb_bytes, HB_SINK_TO);
 	}
