@@ -115,9 +115,6 @@ static void up_work_handler(struct work_struct *work)
 static void up_read_bulk_callback(struct urb *urb)
 {
 	struct up_drv_data *drv_data = urb->context;
-	struct up_parse_ctx ctx = { .index = 0 };
-	size_t remaining;
-	u8 *dcp;
 	int retval;
 
 	/*
