@@ -12,15 +12,15 @@
 #include <media/videobuf2-v4l2.h>
 
 /* Global Protocol Constant Macros */
-#define BULK_TRANSFER_COUNT		4
-#define BULK_TRANSFER_SIZE		(16 * 1024)
-#define MAX_FRAME_SIZE			(512 * 1024)
+#define NUM_URBS	4
+#define URB_SIZE	(16 * 1024)
+#define MAX_FRAME_SIZE	(512 * 1024)
 
 #define UP_DEF_WIDTH	640
 #define UP_DEF_HEIGHT	480
 
 #define JPEG_SOI_MAX_POS	256
-#define MAX_GHOST_HEADER_OFFSET		160
+#define MAX_GHOST_HEADER_OFFSET	160
 
 /* Structural Protocol Sizing Expressions */
 #define UP_PKT_HDR_SIZE		(sizeof(struct up_pkt_hdr))
@@ -111,9 +111,9 @@ struct up_drv_data {
 
 	u64 sequence;
 
-	struct urb *urbs[BULK_TRANSFER_COUNT];
-	u8 *urb_buffers[BULK_TRANSFER_COUNT];
-	dma_addr_t urb_dma_addrs[BULK_TRANSFER_COUNT];
+	struct urb *urbs[NUM_URBS];
+	u8 *urb_buffers[NUM_URBS];
+	dma_addr_t urb_dma_addrs[NUM_URBS];
 
 	unsigned long streaming;
 
