@@ -311,7 +311,7 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		 * Process Video Feed Only (Camera Stream ID 0x0B checked via up_is_valid_header)
 		 */
 		if (!has_gravity_sensor && other_flags == 0 &&
-		    cur_cam_num < 2) {
+		    cur_cam_num <= MAX_CAM_NUM) {
 			if (likely(pkt_size >= TOTAL_USB_HEADER_SIZE)) {
 				pl_start = cur_index + TOTAL_USB_HEADER_SIZE;
 				pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
