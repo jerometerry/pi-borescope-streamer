@@ -18,7 +18,7 @@ ccflags-y += -DBUILD_VER='"$(VERSION_STR)"'
 
 ifeq ($(DEBUG),1)
 ccflags-y += -DDEBUG
-ccflags-y += -fsanitize=bounds -fsanitize=undefined -fhardened
+ccflags-y += -fsanitize=bounds
 endif
 
 default:
