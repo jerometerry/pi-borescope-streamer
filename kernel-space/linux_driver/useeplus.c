@@ -211,18 +211,40 @@ overflow_reset:
 
 void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 {
-	u8 current_frame_id, current_camera_number, current_flags, other_flags;
-	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off;
-	u8 *hdr_ptr, *pl_src;
+	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off, cur_index, max_buf_len;
+	u8 cur_frm_id, cur_cam_num, cur_flags, other_flags, *hdr_ptr, *pl_src;
 	struct up_pl_hdr *payload;
 	struct up_pkt_hdr *pkt;
 	bool has_gravity_sensor;
 	u16 pkt_len;
 
-	while (ctx->index + TOTAL_USB_HEADER_SIZE <= drv_data->decode_buf_len) {
-		hdr_ptr = drv_data->decode_buf + ctx->index;
+	max_buf_len = drv_data->decode_buf_len;
+	if (unlikely(max_buf_len == 0 || !drv_data->decode_buf))
+		return;
+
+	while (ctx->index <= max_buf_len &&
+	       (max_buf_len - ctx->index) >= TOTAL_USB_HEADER_SIZE) {
+
+		cur_index = ctx->index;
+		hdr_ptr = drv_data->decode_buf + cur_index;
 		pkt = (struct up_pkt_hdr *)(hdr_ptr);
 		pkt_len = le16_to_cpu(pkt->le_length);
+
+		/*
+		 * Checks against the actual absolute physical wire capacity of the __le16 field.
+		 */
+		if (unlikely(pkt_len > UP_MAX_WIRE_LEN)) {
+			ctx->index++;
+			continue;
+		}
+
+		/*
+		 * Explicitly verify that UP_PKT_HDR_SIZE + pkt_len won't overflow size_t
+		 */
+		if (unlikely(pkt_len > (SIZE_MAX - UP_PKT_HDR_SIZE))) {
+			ctx->index++;
+			continue;
+		}
 		pkt_size = UP_PKT_HDR_SIZE + pkt_len;
 		hdr_off = 0;
 
@@ -233,58 +255,82 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 
 		if (up_check_ghost_header(drv_data, ctx, &hdr_off)) {
 			drv_data->dbg_ghost_headers++;
-			ctx->index += hdr_off;
+			if (likely(hdr_off <= (max_buf_len - cur_index))) {
+				ctx->index += hdr_off;
+			} else {
+				ctx->index++;
+			}
 			continue;
 		}
 
 		drv_data->dbg_packets_found++;
-		if (pkt_len > (MAX_WORKSPACE_SIZE)) {
-			dev_dbg(&drv_data->itf->dev,
-				"Corrupted pkt_len %u, skipping byte\n",
-				pkt_len);
-			ctx->index++;
-			continue;
-		}
 
-		if (ctx->index + pkt_size > drv_data->decode_buf_len)
+		/*
+		 * Check that total calculated packet size doesn't overrun our buffer window
+		 */
+		if (pkt_size > (max_buf_len - cur_index))
 			break;
 
+		/*
+		 * A packet payload must at least be large enough to contain the 7-byte header
+		 */
 		if (pkt_len < UP_PL_HDR_SIZE) {
 			ctx->index += pkt_size;
 			continue;
 		}
 
-		pl_off = ctx->index + UP_PKT_HDR_SIZE;
-		payload = (struct up_pl_hdr *)(drv_data->decode_buf + pl_off);
-		current_frame_id = payload->le_frame_id;
-		current_camera_number = payload->le_camera_number;
-		current_flags = payload->le_flags;
+		pl_off = cur_index + UP_PKT_HDR_SIZE;
 
 		/*
-		 * Frame Boundary Detected
+		 * Verify pl_off structure alignment fits within safe boundaries
 		 */
-		if (drv_data->building_frame &&
-		    drv_data->frame_id != current_frame_id)
-			up_finalize_active_frame(drv_data);
-
-		drv_data->frame_id = current_frame_id;
-		drv_data->building_frame = true;
-		has_gravity_sensor = (current_flags & 0x01) != 0;
-		other_flags = (current_flags >> 2) & 0x3F;
-
-		/*
-		 * Process Video Feed Only
-		 */
-		if (!has_gravity_sensor && other_flags == 0 &&
-		    current_camera_number < 2) {
-			pl_start = ctx->index + TOTAL_USB_HEADER_SIZE;
-			pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
-			pl_src = drv_data->decode_buf + pl_start;
-
-			up_process_video_payload(drv_data, ctx, pl_src,
-						 pl_size);
+		if (unlikely(pl_off >= max_buf_len || (max_buf_len - pl_off) < sizeof(struct up_pl_hdr))) {
+			ctx->index += pkt_size;
+			continue;
 		}
 
-		ctx->index += pkt_size;
+		payload = (struct up_pl_hdr *)(drv_data->decode_buf + pl_off);
+
+		cur_frm_id = payload->le_frame_id;
+		cur_cam_num = payload->le_camera_number;
+		cur_flags = payload->le_flags;
+
+		/*
+		 * Frame Boundary Tracking
+		*/
+		if (drv_data->building_frame &&
+		    drv_data->frame_id != cur_frm_id)
+			up_finalize_active_frame(drv_data);
+
+		drv_data->frame_id = cur_frm_id;
+		drv_data->building_frame = true;
+		has_gravity_sensor = (cur_flags & 0x01) != 0;
+		other_flags = (cur_flags >> 2) & 0x3F;
+
+		/*
+		 * Process Video Feed Only (Camera Stream ID 0x0B checked via up_is_valid_header)
+		 */
+		if (!has_gravity_sensor && other_flags == 0 &&
+		    cur_cam_num < 2) {
+
+			if (likely(pkt_size >= TOTAL_USB_HEADER_SIZE)) {
+				pl_start = cur_index + TOTAL_USB_HEADER_SIZE;
+				pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
+
+				if (likely(pl_start < max_buf_len && pl_size <= (max_buf_len - pl_start))) {
+					pl_src = drv_data->decode_buf + pl_start;
+					up_process_video_payload(drv_data, ctx, pl_src, pl_size);
+				}
+			}
+		}
+
+		/*
+		* Hard infinite loop defense against EMI register corruption
+		*/
+		if (unlikely(pkt_size == 0 || pkt_size > (max_buf_len - cur_index))) {
+			ctx->index++;
+		} else {
+			ctx->index += pkt_size;
+		}
 	}
 }
