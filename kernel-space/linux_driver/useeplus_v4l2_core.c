@@ -267,7 +267,7 @@ static int up_probe(struct usb_interface *interface,
 	drv_data->itf = interface;
 	drv_data->sequence = 0;
 	drv_data->building_frame = false;
-	drv_data->frame_len = 0;
+	drv_data->active_pl_len = 0;
 	drv_data->decode_buf_len = 0;
 	drv_data->width = UP_DEF_WIDTH;
 	drv_data->height = UP_DEF_HEIGHT;
