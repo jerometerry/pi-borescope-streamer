@@ -179,11 +179,6 @@ static void up_read_bulk_callback(struct urb *urb)
 		dev_warn(&urb->dev->dev, "kfifo overflow, dropping URB payload\n");
 
 	/*
-	 * Resubmit the URB immediately so the hardware never starves
-	 */
-	usb_submit_urb(urb, GFP_ATOMIC);
-
-	/*
 	 * Wake up the parser thread
 	 */
 	queue_work(drv_data->wq, &drv_data->work);
