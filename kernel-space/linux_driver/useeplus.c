@@ -72,13 +72,15 @@ static void up_finalize_active_frame(struct up_drv_data *drv_data)
 			drv_data->sequence++;
 		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
 		drv_data->dbg_frames_delivered++;
+
+		/* Safely release ownership of the buffer back to VB2 */
+		drv_data->active_buf = NULL;
 	} else {
 		/* Recycle the buffer if corrupted/incomplete */
 		drv_data->dbg_frames_dropped_eoi++;
 	}
 
 	/* Clear state for the next frame */
-	drv_data->active_buf = NULL;
 	drv_data->active_pl_len = 0;
 }
 
