@@ -19,22 +19,20 @@
 
 MODULE_LICENSE("Dual MIT/GPL");
 MODULE_AUTHOR("Jerome Terry");
-MODULE_DESCRIPTION("V4L2 driver for Useeplus non-UVC borescopes");
+MODULE_DESCRIPTION("V4L2 driver for Useeplus protocol cameras");
 MODULE_VERSION("0.1.0");
 
-#define CAP_DRIVER "Useeplus"
-#define CAP_CARD "Useeplus non-UVC Borescope"
-#define V4L2_INPUT_NAME "Borescope Lens Channel 0"
+#define USB_DRIVER_NAME "useeplus_v4l2"
+#define CAP_DRIVER "useeplus"
+#define CAP_CARD "useeplus protocol cameras"
+#define V4L2_INPUT_NAME "Camera Lens Channel 0"
+#define VIDEO_QUEUE_NAME "useeplus-queue"
+#define VIDEO_DEVICE_NAME "useeplus-video"
 
 static struct usb_driver up_driver;
 static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops;
 static const struct v4l2_file_operations up_v4l2_fops;
 static const struct vb2_ops up_vb2_ops;
-
-static const struct usb_device_id up_table[] = { { USB_DEVICE(0x0329, 0x2022) },
-						 { USB_DEVICE(0x2ce3, 0x3828) },
-						 {} };
-MODULE_DEVICE_TABLE(usb, up_table);
 
 static const u8 iap_auth_handshake[] = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 static const u8 start_video_command[] = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
@@ -46,41 +44,6 @@ enum up_config {
 	DIAG_LOG_ITERATIONS = 300,
 	USB_TO = 1000,
 };
-
-static int up_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
-			  unsigned int *nplanes, unsigned int sizes[],
-			  struct device *alloc_devs[])
-{
-	if (*nplanes)
-		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
-
-	*nplanes = 1;
-	sizes[0] = MAX_FRAME_SIZE;
-	return 0;
-}
-
-static int up_buf_prepare(struct vb2_buffer *vb)
-{
-	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
-		return -EINVAL;
-
-	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
-	return 0;
-}
-
-static void up_buf_queue(struct vb2_buffer *vb)
-{
-	struct up_drv_data *drv_data = vb2_get_drv_priv(vb->vb2_queue);
-	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
-	struct up_buffer *buf;
-	unsigned long flags;
-
-	buf = container_of(v4l2_buf, struct up_buffer, vb2_buffer);
-
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	list_add_tail(&buf->list, &drv_data->ready_queue);
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-}
 
 static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 {
@@ -120,279 +83,6 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 	 */
 	for (i = 0; i < NUM_URBS; i++)
 		up_free_urb(drv_data, i);
-}
-
-static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
-			size_t len)
-{
-	struct usb_device *u_dev = data->usb_dev;
-	int retval, sent_bytes, out_pipe;
-	u8 *buf;
-
-	buf = kmemdup(tokens, len, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	out_pipe = usb_sndbulkpipe(u_dev, ep_addr);
-	retval = usb_bulk_msg(u_dev, out_pipe, buf, len, &sent_bytes, USB_TO);
-
-	kfree(buf);
-	return retval;
-}
-
-static int up_iap_auth(struct up_drv_data *drv_data)
-{
-	size_t size = sizeof(iap_auth_handshake);
-	int ep = drv_data->iap_out_ep;
-
-	return up_write_msg(drv_data, ep, iap_auth_handshake, size);
-}
-
-static int up_start_video(struct up_drv_data *drv_data)
-{
-	size_t size = sizeof(start_video_command);
-	int ep = drv_data->video_out_ep;
-
-	return up_write_msg(drv_data, ep, start_video_command, size);
-}
-
-static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
-{
-	struct up_drv_data *drv_data = vb2_get_drv_priv(vq);
-	struct usb_interface *itf = drv_data->itf;
-	int i, retval, urbs_submitted;
-	struct up_buffer *buf;
-	unsigned long flags;
-
-	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->streaming))
-		return 0;
-
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	drv_data->frame_len = 0;
-	drv_data->frame_id = -1;
-	drv_data->building_frame = false;
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-
-	/*
-	 * Send hardware initialization commands
-	 */
-	retval = up_iap_auth(drv_data);
-	if (retval) {
-		dev_err(&itf->dev, "up_write_msg init failed: %d\n", retval);
-		goto error_start;
-	}
-
-	retval = up_start_video(drv_data);
-	if (retval) {
-		dev_err(&itf->dev, "up_write_msg start failed: %d\n", retval);
-		goto error_start;
-	}
-
-	/*
-	 * Allow URB callback paths to start passing payloads to buffers
-	 * We do this before submitting URBs so that the read callbacks can
-	 * start processing data before we finish initializing all URBs
-	 */
-	set_bit(STREAM_CLIENT_READY, &drv_data->streaming);
-
-	/*
-	 * Ensure the bit is visible to all CPU cores before submitting URBs
-	 * Required after Non-Value-Returning set_bit operation.
-	 */
-	smp_mb__after_atomic();
-
-	/*
-	 * Submit the URBs
-	 */
-	for (urbs_submitted = 0; urbs_submitted < NUM_URBS; urbs_submitted++) {
-		retval = usb_submit_urb(drv_data->urbs[urbs_submitted],
-					GFP_KERNEL);
-		if (retval) {
-			dev_err(&drv_data->itf->dev,
-				"Failed to submit URBs: %d\n", retval);
-			goto error_start;
-		}
-	}
-
-	return 0;
-
-error_start:
-	/*
-	 * Clear the client-ready bit immediately to block incoming URB data paths
-	 */
-	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
-
-	/*
-	 * Free any URBs that were successfully submitted before the failure
-	 */
-	for (i = 0; i < urbs_submitted; i++)
-		usb_kill_urb(drv_data->urbs[i]);
-
-	/*
-	 * Drain the queue and return buffers to userspace per V4L2 spec
-	 */
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	while (!list_empty(&drv_data->ready_queue)) {
-		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
-				       list);
-		list_del(&buf->list);
-		/*
-		 * Buffers correctly marked as queued for V4L2 cleanup on start error
-		 */
-		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_QUEUED);
-	}
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-
-	/*
-	 * Clear the HW guard last so a future start_streaming invocation can re-attempt
-	 */
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
-
-	return retval;
-}
-
-static void up_stop_streaming(struct vb2_queue *vq)
-{
-	struct up_drv_data *drv_data = vb2_get_drv_priv(vq);
-	struct up_buffer *buf;
-	unsigned long flags;
-	int i;
-
-	/*
-	 * Signal the callback to STOP processing and STOP resubmitting immediately.
-	 */
-	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
-
-	/*
-	 * Ensure all CPU cores see the bit change before we start Freeing URBs.
-	 * clear_bit doesn't imply a memory barrier, so we explicitly add one.
-	 */
-	smp_mb__after_atomic();
-
-	/*
-	 * usb_kill_urb blocks until any active callback finishes executing.
-	 * Since STREAM_CLIENT_READY is now 0, the callback will exit without
-	 * resubmitting.
-	 */
-	for (i = 0; i < NUM_URBS; i++) {
-		if (drv_data->urbs[i])
-			usb_kill_urb(drv_data->urbs[i]);
-	}
-
-	/* Reset the hardware active guard state. */
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
-
-	/*
-	 * Safely drain any buffers that were left over in the queue.
-	 * Because all URBs are definitively dead now, no one else will touch
-	 * this list.
-	 */
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	while (!list_empty(&drv_data->ready_queue)) {
-		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
-				       list);
-		list_del(&buf->list);
-		/*
-		 * Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR
-		 */
-		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-}
-
-static int up_v4l2_open(struct file *file)
-{
-	return v4l2_fh_open(file);
-}
-
-static int up_v4l2_release(struct file *file)
-{
-	return _vb2_fop_release(file, NULL);
-}
-
-static int up_vidioc_querycap(struct file *file, void *priv,
-			      struct v4l2_capability *cap)
-{
-	struct up_drv_data *drv_data = video_drvdata(file);
-
-	strscpy(cap->driver, CAP_DRIVER, sizeof(cap->driver));
-	strscpy(cap->card, CAP_CARD, sizeof(cap->card));
-	usb_make_path(drv_data->usb_dev, cap->bus_info, sizeof(cap->bus_info));
-
-	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
-			    V4L2_CAP_DEVICE_CAPS;
-	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
-
-	return 0;
-}
-
-static int up_vidioc_fmt_vid_cap(struct file *file, void *priv,
-				 struct v4l2_format *f)
-{
-	struct up_drv_data *drv_data = video_drvdata(file);
-
-	f->fmt.pix.width = drv_data->width;
-	f->fmt.pix.height = drv_data->height;
-	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
-	f->fmt.pix.field = V4L2_FIELD_NONE;
-	f->fmt.pix.bytesperline = 0;
-	f->fmt.pix.sizeimage = MAX_FRAME_SIZE;
-	f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
-
-	return 0;
-}
-
-static int up_vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
-				      struct v4l2_fmtdesc *f)
-{
-	if (f->index > 0)
-		return -EINVAL;
-
-	f->pixelformat = V4L2_PIX_FMT_MJPEG;
-
-	return 0;
-}
-
-static int up_vidioc_enum_input(struct file *file, void *priv,
-				struct v4l2_input *inp)
-{
-	if (inp->index > 0)
-		return -EINVAL;
-
-	inp->type = V4L2_INPUT_TYPE_CAMERA;
-	strscpy(inp->name, V4L2_INPUT_NAME, sizeof(inp->name));
-
-	return 0;
-}
-
-static int up_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
-{
-	*i = 0;
-	return 0;
-}
-
-static int up_vidioc_s_input(struct file *file, void *priv, unsigned int i)
-{
-	return i == 0 ? 0 : -EINVAL;
-}
-
-static int up_vidioc_g_parm(struct file *file, void *priv,
-			    struct v4l2_streamparm *sp)
-{
-	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		return -EINVAL;
-
-	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
-	sp->parm.capture.timeperframe.numerator = 1;
-	sp->parm.capture.timeperframe.denominator = 30;
-
-	return 0;
-}
-
-static int up_vidioc_s_parm(struct file *file, void *priv,
-			    struct v4l2_streamparm *sp)
-{
-	return up_vidioc_g_parm(file, priv, sp);
 }
 
 static void up_read_bulk_callback(struct urb *urb)
@@ -532,57 +222,6 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 	}
 
 	return 0;
-}
-
-static int up_suspend(struct usb_interface *intf, pm_message_t message)
-{
-	return 0;
-}
-
-static int up_resume(struct usb_interface *intf)
-{
-	return 0;
-}
-
-static void up_disconnect(struct usb_interface *interface)
-{
-	struct up_drv_data *drv_data = usb_get_intfdata(interface);
-	int itf_num = interface->cur_altsetting->desc.bInterfaceNumber;
-	struct usb_interface *iap_intf;
-
-	usb_set_intfdata(interface, NULL);
-
-	/*
-	 * Ignore the iAP interface disconnect.
-	 * The Video Interface disconnect handles the full device teardown.
-	 */
-	if (itf_num == UP_IAP_INTERFACE)
-		return;
-
-	if (!drv_data)
-		return;
-
-	/*
-	 * Explicitly release the iAP interface claimed in probe
-	 */
-	iap_intf = usb_ifnum_to_if(drv_data->usb_dev, UP_IAP_INTERFACE);
-	if (iap_intf) {
-		usb_set_intfdata(iap_intf, NULL);
-		usb_driver_release_interface(&up_driver, iap_intf);
-	}
-
-	up_free_urbs(drv_data);
-
-	/*
-	 * Safely check if V4L2 actually registered before unregistering
-	 */
-	if (video_is_registered(&drv_data->video_dev))
-		video_unregister_device(&drv_data->video_dev);
-
-	v4l2_device_disconnect(&drv_data->v4l2_dev);
-	v4l2_device_put(&drv_data->v4l2_dev);
-
-	dev_info(&interface->dev, "Device disconnected.\n");
 }
 
 static void up_device_release(struct v4l2_device *v4l2_dev)
@@ -736,7 +375,7 @@ static int up_probe(struct usb_interface *interface,
 	q->min_queued_buffers = 2;
 	q->lock = &drv_data->v4l2_lock;
 	q->dev = &interface->dev;
-	strscpy(q->name, "useeplus-queue", sizeof(q->name));
+	strscpy(q->name, VIDEO_QUEUE_NAME, sizeof(q->name));
 
 	retval = vb2_queue_init(q);
 	if (retval) {
@@ -744,7 +383,7 @@ static int up_probe(struct usb_interface *interface,
 		goto error_unreg_v4l2;
 	}
 
-	strscpy(drv_data->video_dev.name, "useeplus-video",
+	strscpy(drv_data->video_dev.name, VIDEO_DEVICE_NAME,
 		sizeof(drv_data->video_dev.name));
 	drv_data->video_dev.v4l2_dev = &drv_data->v4l2_dev;
 	drv_data->video_dev.fops = &up_v4l2_fops;
@@ -799,8 +438,7 @@ static int up_probe(struct usb_interface *interface,
 		goto error_urbs;
 	}
 
-	dev_info(&interface->dev,
-		 "Useeplus protocol borescope connected successfully.\n");
+	dev_info(&interface->dev, "Device connected.\n");
 	return 0;
 
 error_urbs:
@@ -808,7 +446,7 @@ error_urbs:
 	up_free_urbs(drv_data);
 
 error_unreg_v4l2:
-	dev_dbg(&interface->dev, "Unregistering V4L2 device\n");
+	dev_dbg(&interface->dev, "Unregistering device\n");
 	v4l2_device_unregister(&drv_data->v4l2_dev);
 
 error_release_iap:
@@ -821,16 +459,363 @@ error_free_dev:
 	return retval;
 }
 
-static int __init up_init(void)
+static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
+			size_t len)
 {
-	pr_debug("up_v4l2: Module initialized. Version: %s\n", BUILD_VER);
-	return usb_register(&up_driver);
+	struct usb_device *u_dev = data->usb_dev;
+	int retval, sent_bytes, out_pipe;
+	u8 *buf;
+
+	buf = kmemdup(tokens, len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	out_pipe = usb_sndbulkpipe(u_dev, ep_addr);
+	retval = usb_bulk_msg(u_dev, out_pipe, buf, len, &sent_bytes, USB_TO);
+
+	kfree(buf);
+	return retval;
 }
 
-static void __exit up_exit(void)
+static int up_iap_auth(struct up_drv_data *drv_data)
 {
-	pr_debug("up_v4l2: Module exited.\n");
-	usb_deregister(&up_driver);
+	size_t size = sizeof(iap_auth_handshake);
+	int ep = drv_data->iap_out_ep;
+
+	return up_write_msg(drv_data, ep, iap_auth_handshake, size);
+}
+
+static int up_start_video(struct up_drv_data *drv_data)
+{
+	size_t size = sizeof(start_video_command);
+	int ep = drv_data->video_out_ep;
+
+	return up_write_msg(drv_data, ep, start_video_command, size);
+}
+
+static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
+{
+	struct up_drv_data *drv_data = vb2_get_drv_priv(vq);
+	struct usb_interface *itf = drv_data->itf;
+	int i, retval, urbs_submitted;
+	struct up_buffer *buf;
+	unsigned long flags;
+
+	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->streaming))
+		return 0;
+
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	drv_data->frame_len = 0;
+	drv_data->frame_id = -1;
+	drv_data->building_frame = false;
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
+	/*
+	 * Send hardware initialization commands
+	 */
+	retval = up_iap_auth(drv_data);
+	if (retval) {
+		dev_err(&itf->dev, "up_iap_auth failed: %d\n", retval);
+		goto error_start;
+	}
+
+	retval = up_start_video(drv_data);
+	if (retval) {
+		dev_err(&itf->dev, "up_start_video failed: %d\n", retval);
+		goto error_start;
+	}
+
+	/*
+	 * Allow URB callback paths to start passing payloads to buffers
+	 * We do this before submitting URBs so that the read callbacks can
+	 * start processing data before we finish initializing all URBs
+	 */
+	set_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+
+	/*
+	 * Ensure the bit is visible to all CPU cores before submitting URBs
+	 * Required after Non-Value-Returning set_bit operation.
+	 */
+	smp_mb__after_atomic();
+
+	/*
+	 * Submit the URBs
+	 */
+	for (urbs_submitted = 0; urbs_submitted < NUM_URBS; urbs_submitted++) {
+		retval = usb_submit_urb(drv_data->urbs[urbs_submitted],
+					GFP_KERNEL);
+		if (retval) {
+			dev_err(&drv_data->itf->dev,
+				"Failed to submit URBs: %d\n", retval);
+			goto error_start;
+		}
+	}
+
+	return 0;
+
+error_start:
+	/*
+	 * Clear the client-ready bit immediately to block incoming URB data paths
+	 */
+	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+
+	/*
+	 * Free any URBs that were successfully submitted before the failure
+	 */
+	for (i = 0; i < urbs_submitted; i++)
+		usb_kill_urb(drv_data->urbs[i]);
+
+	/*
+	 * Drain the queue and return buffers to userspace per V4L2 spec
+	 */
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	while (!list_empty(&drv_data->ready_queue)) {
+		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
+				       list);
+		list_del(&buf->list);
+		/*
+		 * Buffers correctly marked as queued for V4L2 cleanup on start error
+		 */
+		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_QUEUED);
+	}
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
+	/*
+	 * Clear the HW guard last so a future start_streaming invocation can re-attempt
+	 */
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
+
+	return retval;
+}
+
+static void up_stop_streaming(struct vb2_queue *vq)
+{
+	struct up_drv_data *drv_data = vb2_get_drv_priv(vq);
+	struct up_buffer *buf;
+	unsigned long flags;
+	int i;
+
+	/*
+	 * Signal the callback to STOP processing and STOP resubmitting immediately.
+	 */
+	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+
+	/*
+	 * Ensure all CPU cores see the bit change before we start Freeing URBs.
+	 * clear_bit doesn't imply a memory barrier, so we explicitly add one.
+	 */
+	smp_mb__after_atomic();
+
+	/*
+	 * usb_kill_urb blocks until any active callback finishes executing.
+	 * Since STREAM_CLIENT_READY is now 0, the callback will exit without
+	 * resubmitting.
+	 */
+	for (i = 0; i < NUM_URBS; i++) {
+		if (drv_data->urbs[i])
+			usb_kill_urb(drv_data->urbs[i]);
+	}
+
+	/* Reset the hardware active guard state. */
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
+
+	/*
+	 * Safely drain any buffers that were left over in the queue.
+	 * Because all URBs are definitively dead now, no one else will touch
+	 * this list.
+	 */
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	while (!list_empty(&drv_data->ready_queue)) {
+		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
+				       list);
+		list_del(&buf->list);
+		/*
+		 * Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR
+		 */
+		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
+	}
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+}
+
+static void up_disconnect(struct usb_interface *interface)
+{
+	struct up_drv_data *drv_data = usb_get_intfdata(interface);
+	int itf_num = interface->cur_altsetting->desc.bInterfaceNumber;
+	struct usb_interface *iap_intf;
+
+	usb_set_intfdata(interface, NULL);
+
+	/*
+	 * Ignore the iAP interface disconnect.
+	 * The Video Interface disconnect handles the full device teardown.
+	 */
+	if (itf_num == UP_IAP_INTERFACE)
+		return;
+
+	if (!drv_data)
+		return;
+
+	/*
+	 * Explicitly release the iAP interface claimed in probe
+	 */
+	iap_intf = usb_ifnum_to_if(drv_data->usb_dev, UP_IAP_INTERFACE);
+	if (iap_intf) {
+		usb_set_intfdata(iap_intf, NULL);
+		usb_driver_release_interface(&up_driver, iap_intf);
+	}
+
+	up_free_urbs(drv_data);
+
+	/*
+	 * Safely check if V4L2 actually registered before unregistering
+	 */
+	if (video_is_registered(&drv_data->video_dev))
+		video_unregister_device(&drv_data->video_dev);
+
+	v4l2_device_disconnect(&drv_data->v4l2_dev);
+	v4l2_device_put(&drv_data->v4l2_dev);
+
+	dev_info(&interface->dev, "Device disconnected.\n");
+}
+
+static int up_suspend(struct usb_interface *intf, pm_message_t message)
+{
+	return 0;
+}
+
+static int up_resume(struct usb_interface *intf)
+{
+	return 0;
+}
+
+static int up_v4l2_open(struct file *file)
+{
+	return v4l2_fh_open(file);
+}
+
+static int up_v4l2_release(struct file *file)
+{
+	return _vb2_fop_release(file, NULL);
+}
+
+static int up_vidioc_querycap(struct file *file, void *priv,
+			      struct v4l2_capability *cap)
+{
+	struct up_drv_data *drv_data = video_drvdata(file);
+
+	strscpy(cap->driver, CAP_DRIVER, sizeof(cap->driver));
+	strscpy(cap->card, CAP_CARD, sizeof(cap->card));
+	usb_make_path(drv_data->usb_dev, cap->bus_info, sizeof(cap->bus_info));
+
+	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
+			    V4L2_CAP_DEVICE_CAPS;
+	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+
+	return 0;
+}
+
+static int up_vidioc_fmt_vid_cap(struct file *file, void *priv,
+				 struct v4l2_format *f)
+{
+	struct up_drv_data *drv_data = video_drvdata(file);
+
+	f->fmt.pix.width = drv_data->width;
+	f->fmt.pix.height = drv_data->height;
+	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
+	f->fmt.pix.field = V4L2_FIELD_NONE;
+	f->fmt.pix.bytesperline = 0;
+	f->fmt.pix.sizeimage = MAX_FRAME_SIZE;
+	f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+
+	return 0;
+}
+
+static int up_vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
+				      struct v4l2_fmtdesc *f)
+{
+	if (f->index > 0)
+		return -EINVAL;
+
+	f->pixelformat = V4L2_PIX_FMT_MJPEG;
+
+	return 0;
+}
+
+static int up_vidioc_enum_input(struct file *file, void *priv,
+				struct v4l2_input *inp)
+{
+	if (inp->index > 0)
+		return -EINVAL;
+
+	inp->type = V4L2_INPUT_TYPE_CAMERA;
+	strscpy(inp->name, V4L2_INPUT_NAME, sizeof(inp->name));
+
+	return 0;
+}
+
+static int up_vidioc_g_input(struct file *file, void *priv, unsigned int *i)
+{
+	*i = 0;
+	return 0;
+}
+
+static int up_vidioc_s_input(struct file *file, void *priv, unsigned int i)
+{
+	return i == 0 ? 0 : -EINVAL;
+}
+
+static int up_vidioc_g_parm(struct file *file, void *priv,
+			    struct v4l2_streamparm *sp)
+{
+	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+
+	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
+	sp->parm.capture.timeperframe.numerator = 1;
+	sp->parm.capture.timeperframe.denominator = 30;
+
+	return 0;
+}
+
+static int up_vidioc_s_parm(struct file *file, void *priv,
+			    struct v4l2_streamparm *sp)
+{
+	return up_vidioc_g_parm(file, priv, sp);
+}
+
+static int up_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
+			  unsigned int *nplanes, unsigned int sizes[],
+			  struct device *alloc_devs[])
+{
+	if (*nplanes)
+		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
+
+	*nplanes = 1;
+	sizes[0] = MAX_FRAME_SIZE;
+	return 0;
+}
+
+static int up_buf_prepare(struct vb2_buffer *vb)
+{
+	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
+		return -EINVAL;
+
+	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
+	return 0;
+}
+
+static void up_buf_queue(struct vb2_buffer *vb)
+{
+	struct up_drv_data *drv_data = vb2_get_drv_priv(vb->vb2_queue);
+	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
+	struct up_buffer *buf;
+	unsigned long flags;
+
+	buf = container_of(v4l2_buf, struct up_buffer, vb2_buffer);
+
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	list_add_tail(&buf->list, &drv_data->ready_queue);
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
 static const struct vb2_ops up_vb2_ops = {
@@ -872,8 +857,14 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 	.vidioc_streamoff = vb2_ioctl_streamoff,
 };
 
+static const struct usb_device_id up_table[] = { { USB_DEVICE(0x0329, 0x2022) },
+						 { USB_DEVICE(0x2ce3, 0x3828) },
+						 {} };
+
+MODULE_DEVICE_TABLE(usb, up_table);
+
 static struct usb_driver up_driver = {
-	.name = "useeplus",
+	.name = USB_DRIVER_NAME,
 	.id_table = up_table,
 	.probe = up_probe,
 	.disconnect = up_disconnect,
@@ -881,6 +872,18 @@ static struct usb_driver up_driver = {
 	.resume = up_resume,
 	.reset_resume = up_resume,
 };
+
+static int __init up_init(void)
+{
+	pr_debug("useeplus_v4l2: Module initialized. Version: %s\n", BUILD_VER);
+	return usb_register(&up_driver);
+}
+
+static void __exit up_exit(void)
+{
+	pr_debug("useeplus_v4l2: Module exited.\n");
+	usb_deregister(&up_driver);
+}
 
 module_init(up_init);
 module_exit(up_exit);
