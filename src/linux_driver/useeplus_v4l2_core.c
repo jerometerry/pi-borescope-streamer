@@ -88,8 +88,8 @@ static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 	if (!drv_data->urbs[urb_index])
 		return;
 
-	urb_buf = drv_data->urb_buffers[urb_index] dma_addr =
-		drv_data->urb_dma_addrs[urb_index];
+	urb_buf = drv_data->urb_buffers[urb_index];
+	dma_addr = drv_data->urb_dma_addrs[urb_index];
 	if (urb_buf) {
 		usb_free_coherent(u_dev, URB_SIZE, urb_buf, dma_addr);
 		drv_data->urb_buffers[urb_index] = NULL;
