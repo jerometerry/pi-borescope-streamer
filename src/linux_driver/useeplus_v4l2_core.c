@@ -548,6 +548,7 @@ static void up_disconnect(struct usb_interface *interface)
 {
 	struct up_drv_data *drv_data = usb_get_intfdata(interface);
 	int itf_num = interface->cur_altsetting->desc.bInterfaceNumber;
+	struct usb_interface *iap_intf;
 
 	usb_set_intfdata(interface, NULL);
 
@@ -561,9 +562,20 @@ static void up_disconnect(struct usb_interface *interface)
 	if (!drv_data)
 		return;
 
+	/*
+	 * Explicitly release the iAP interface claimed in probe
+	 */
+	iap_intf = usb_ifnum_to_if(drv_data->usb_dev, UP_IAP_INTERFACE);
+	if (iap_intf) {
+		usb_set_intfdata(iap_intf, NULL);
+		usb_driver_release_interface(&up_driver, iap_intf);
+	}
+
 	up_free_urbs(drv_data);
 
-	/* Safely check if V4L2 actually registered before unregistering */
+	/*
+	 * Safely check if V4L2 actually registered before unregistering
+	 */
 	if (video_is_registered(&drv_data->video_dev))
 		video_unregister_device(&drv_data->video_dev);
 
