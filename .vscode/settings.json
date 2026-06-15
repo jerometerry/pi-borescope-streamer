@@ -1,5 +1,8 @@
 {
-	"cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
+    "files.exclude": {
+        "**/*.cmd": true
+    },
+    "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
     //"cmake.options.statusBarVisibility": "visible",
     "cmake.debugConfig": {
         "type": "lldb",
