@@ -174,7 +174,7 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 	}
 
 	/*
-	 * Overflow-Safe Math Check */
+	 * Overflow-Safe Math Check
 	 */
 	if (likely(pl_size <= (MAX_FRAME_SIZE - current_len))) {
 		/*
