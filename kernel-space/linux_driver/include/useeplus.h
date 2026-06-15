@@ -48,6 +48,7 @@ enum up_hw_signatures {
 	UP_PKT_DEL = 0xBBAA,
 	VIDEO_CAMERA_ID = 0x0B,
 	GRAVITY_SENSOR_ID = 0x07,
+	MAX_CAM_NUM = 1,
 };
 
 enum up_jpeg_marker {
