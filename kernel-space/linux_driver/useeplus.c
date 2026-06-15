@@ -40,35 +40,6 @@ static bool up_check_ghost_header(struct up_drv_data *drv_data,
 	return false;
 }
 
-static void up_find_jpeg_boundaries(struct up_drv_data *drv_data,
-				    size_t *soi_offset, size_t *eoi_offset,
-				    bool *building_frame, bool *found_eoi)
-{
-	size_t max_pos = min_t(size_t, JPEG_SOI_MAX_POS, drv_data->active_pl_len);
-	size_t f_len = drv_data->active_pl_len;
-	u8 *f_buf = drv_data->active_buf;
-	long j;
-
-	*building_frame = false;
-	*found_eoi = false;
-
-	for (j = 0; j + 1 < max_pos; j++) {
-		if (f_buf[j] == JPEG_DEL && f_buf[j + 1] == JPEG_SOI) {
-			*soi_offset = j;
-			*building_frame = true;
-			break;
-		}
-	}
-
-	for (j = f_len; j >= 2; j--) {
-		if (f_buf[j - 2] == JPEG_DEL && f_buf[j - 1] == JPEG_EOI) {
-			*eoi_offset = j;
-			*found_eoi = true;
-			break;
-		}
-	}
-}
-
 static void up_finalize_active_frame(struct up_drv_data *drv_data)
 {
 	struct vb2_buffer *vb;
