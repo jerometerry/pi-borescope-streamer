@@ -108,6 +108,13 @@ Plug in the useeplus_v4l2 into a USB port on the Raspberry Pi. Run this command 
 v4l2-ctl --list-devices
 ```
 
+## Verify useeplus_v4l2 Driver For V4L2 Compliance
+
+```bash
+# Assuming /dev/video0 is the video device the supercamera is connected to.
+v4l2-compliance -d /dev/video0
+```
+
 ## Capturing Snapshots with FFMPEGs
 
 ```bash
