@@ -206,10 +206,9 @@ overflow_reset:
 	/*
 	 * Hard, fail-secure rollback of the driver state
 	 */
-	dev_err_ratelimited(
-		&drv_data->itf->dev,
-		"useeplus: Overflow Prevention. Size: %zu, Current: %zu\n",
-		pl_size, current_len);
+	dev_err_ratelimited(&drv_data->itf->dev,
+			    "useeplus: Overflow Prevention. Size: %zu, Current: %zu\n", pl_size,
+			    current_len);
 
 	/*
 	 * We didn't successfully deliver a frame. Recycle drv_data->active_buf to use on the

@@ -69,9 +69,8 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 		if (!parser->building_frame ||
 		    parser->frame_id != pl_hdr->le_frame_id) {
 			if (parser->cb.on_frame_start)
-				parser->cb.on_frame_start(
-					parser->ctx, pl_hdr->le_frame_id,
-					pl_hdr->le_camera_number);
+				parser->cb.on_frame_start(parser->ctx, pl_hdr->le_frame_id,
+							  pl_hdr->le_camera_number);
 			parser->frame_id = pl_hdr->le_frame_id;
 			parser->building_frame = true;
 		}
