@@ -101,13 +101,16 @@ check-stack: default
 
 check-patch:
 	@$(KDIR)/scripts/checkpatch.pl --strict --no-tree --root=$$(pwd) --file \
-	useeplus_v4l2_core.c useeplus.c ./include/useeplus.h
+	useeplus_v4l2_core.c useeplus.c useeplus_protocol.c \
+	./include/useeplus.h ./include/useeplus_protocol.h
 
 check-format:
-	@clang-format --dry-run --Werror useeplus_v4l2_core.c useeplus.c include/useeplus.h
+	@clang-format --dry-run --Werror useeplus_v4l2_core.c useeplus.c useeplus_protocol.c \
+	include/useeplus.h include/useeplus_protocol.h
 
 fix-format:
-	@clang-format -i useeplus_v4l2_core.c useeplus.c include/useeplus.h
+	@clang-format -i useeplus_v4l2_core.c useeplus.c useeplus_protocol.c \
+	include/useeplus.h include/useeplus_protocol.h
 
 check-includes:
 	$(KDIR)/scripts/checkincludes.pl *.c include/*.h
