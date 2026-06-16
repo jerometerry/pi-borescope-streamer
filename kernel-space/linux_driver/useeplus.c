@@ -39,7 +39,7 @@ static bool up_check_ghost_header(struct up_drv_data *drv_data,
 		o_hdr_ptr = drv_data->decode_buf + ctx->index + o;
 		o_pkt = (struct up_pkt_hdr *)o_hdr_ptr;
 
-		if (up_is_valid_header(o_pkt)) {
+		if (up_is_valid_pkt_header(o_pkt)) {
 			*hdr_off = o;
 			return true;
 		}
@@ -272,7 +272,7 @@ static enum up_parse_status up_parse_envelope(struct up_drv_data *drv_data,
 
 	env->total_size = UP_PKT_HDR_SIZE + pkt_len;
 
-	if (!up_is_valid_header(pkt_hdr)) {
+	if (!up_is_valid_pkt_header(pkt_hdr)) {
 		ctx->index++;
 		return UP_PARSE_SKIP;
 	}
