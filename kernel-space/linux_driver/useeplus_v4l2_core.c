@@ -872,6 +872,27 @@ static void up_buf_queue(struct vb2_buffer *vb)
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
+static int up_vidioc_enum_frameintervals(struct file *file, void *priv,
+					 struct v4l2_frmivalenum *fival)
+{
+	struct up_drv_data *drv_data = video_drvdata(file);
+
+	if (fival->index > 0)
+		return -EINVAL;
+
+	if (fival->pixel_format != V4L2_PIX_FMT_MJPEG)
+		return -EINVAL;
+
+	if (fival->width != drv_data->width || fival->height != drv_data->height)
+		return -EINVAL;
+
+	fival->type = V4L2_FRMIVAL_TYPE_DISCRETE;
+	fival->discrete.numerator = 1;
+	fival->discrete.denominator = 30;
+
+	return 0;
+}
+
 static const struct vb2_ops up_vb2_ops = {
 	.queue_setup = up_queue_setup,
 	.buf_prepare = up_buf_prepare,
@@ -898,12 +919,14 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 	.vidioc_s_fmt_vid_cap = up_vidioc_fmt_vid_cap,
 	.vidioc_try_fmt_vid_cap = up_vidioc_fmt_vid_cap,
 	.vidioc_enum_fmt_vid_cap = up_vidioc_enum_fmt_vid_cap,
+	.vidioc_enum_frameintervals = up_vidioc_enum_frameintervals,
 	.vidioc_enum_input = up_vidioc_enum_input,
 	.vidioc_g_input = up_vidioc_g_input,
 	.vidioc_s_input = up_vidioc_s_input,
 	.vidioc_g_parm = up_vidioc_g_parm,
 	.vidioc_s_parm = up_vidioc_s_parm,
 	.vidioc_reqbufs = vb2_ioctl_reqbufs,
+	.vidioc_create_bufs = vb2_ioctl_create_bufs,
 	.vidioc_querybuf = vb2_ioctl_querybuf,
 	.vidioc_qbuf = vb2_ioctl_qbuf,
 	.vidioc_dqbuf = vb2_ioctl_dqbuf,
