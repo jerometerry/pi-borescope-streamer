@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR GPL-2.0-only
 
 #include "useeplus.h"
+#include "useeplus_protocol.h"
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/kernel.h>

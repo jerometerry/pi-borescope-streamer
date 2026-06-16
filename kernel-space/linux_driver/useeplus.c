@@ -23,15 +23,6 @@ static inline struct up_pl_hdr *up_get_pl_hdr(struct up_drv_data *drv_data,
 	return (struct up_pl_hdr *)(drv_data->decode_buf + index + UP_PKT_HDR_SIZE);
 }
 
-static bool up_is_valid_header(struct up_pkt_hdr *pkt)
-{
-	u16 del = le16_to_cpu(pkt->le_delimeter);
-	u8 dev_id = pkt->le_device_id;
-
-	return (del == UP_PKT_DEL &&
-		(dev_id == VIDEO_CAMERA_ID || dev_id == GRAVITY_SENSOR_ID));
-}
-
 static bool up_check_ghost_header(struct up_drv_data *drv_data,
 				  struct up_parse_ctx *ctx, size_t *hdr_off)
 {

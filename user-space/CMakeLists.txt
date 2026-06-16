@@ -12,6 +12,10 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Define the path to the kernel space directory relative to the user-space CMake root
+set(KERNEL_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../kernel-space/linux_driver")
+set(SHARED_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../shared")
+
 # --- Build Configuration Options ---
 option(ENABLE_CLANG_TIDY "Enable clang-tidy analysis during build" OFF)
 option(ENABLE_IWYU "Enable include-what-you-use analysis during build" OFF)
@@ -230,12 +234,14 @@ add_library(borescope_core STATIC
     src/classes/usb_driver.cpp
     src/classes/v4l2.cpp
     src/classes/zero_allocation_response_builder.cpp
+    ${KERNEL_DRIVER_DIR}/useeplus_protocol.c
     ${GENERATED_HPP}
 )
 add_library(Borescope::Core ALIAS borescope_core)
 
 target_include_directories(borescope_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PUBLIC "${KERNEL_DRIVER_DIR}/include"
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
@@ -383,8 +389,6 @@ if(BUILD_TESTING)
     gtest_discover_tests(run_project_tests)
 
     # --- Kernel Driver Parser Tests ---
-    # Define the path to the kernel space directory relative to the user-space CMake root
-    set(KERNEL_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../kernel-space/linux_driver")
 
     add_executable(run_kernel_parser_tests
         "${KERNEL_DRIVER_DIR}/tests/test_useeplus_parser.cpp"

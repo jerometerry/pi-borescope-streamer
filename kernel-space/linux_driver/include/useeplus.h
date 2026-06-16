@@ -3,6 +3,7 @@
 #ifndef _up_H_
 #define _up_H_
 
+#include "useeplus_protocol.h"
 #include <linux/types.h>
 #include <linux/usb.h>
 #include <linux/mutex.h>
@@ -35,46 +36,6 @@
 /* Global Diagnostic String Macro */
 #define DIAG_DATA_FORMAT \
 	"URBs:%lu Err:%lu Pkt:%lu Frm:%lu Deliv:%lu D-SOI:%lu D-EOI:%lu D-Q:%lu Ghost:%lu\n"
-
-enum up_usb_topology {
-	UP_IAP_INTERFACE = 0,
-	UP_VIDEO_INTERFACE = 1,
-	UP_ALT_VIDEO_ENABLE = 1,
-	UP_VIDEO_ENDPOINT = 0x01,
-	UP_IAP_ENDPOINT = 0x02,
-};
-
-enum up_hw_signatures {
-	UP_PKT_DEL = 0xBBAA,
-	VIDEO_CAMERA_ID = 0x0B,
-	GRAVITY_SENSOR_ID = 0x07,
-	MAX_CAM_NUM = 1,
-};
-
-enum up_jpeg_marker {
-	JPEG_DEL = 0xFF,
-	JPEG_SOI = 0xD8,
-	JPEG_EOI = 0xD9,
-};
-
-/**
- * struct up_pkt_hdr - High-level wire transfer framing format
- */
-struct up_pkt_hdr {
-	__le16 le_delimeter;
-	u8 le_device_id;
-	__le16 le_length;
-} __packed;
-
-/**
- * struct up_pl_hdr - Content transport payload structure tracking
- */
-struct up_pl_hdr {
-	u8 le_frame_id;
-	u8 le_camera_number;
-	u8 le_flags;
-	__le32 le_gravity_sensor;
-} __packed;
 
 /**
  * struct up_buffer - Queue wrapper mapping videobuf2 elements to internal lists

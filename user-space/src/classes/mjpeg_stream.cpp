@@ -1,4 +1,7 @@
 #include "mjpeg_stream.hpp"
+extern "C" {
+    #include "useeplus_protocol.h"
+}
 
 #include <algorithm>
 #include <cstdint>
