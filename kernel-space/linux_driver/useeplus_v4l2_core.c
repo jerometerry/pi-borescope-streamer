@@ -51,6 +51,12 @@ static void kernel_on_frame_start(void *ctx, u8 frame_id, u8 cam_num)
 	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
 	unsigned long flags;
 
+	if (drv_data->active_buf) {
+		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+				VB2_BUF_STATE_ERROR);
+		drv_data->active_buf = NULL;
+	}
+
 	drv_data->active_pl_len = 0;
 
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
@@ -64,7 +70,7 @@ static void kernel_on_frame_start(void *ctx, u8 frame_id, u8 cam_num)
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
-static void kernel_on_video_payload(void *ctx, u8 *data, size_t len)
+static void kernel_on_video_payload(void *ctx, const u8 *data, size_t len)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
 	struct vb2_buffer *vb;
@@ -74,6 +80,9 @@ static void kernel_on_video_payload(void *ctx, u8 *data, size_t len)
 		return;
 
 	if (drv_data->active_pl_len + len > MAX_FRAME_SIZE) {
+		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+				VB2_BUF_STATE_ERROR);
+		drv_data->active_buf = NULL;
 		drv_data->active_pl_len = 0;
 		return;
 	}
@@ -94,6 +103,7 @@ static void kernel_on_frame_end(void *ctx)
 	u8 *vaddr;
 	size_t eoi_off = 0;
 	bool found_eoi = false;
+	int j;
 
 	if (!drv_data->active_buf || drv_data->active_pl_len < 2)
 		return;
@@ -101,7 +111,7 @@ static void kernel_on_frame_end(void *ctx)
 	vb = &drv_data->active_buf->vb2_buffer.vb2_buf;
 	vaddr = vb2_plane_vaddr(vb, 0);
 
-	for (int j = drv_data->active_pl_len; j >= 2; j--) {
+	for (j = drv_data->active_pl_len; j >= 2; j--) {
 		if (vaddr[j - 2] == 0xFF && vaddr[j - 1] == 0xD9) {
 			eoi_off = j;
 			found_eoi = true;
@@ -115,8 +125,13 @@ static void kernel_on_frame_end(void *ctx)
 		drv_data->active_buf->vb2_buffer.sequence =
 			drv_data->sequence++;
 		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
-		drv_data->active_buf = NULL;
+	} else {
+		drv_data->dbg_frames_dropped_eoi++;
+		vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
 	}
+
+	drv_data->active_buf = NULL;
+	drv_data->active_pl_len = 0;
 }
 
 static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
