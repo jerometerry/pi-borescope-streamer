@@ -1,27 +1,26 @@
-/* SPDX-License-Identifier: GPL-2.0+ */
-
+/* SPDX-License-Identifier: GPL-2.0+ OR MIT */
 #ifndef _USEEPLUS_PROTOCOL_H_
 #define _USEEPLUS_PROTOCOL_H_
 
 #ifdef __KERNEL__
-	/* Kernel-space includes and types */
 	#include <linux/types.h>
 	#include <asm/byteorder.h>
 
 	#define UP_LE16_TO_CPU(x) le16_to_cpu(x)
 	#define UP_LE32_TO_CPU(x) le32_to_cpu(x)
 #else
-	/* User-space includes and types */
 	#include <stdint.h>
 	#include <stdbool.h>
 	#include <stddef.h>
 
-	/* Map kernel shorthand types to standard C99 types */
 	typedef uint8_t  u8;
 	typedef uint16_t u16;
 	typedef uint32_t u32;
 
-	/* Endianness mapping for macOS vs Linux user-space */
+	#ifndef __packed
+	#define __packed __attribute__((packed))
+	#endif
+
 	#if defined(__APPLE__)
 		#include <libkern/OSByteOrder.h>
 		#define UP_LE16_TO_CPU(x) OSSwapLittleToHostInt16(x)
@@ -31,6 +30,10 @@
 		#define UP_LE16_TO_CPU(x) le16toh(x)
 		#define UP_LE32_TO_CPU(x) le32toh(x)
 	#endif
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 enum up_usb_topology {
@@ -55,17 +58,32 @@ enum up_jpeg_marker {
 };
 
 struct up_pkt_hdr {
-	uint16_t le_delimeter;
-	uint8_t  le_device_id;
-	uint16_t le_length;
-} __attribute__((packed));
+	u16 le_delimeter;
+	u8  le_device_id;
+	u16 le_length;
+} __packed;
 
 struct up_pl_hdr {
-	uint8_t  le_frame_id;
-	uint8_t  le_camera_number;
-	uint8_t  le_flags;
-	uint32_t le_gravity_sensor;
-} __attribute__((packed));
+	u8  le_frame_id;
+	u8  le_camera_number;
+	u8  le_flags;
+	u32 le_gravity_sensor;
+} __packed;
+
+struct up_parser_callbacks {
+	void (*on_frame_start)(void *ctx, u8 frame_id, u8 cam_num);
+	void (*on_video_payload)(void *ctx, const u8 *data, size_t len);
+	void (*on_frame_end)(void *ctx);
+};
+
+struct up_parser {
+	struct up_parser_callbacks cb;
+	void *ctx;
+	u8 current_frame_id;
+	bool is_building_frame;
+};
+
+void up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len);
 
 static inline bool up_check_pkt_header(u16 delimeter, u8 device_id)
 {
@@ -81,34 +99,8 @@ static inline bool up_is_valid_pkt_header(const struct up_pkt_hdr *pkt)
 	return up_check_pkt_header(del, dev_id);
 }
 
-/* * The Callback Interface
- * The parser will fire these events when it finds valid data.
- */
-struct up_parser_callbacks {
-	/* Called when a new frame ID is detected */
-	void (*on_frame_start)(void *ctx, uint8_t frame_id, uint8_t cam_num);
-
-	/* Called to deliver a chunk of MJPEG payload */
-	void (*on_video_payload)(void *ctx, const uint8_t *data, size_t len);
-
-	/* Called when the parser detects the end of a frame (or frame ID change) */
-	void (*on_frame_end)(void *ctx);
-
-	/* Optional: Called when parser detects a hardware button press */
-	void (*on_button_press)(void *ctx);
-};
-
-struct up_parser {
-	struct up_parser_callbacks cb;
-	void *ctx;
-
-	/* Parser state variables */
-	uint8_t current_frame_id;
-	bool is_building_frame;
-	/* ... */
-};
-
-/* The single entry point for feeding raw USB bytes */
-void up_parser_feed(struct up_parser *parser, const uint8_t *buffer, size_t len);
-
+#ifdef __cplusplus
+}
 #endif
+
+#endif /* _USEEPLUS_PROTOCOL_H_ */
