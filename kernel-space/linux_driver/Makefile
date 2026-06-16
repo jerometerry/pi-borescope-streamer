@@ -110,4 +110,4 @@ fix-format:
 	@clang-format -i useeplus_v4l2_core.c useeplus.c include/useeplus.h
 
 check-includes:
-	$(KDIR)/scripts/checkincludes.pl *.c includes/*.h
+	$(KDIR)/scripts/checkincludes.pl *.c include/*.h
