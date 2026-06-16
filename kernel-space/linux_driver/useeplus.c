@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0+
 
 #include "useeplus.h"
-#include <assert.h>
 #include <asm/byteorder.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/usb.h>
+#include <linux/build_bug.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
 
