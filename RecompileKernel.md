@@ -6,9 +6,9 @@ Official Raspberry Pi [Linux Kernel Docs](https://www.raspberrypi.com/documentat
 
 I purchased a DTECH [USB to TTL Serial cable](https://www.amazon.ca/dp/B0FBM3KWBD). At first I wired it up to via GPIO pins GND. Then I switched to using the default UART port, by cutting off the DuPont connectors and adding a mini micro JST SH 1.0mm Pitch 3-Pin Male connector.
 
-The official Raspberry Pi [Debug Probe](https://www.raspberrypi.com/products/debug-probe/) is your best bet for the least amount of hassle. 
+The official Raspberry Pi [Debug Probe](https://www.raspberrypi.com/products/debug-probe/) is your best bet for the least amount of hassle.
 
-With the USB to TTL Serial Cable attached, I use minicom to connect to the Raspberry PI. 
+With the USB to TTL Serial Cable attached, I use minicom to connect to the Raspberry PI.
 
 ```bash
 minicom -D /dev/cu.PL2303G-USBtoUART1220 -b 115200
@@ -22,7 +22,7 @@ sudo apt install git bc bison flex libssl-dev make libc6-dev libncurses5-dev lib
 
 ## Clone Raspberry PI Linux repo
 
-Clone using depth=1 to only pull down the necessary files. The repo is quite large. 
+Clone using depth=1 to only pull down the necessary files. The repo is quite large.
 
 ```bash
 git clone --depth=1 https://github.com/raspberrypi/linux
@@ -36,6 +36,7 @@ The branch for the latest kernel version is checked out by default. The latest b
 ## Make Kernel Config
 
 **Raspberry Pi 5 64-bit OS**
+
 ```bash
 KERNEL=kernel_2712
 make bcm2712_defconfig
@@ -49,29 +50,31 @@ You can use the built in config editor wizard via:
 make menuconfig
 ```
 
-This opens up a console application that lets you tweak settings in a safer way than editing the config file directly. You can still edit the .config file manually if you want. 
+This opens up a console application that lets you tweak settings in a safer way than editing the config file directly. You can still edit the .config file manually if you want.
 
 It's a good idea to customize local version to include something to identify your custom kernel version: e.g. `-bpf`.
 
-- General setup -> Local version - append to kernel release. 
+- General setup -> Local version - append to kernel release.
 
 ## Configuring BTF Support
 
-If you want to use eBPF, for example to generate FlameGraphs, you'll need to enable BTF (BPF Type Format) Support. 
+If you want to use eBPF, for example to generate FlameGraphs, you'll need to enable BTF (BPF Type Format) Support.
 
-- Enable "Kernel hacking -> Compile-time checks and compiler options -> Compile the Kernel with debug info"
-  - Select "Rely on the toolchain's implicit default DWARF version"
-- Enable "Kernel hacking -> Compile-time checks and compiler options -> Generate BTF typeinfo"
-- Enable "Kernel hacking -> Tracers -> Enable uprobes-based dynamic events"
-- Enable "Kernel Hacking -> Printk and logs -> Enable dynamic printk() support"
+- Kernel hacking -> Compile-time checks and compiler options -> Compile the Kernel with debug info
+  - Rely on the toolchain's implicit default DWARF version
+- Kernel hacking -> Compile-time checks and compiler options -> Generate BTF typeinfo
+- Kernel hacking -> Tracers -> Enable uprobes-based dynamic events
+- Kernel Hacking -> Printk and logs -> Enable dynamic printk() support
 
 If you want to run BPF / linux perf on custom applications you are building, ensure to add the following flags:
--  `-g`:  Embeds your source code maps into the build
-- `-fno-omit-frame-pointer`:  Instructs the compiler to keep the frame pointer register on the stack for every function call.
+
+- `-g`: Embeds your source code maps into the build
+- `-fno-omit-frame-pointer`: Instructs the compiler to keep the frame pointer register on the stack for every function call.
 
 ## Build the kernel, modules, and device trees
 
 **Raspberry Pi 5 64-bit OS**
+
 ```bash
 make -j6 Image.gz modules dtbs
 ```

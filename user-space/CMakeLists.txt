@@ -381,6 +381,45 @@ if(BUILD_TESTING)
 
     include(GoogleTest)
     gtest_discover_tests(run_project_tests)
+
+    # --- Kernel Driver Parser Tests ---
+    # Define the path to the kernel space directory relative to the user-space CMake root
+    set(KERNEL_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../kernel-space/linux_driver")
+
+    add_executable(run_kernel_parser_tests
+        "${KERNEL_DRIVER_DIR}/tests/test_useeplus_parser.cpp"
+        "${KERNEL_DRIVER_DIR}/useeplus.c"
+    )
+
+    # Inject the mock kernel headers BEFORE the standard includes
+    target_include_directories(run_kernel_parser_tests PRIVATE
+        "${KERNEL_DRIVER_DIR}/tests/mock_kernel"
+        "${KERNEL_DRIVER_DIR}/include"
+    )
+
+    target_link_libraries(run_kernel_parser_tests
+        PRIVATE
+            project_warnings
+            gtest_main
+            gmock
+    )
+
+    # Disable static analysis for the kernel source since it uses C/kernel idioms
+    # that will fail C++ user-space linting rules.
+    set_target_properties(run_kernel_parser_tests PROPERTIES
+        C_CLANG_TIDY ""
+        CXX_CLANG_TIDY ""
+        CXX_INCLUDE_WHAT_YOU_USE ""
+        CXX_CPPCHECK ""
+        C_CPPCHECK ""
+    )
+
+    if(ENABLE_COVERAGE)
+        target_compile_options(run_kernel_parser_tests PRIVATE --coverage)
+        target_link_options(run_kernel_parser_tests PRIVATE --coverage)
+    endif()
+
+    gtest_discover_tests(run_kernel_parser_tests)
 endif()
 
 # --- Benchmarks (Opt-In) ---
@@ -423,6 +462,8 @@ if(CLANG_FORMAT_EXE)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../kernel-space/linux_driver/tests/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../kernel-space/linux_driver/tests/mock_kernel/**/*.h"
     )
 
     add_custom_target(format
