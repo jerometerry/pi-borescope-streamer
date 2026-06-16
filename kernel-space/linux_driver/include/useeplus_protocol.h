@@ -76,7 +76,7 @@ struct up_pl_hdr {
 
 struct up_parser_callbacks {
 	void (*on_frame_start)(void *ctx, u8 frame_id, u8 cam_num);
-	void (*on_video_payload)(void *ctx, const u8 *data, size_t len);
+	void (*on_video_payload)(void *ctx, u8 *data, size_t len);
 	void (*on_frame_end)(void *ctx);
 };
 
