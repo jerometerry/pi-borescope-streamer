@@ -239,16 +239,6 @@ static inline void up_extract_video_packet(struct up_drv_data *drv_data,
 	up_process_video_payload(drv_data, ctx, pl_src, pl_size);
 }
 
-static inline bool up_has_gravity_sensor(u8 flags)
-{
-	return (flags & 0x01) != 0;
-}
-
-static inline bool up_has_other_flags(u8 flags)
-{
-	return ((flags >> 2) & 0x3F) != 0;
-}
-
 static enum up_parse_status up_parse_envelope(struct up_drv_data *drv_data,
 					      struct up_parse_ctx *ctx,
 					      struct up_envelope *env)

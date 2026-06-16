@@ -8,8 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "usb_packet_header.hpp"
-#include "usb_payload_header.hpp"
+#include "useeplus_protocol.h"
 
 namespace UsbProtocol {
 /**
@@ -213,6 +212,5 @@ enum class ParseResult : std::uint8_t { Success, HelpRequested, Error };
 
 enum class UsbTransferStatus : std::uint8_t { Completed, Disconnected, Error };
 
-inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(UsbPacketHeader);
-inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(UsbPayloadHeader);
-inline constexpr size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
+inline constexpr size_t USB_PACKET_HEADER_SIZE = UP_PKT_HDR_SIZE;
+inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = UP_PL_HDR_SIZE;

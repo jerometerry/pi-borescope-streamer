@@ -5,7 +5,7 @@
 #include <span>
 #include <vector>
 
-#include "usb_payload_header.hpp"
+#include "useeplus_protocol.h"
 #include "video_frame.hpp"
 #include "video_frame_buffer.hpp"
 
@@ -79,7 +79,7 @@ class MjpegStream {
      * data is coming from, so we don't accidentally stitch chunks from two different
      * pictures together.
      */
-    UsbPayloadHeader payloadHeader_{};
+    up_pl_hdr payloadHeader_{};
 
     /**
      * @brief Get the Active VideoFrame Slot object

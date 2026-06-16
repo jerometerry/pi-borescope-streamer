@@ -14,9 +14,8 @@
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
+#include "endian_conversion.hpp"
 #include "intrusive_ptr.hpp"
-#include "usb_packet_header.hpp"
-#include "usb_payload_header.hpp"
 
 BufferedMjpegStream::BufferedMjpegStream(std::shared_ptr<BufferPool> bufferPool,
                                          std::function<void(BufferPtr)> onFrameReady)
@@ -31,12 +30,10 @@ void BufferedMjpegStream::send(std::span<const uint8_t> data) {
     size_t i = readOffset_;
 
     while (i + TOTAL_USB_HEADER_SIZE <= inputBuffer_.size()) {
-        UsbPacketHeader packetHeader{};
+        up_pkt_hdr packetHeader{};
         std::memcpy(&packetHeader, &inputBuffer_[i], USB_PACKET_HEADER_SIZE);
 
-        if (packetHeader.getHeader() != UsbProtocol::USB_FRAME_HEADER ||
-            (packetHeader.getCameraId() != UsbProtocol::VIDEO_CAMERA_ID &&
-             packetHeader.getCameraId() != UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
+        if (!up_is_valid_pkt_header(&packetHeader)) {
             i++;
             continue;
         }
@@ -61,30 +58,30 @@ void BufferedMjpegStream::send(std::span<const uint8_t> data) {
             continue;
         }
 
-        size_t totalPacketSize = USB_PACKET_HEADER_SIZE + packetHeader.getLength();
+        size_t packetLength = EndianConversion::wireToHost(packetHeader.le_length);
+        size_t totalPacketSize = USB_PACKET_HEADER_SIZE + packetLength;
 
         if (i + totalPacketSize > inputBuffer_.size()) {
             break;
         }
 
-        if (packetHeader.getLength() < USB_PAYLOAD_HEADER_SIZE) {
+        if (packetLength < USB_PAYLOAD_HEADER_SIZE) {
             i++;
             continue;
         }
 
-        UsbPayloadHeader payloadHeader{};
+        up_pl_hdr payloadHeader{};
         std::memcpy(&payloadHeader, &inputBuffer_[i + USB_PACKET_HEADER_SIZE],
                     USB_PAYLOAD_HEADER_SIZE);
 
         if (activeFrame_ && !activeFrame_->empty() &&
-            payloadHeader_.getFrameId() != payloadHeader.getFrameId()) {
+            payloadHeader_.le_frame_id != payloadHeader.le_frame_id) {
             outputFrame();
         }
 
         payloadHeader_ = payloadHeader;
 
-        if (!payloadHeader.hasGravitySensor() && payloadHeader.getOtherFlags() == 0 &&
-            payloadHeader.getCameraNumber() < 2) {
+        if (up_valid_mjpeg_payload(&payloadHeader)) {
             size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
             size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
 

@@ -35,7 +35,7 @@ constexpr T wireToHost(T val) noexcept {
 }
 
 #pragma pack(push, 1)
-struct [[gnu::packed]] UsbPacketHeader {
+struct [[gnu::packed]] up_pkt_hdr {
     uint16_t leHeader;
     uint8_t leCameraId;
     uint16_t leLength;
@@ -51,7 +51,7 @@ struct [[gnu::packed]] UsbPacketHeader {
     }
 };
 
-struct [[gnu::packed]] UsbPayloadHeader {
+struct [[gnu::packed]] up_pl_hdr {
     uint8_t leFrameId;
     uint8_t leCameraNumber;
     uint8_t leFlags;
@@ -75,8 +75,8 @@ struct [[gnu::packed]] UsbPayloadHeader {
 };
 #pragma pack(pop)
 
-inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(UsbPacketHeader);
-inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(UsbPayloadHeader);
+inline constexpr size_t USB_PACKET_HEADER_SIZE = sizeof(up_pkt_hdr);
+inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = sizeof(up_pl_hdr);
 inline constexpr size_t TOTAL_USB_HEADER_SIZE = USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE;
 
 enum class ParseState : uint8_t {
@@ -147,8 +147,7 @@ int main(int argc, const char* argv[]) {
                         headerBuffer[headerBytesCollected++] = b;
                         // NOLINTEND(cppcoreguidelines-pro-bounds-constant-array-index)
                         if (headerBytesCollected == USB_PACKET_HEADER_SIZE) {
-                            const auto* pkt =
-                                reinterpret_cast<const UsbPacketHeader*>(headerBuffer);
+                            const auto* pkt = reinterpret_cast<const up_pkt_hdr*>(headerBuffer);
                             activeCameraId = pkt->getCameraId();
                             payloadBytesRemaining = pkt->getLength();
 
@@ -168,7 +167,7 @@ int main(int argc, const char* argv[]) {
                         payloadBytesRemaining--;
 
                         if (headerBytesCollected == TOTAL_USB_HEADER_SIZE) {
-                            const auto* payload = reinterpret_cast<const UsbPayloadHeader*>(
+                            const auto* payload = reinterpret_cast<const up_pl_hdr*>(
                                 headerBuffer + USB_PACKET_HEADER_SIZE);
 
                             if (lastFrameId != -1 &&

@@ -388,20 +388,20 @@ if(BUILD_TESTING)
     include(GoogleTest)
     gtest_discover_tests(run_project_tests)
 
-    # --- Kernel Driver Parser Tests ---
+    # --- Linux Driver Tests ---
 
-    add_executable(run_kernel_parser_tests
+    add_executable(run_linux_driver_tests
         "${KERNEL_DRIVER_DIR}/tests/test_useeplus_parser.cpp"
+	"${KERNEL_DRIVER_DIR}/tests/test_useeplus_protocol.cpp"
         "${KERNEL_DRIVER_DIR}/useeplus.c"
     )
 
-    # Inject the mock kernel headers BEFORE the standard includes
-    target_include_directories(run_kernel_parser_tests PRIVATE
+    target_include_directories(run_linux_driver_tests PRIVATE
         "${KERNEL_DRIVER_DIR}/tests/mock_kernel"
         "${KERNEL_DRIVER_DIR}/include"
     )
 
-    target_link_libraries(run_kernel_parser_tests
+    target_link_libraries(run_linux_driver_tests
         PRIVATE
             project_warnings
             gtest_main
@@ -410,7 +410,7 @@ if(BUILD_TESTING)
 
     # Disable static analysis for the kernel source since it uses C/kernel idioms
     # that will fail C++ user-space linting rules.
-    set_target_properties(run_kernel_parser_tests PROPERTIES
+    set_target_properties(run_linux_driver_tests PROPERTIES
         C_CLANG_TIDY ""
         CXX_CLANG_TIDY ""
         CXX_INCLUDE_WHAT_YOU_USE ""
@@ -419,11 +419,11 @@ if(BUILD_TESTING)
     )
 
     if(ENABLE_COVERAGE)
-        target_compile_options(run_kernel_parser_tests PRIVATE --coverage)
-        target_link_options(run_kernel_parser_tests PRIVATE --coverage)
+        target_compile_options(run_linux_driver_tests PRIVATE --coverage)
+        target_link_options(run_linux_driver_tests PRIVATE --coverage)
     endif()
 
-    gtest_discover_tests(run_kernel_parser_tests)
+    gtest_discover_tests(run_linux_driver_tests)
 endif()
 
 # --- Benchmarks (Opt-In) ---

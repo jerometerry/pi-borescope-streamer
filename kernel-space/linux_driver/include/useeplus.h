@@ -28,11 +28,6 @@
 #define JPEG_SOI_MAX_POS 256
 #define MAX_GHOST_HEADER_OFFSET 160
 
-/* Structural Protocol Sizing Expressions */
-#define UP_PKT_HDR_SIZE (sizeof(struct up_pkt_hdr))
-#define UP_PL_HDR_SIZE (sizeof(struct up_pl_hdr))
-#define TOTAL_USB_HEADER_SIZE (UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE)
-
 /* Global Diagnostic String Macro */
 #define DIAG_DATA_FORMAT \
 	"URBs:%lu Err:%lu Pkt:%lu Frm:%lu Deliv:%lu D-SOI:%lu D-EOI:%lu D-Q:%lu Ghost:%lu\n"

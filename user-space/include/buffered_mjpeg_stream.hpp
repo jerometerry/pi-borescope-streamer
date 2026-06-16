@@ -8,7 +8,6 @@
 #include "buffer_pool.hpp"
 #include "buffer_ptr.hpp"
 #include "constants.hpp"
-#include "usb_payload_header.hpp"
 
 /**
  * @brief The translator that extracts and reassembles clean MJPEG video pictures from the hardware
@@ -66,7 +65,7 @@ class BufferedMjpegStream {
      * data is coming from, so we don't accidentally stitch chunks from two different
      * pictures together.
      */
-    UsbPayloadHeader payloadHeader_{};
+    up_pl_hdr payloadHeader_{};
 
     /**
      * @brief A bookmark tracking how far we've read into the stream buffer.
