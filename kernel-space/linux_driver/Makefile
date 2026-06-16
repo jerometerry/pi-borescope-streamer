@@ -3,7 +3,7 @@
 	check-format fix-format
 
 obj-m += useeplus_v4l2.o
-useeplus_v4l2-y := useeplus_v4l2_core.o useeplus.o
+useeplus_v4l2-y := useeplus_v4l2_core.o useeplus.o useeplus_protocol.o
 
 MODULE_NAME := useeplus_v4l2
 GIT_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "no-git")
