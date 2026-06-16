@@ -1,12 +1,27 @@
 // SPDX-License-Identifier: GPL-2.0+
 
 #include "useeplus.h"
+#include <assert.h>
 #include <asm/byteorder.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/usb.h>
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
+
+static_assert(UP_MAX_WIRE_LEN <= U16_MAX, "UP_MAX_WIRE_LEN exceeds absolute u16 bounds");
+
+static inline struct up_pkt_hdr *up_get_pkt_hdr(struct up_drv_data *drv_data,
+						size_t index)
+{
+	return (struct up_pkt_hdr *)(drv_data->decode_buf + index);
+}
+
+static inline struct up_pl_hdr *up_get_pl_hdr(struct up_drv_data *drv_data,
+					      size_t index)
+{
+	return (struct up_pl_hdr *)(drv_data->decode_buf + index + UP_PKT_HDR_SIZE);
+}
 
 static bool up_is_valid_header(struct up_pkt_hdr *pkt)
 {
@@ -156,7 +171,11 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 
 	vaddr = vb2_plane_vaddr(&drv_data->active_buf->vb2_buffer.vb2_buf, 0);
 	if (unlikely(!vaddr)) {
-		drv_data->active_buf = NULL;
+		/*
+		 * If we didn't get a virtual memory address to the video plane, recycle
+		 * drv_data->active_buf to use on the next attempt.
+		 */
+		drv_data->active_buf_len = 0;
 		return;
 	}
 
@@ -198,139 +217,150 @@ overflow_reset:
 			    "useeplus: Overflow Prevention. Size: %zu, Current: %zu\n",
 			    pl_size, current_len);
 
+	/*
+	 * We didn't successfully deliver a frame. Recycle drv_data->active_buf to use on the
+	 * next attempt.
+	 */
 	drv_data->active_pl_len = 0;
 	drv_data->building_frame = false;
 	drv_data->dbg_frames_dropped_soi++;
+}
 
-	/*
-	 * Recycle or decouple the corrupted buffer state safely
-	 */
-	drv_data->active_buf = NULL;
+static inline void up_extract_video_packet(struct up_drv_data *drv_data,
+					   struct up_parse_ctx *ctx,
+					   size_t cur_index, size_t pkt_size)
+{
+	size_t pl_start, pl_size, dec_buf_len;
+	u8 *pl_src;
+
+	dec_buf_len = drv_data->decode_buf_len;
+
+	if (unlikely(pkt_size < TOTAL_USB_HEADER_SIZE))
+		return;
+
+	pl_start = cur_index + TOTAL_USB_HEADER_SIZE;
+	pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
+
+	if (unlikely(pl_start >= dec_buf_len || pl_size > (dec_buf_len - pl_start)))
+		return;
+
+	pl_src = drv_data->decode_buf + pl_start;
+	up_process_video_payload(drv_data, ctx, pl_src, pl_size);
+}
+
+static inline bool up_has_gravity_sensor(u8 flags)
+{
+	return (flags & 0x01) != 0;
+}
+
+static inline bool up_has_other_flags(u8 flags)
+{
+	return ((flags >> 2) & 0x3F) != 0;
+}
+
+static enum up_parse_status up_parse_envelope(struct up_drv_data *drv_data,
+					      struct up_parse_ctx *ctx,
+					      struct up_envelope *env)
+{
+	size_t dec_buf_len = drv_data->decode_buf_len;
+	struct up_pkt_hdr *pkt_hdr;
+	struct up_pl_hdr *pl_hdr;
+	size_t hdr_off = 0;
+	size_t pl_off;
+	u16 pkt_len;
+
+	env->index = ctx->index;
+
+	pkt_hdr = up_get_pkt_hdr(drv_data, env->index);
+	pkt_len = le16_to_cpu(pkt_hdr->le_length);
+
+	if (unlikely(pkt_len > UP_MAX_WIRE_LEN)) {
+		ctx->index++;
+		return UP_PARSE_SKIP;
+	}
+
+	env->total_size = UP_PKT_HDR_SIZE + pkt_len;
+
+	if (!up_is_valid_header(pkt_hdr)) {
+		ctx->index++;
+		return UP_PARSE_SKIP;
+	}
+
+	if (up_check_ghost_header(drv_data, ctx, &hdr_off)) {
+		drv_data->dbg_ghost_headers++;
+		ctx->index += likely(hdr_off <= (dec_buf_len - env->index)) ? hdr_off : 1;
+		return UP_PARSE_SKIP;
+	}
+
+	drv_data->dbg_packets_found++;
+
+	if (env->total_size > (dec_buf_len - env->index))
+		return UP_PARSE_NEED_DATA;
+
+	if (pkt_len < UP_PL_HDR_SIZE) {
+		ctx->index += env->total_size;
+		return UP_PARSE_SKIP;
+	}
+
+	pl_off = env->index + UP_PKT_HDR_SIZE;
+	if (unlikely(pl_off >= dec_buf_len || (dec_buf_len - pl_off) < UP_PL_HDR_SIZE)) {
+		ctx->index += env->total_size;
+		return UP_PARSE_SKIP;
+	}
+
+	pl_hdr = up_get_pl_hdr(drv_data, env->index);
+
+	env->frame_id = pl_hdr->le_frame_id;
+	env->cam_num = pl_hdr->le_camera_number;
+	env->flags = pl_hdr->le_flags;
+
+	return UP_PARSE_OK;
+}
+
+static inline bool up_can_proceed(struct up_drv_data *drv_data,
+				  struct up_parse_ctx *ctx)
+{
+	size_t dec_buf_len = drv_data->decode_buf_len;
+
+	if (unlikely(ctx->index > dec_buf_len))
+		return false;
+
+	return (dec_buf_len - ctx->index) >= TOTAL_USB_HEADER_SIZE;
 }
 
 void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 {
-	size_t pl_start, pl_size, pkt_size, hdr_off, pl_off, cur_index, max_buf_len;
-	u8 cur_frm_id, cur_cam_num, cur_flags, other_flags, *hdr_ptr, *pl_src;
-	struct up_pl_hdr *payload;
-	struct up_pkt_hdr *pkt;
-	bool has_gravity_sensor;
-	u16 pkt_len;
+	size_t dec_buf_len = drv_data->decode_buf_len;
+	struct up_envelope env;
 
-	max_buf_len = drv_data->decode_buf_len;
-	if (unlikely(max_buf_len == 0 || !drv_data->decode_buf))
+	if (unlikely(dec_buf_len == 0 || !drv_data->decode_buf))
 		return;
 
-	while (ctx->index <= max_buf_len &&
-	       (max_buf_len - ctx->index) >= TOTAL_USB_HEADER_SIZE) {
-		cur_index = ctx->index;
-		hdr_ptr = drv_data->decode_buf + cur_index;
-		pkt = (struct up_pkt_hdr *)(hdr_ptr);
-		pkt_len = le16_to_cpu(pkt->le_length);
-
-		/*
-		 * Checks against the actual absolute physical wire capacity of the __le16 field.
-		 */
-		if (unlikely(pkt_len > UP_MAX_WIRE_LEN)) {
-			ctx->index++;
+	while (up_can_proceed(drv_data, ctx)) {
+		switch (up_parse_envelope(drv_data, ctx, &env)) {
+		case UP_PARSE_NEED_DATA:
+			return;
+		case UP_PARSE_SKIP:
 			continue;
-		}
-
-		/*
-		 * Explicitly verify that UP_PKT_HDR_SIZE + pkt_len won't overflow size_t
-		 */
-		if (unlikely(pkt_len > (SIZE_MAX - UP_PKT_HDR_SIZE))) {
-			ctx->index++;
-			continue;
-		}
-		pkt_size = UP_PKT_HDR_SIZE + pkt_len;
-		hdr_off = 0;
-
-		if (!up_is_valid_header(pkt)) {
-			ctx->index++;
-			continue;
-		}
-
-		if (up_check_ghost_header(drv_data, ctx, &hdr_off)) {
-			drv_data->dbg_ghost_headers++;
-			if (likely(hdr_off <= (max_buf_len - cur_index)))
-				ctx->index += hdr_off;
-			else
-				ctx->index++;
-
-			continue;
-		}
-
-		drv_data->dbg_packets_found++;
-
-		/*
-		 * Check that total calculated packet size doesn't overrun our buffer window
-		 */
-		if (pkt_size > (max_buf_len - cur_index))
+		case UP_PARSE_OK:
 			break;
-
-		/*
-		 * A packet payload must at least be large enough to contain the 7-byte header
-		 */
-		if (pkt_len < UP_PL_HDR_SIZE) {
-			ctx->index += pkt_size;
-			continue;
 		}
 
-		pl_off = cur_index + UP_PKT_HDR_SIZE;
+		if (unlikely(env.cam_num > MAX_CAM_NUM))
+			goto advance_parser;
 
-		/*
-		 * Verify pl_off structure alignment fits within safe boundaries
-		 */
-		if (unlikely(pl_off >= max_buf_len ||
-			     (max_buf_len - pl_off) <
-				     sizeof(struct up_pl_hdr))) {
-			ctx->index += pkt_size;
-			continue;
-		}
-
-		payload = (struct up_pl_hdr *)(drv_data->decode_buf + pl_off);
-
-		cur_frm_id = payload->le_frame_id;
-		cur_cam_num = payload->le_camera_number;
-		cur_flags = payload->le_flags;
-
-		/*
-		 * Frame Boundary Tracking
-		 */
-		if (drv_data->building_frame &&
-		    drv_data->frame_id != cur_frm_id)
+		if (drv_data->building_frame && drv_data->frame_id != env.frame_id)
 			up_finalize_active_frame(drv_data);
 
-		drv_data->frame_id = cur_frm_id;
+		drv_data->frame_id = env.frame_id;
 		drv_data->building_frame = true;
-		has_gravity_sensor = (cur_flags & 0x01) != 0;
-		other_flags = (cur_flags >> 2) & 0x3F;
 
-		/*
-		 * Process Video Feed Only (Camera Stream ID 0x0B checked via up_is_valid_header)
-		 */
-		if (!has_gravity_sensor && other_flags == 0 &&
-		    cur_cam_num <= MAX_CAM_NUM) {
-			if (likely(pkt_size >= TOTAL_USB_HEADER_SIZE)) {
-				pl_start = cur_index + TOTAL_USB_HEADER_SIZE;
-				pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
+		if (up_has_gravity_sensor(env.flags) || up_has_other_flags(env.flags))
+			goto advance_parser;
 
-				if (likely(pl_start < max_buf_len &&
-					   pl_size <= (max_buf_len - pl_start))) {
-					pl_src = drv_data->decode_buf + pl_start;
-					up_process_video_payload(drv_data, ctx, pl_src, pl_size);
-				}
-			}
-		}
+		up_extract_video_packet(drv_data, ctx, env.index, env.total_size);
 
-		/*
-		 * Hard infinite loop defense against EMI register corruption
-		 */
-		if (unlikely(pkt_size == 0 ||
-			     pkt_size > (max_buf_len - cur_index)))
-			ctx->index++;
-		else
-			ctx->index += pkt_size;
+advance_parser:
+		ctx->index += env.total_size;
 	}
 }
