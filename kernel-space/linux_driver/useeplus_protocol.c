@@ -23,7 +23,7 @@ static bool up_check_ghost_header(const u8 *buffer, size_t len, size_t index,
 
 size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
 {
-	size_t index, size_t pkt_len, size_t total_size, size_t ghost_off, size_t pl_size;
+	size_t index, pkt_len, total_size, ghost_off, pl_size;
 	struct up_pkt_hdr *pkt_hdr;
 	struct up_pl_hdr *pl_hdr;
 	u8 *pl_src;
