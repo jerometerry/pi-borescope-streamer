@@ -64,7 +64,7 @@ static void kernel_on_frame_start(void *ctx, u8 frame_id, u8 cam_num)
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
-static void kernel_on_video_payload(void *ctx, const u8 *data, size_t len)
+static void kernel_on_video_payload(void *ctx, u8 *data, size_t len)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
 	struct vb2_buffer *vb;
