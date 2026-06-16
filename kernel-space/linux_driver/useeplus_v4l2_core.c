@@ -872,6 +872,24 @@ static void up_buf_queue(struct vb2_buffer *vb)
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
+static int up_vidioc_enum_framesizes(struct file *file, void *priv,
+				     struct v4l2_frmsizeenum *fsize)
+{
+	struct up_drv_data *drv_data = video_drvdata(file);
+
+	if (fsize->index > 0)
+		return -EINVAL;
+
+	if (fsize->pixel_format != V4L2_PIX_FMT_MJPEG)
+		return -EINVAL;
+
+	fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+	fsize->discrete.width = drv_data->width;
+	fsize->discrete.height = drv_data->height;
+
+	return 0;
+}
+
 static int up_vidioc_enum_frameintervals(struct file *file, void *priv,
 					 struct v4l2_frmivalenum *fival)
 {
@@ -919,6 +937,7 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 	.vidioc_s_fmt_vid_cap = up_vidioc_fmt_vid_cap,
 	.vidioc_try_fmt_vid_cap = up_vidioc_fmt_vid_cap,
 	.vidioc_enum_fmt_vid_cap = up_vidioc_enum_fmt_vid_cap,
+	.vidioc_enum_framesizes = up_vidioc_enum_framesizes,
 	.vidioc_enum_frameintervals = up_vidioc_enum_frameintervals,
 	.vidioc_enum_input = up_vidioc_enum_input,
 	.vidioc_g_input = up_vidioc_g_input,
