@@ -2,7 +2,7 @@
 
 #include "useeplus_protocol.h"
 
-static bool up_check_ghost_header(const u8 *buffer, size_t len, size_t index,
+static bool up_check_ghost_header(u8 *buffer, size_t len, size_t index,
 				  size_t *hdr_off)
 {
 	struct up_pkt_hdr *pkt_hdr;
