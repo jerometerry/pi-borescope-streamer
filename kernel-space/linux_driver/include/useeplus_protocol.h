@@ -123,34 +123,34 @@ static inline bool up_has_other_flags(u8 flags)
 	return up_get_other_flags(flags) != 0;
 }
 
-static inline void up_set_has_gravity_sensor(struct up_pl_hdr* pl, bool has)
+static inline void up_set_has_gravity_sensor(struct up_pl_hdr *pl, bool has)
 {
-    uint8_t current = pl->le_flags;
-    if (has) {
-        current |= 0x01;
-    } else {
-        current &= ~0x01;
-    }
-    pl->le_flags = current;
+	uint8_t current = pl->le_flags;
+	if (has) {
+		current |= 0x01;
+	} else {
+		current &= ~0x01;
+	}
+	pl->le_flags = current;
 }
 
-static inline void up_set_button_pressed(struct up_pl_hdr* pl, bool pressed)
+static inline void up_set_button_pressed(struct up_pl_hdr *pl, bool pressed)
 {
-    uint8_t current = pl->le_flags;
-    if (pressed) {
-        current |= 0x02;
-    } else {
-        current &= ~0x02;
-    }
-    pl->le_flags = current;
+	uint8_t current = pl->le_flags;
+	if (pressed) {
+		current |= 0x02;
+	} else {
+		current &= ~0x02;
+	}
+	pl->le_flags = current;
 }
 
-static inline void up_set_other_flags(struct up_pl_hdr* pl, uint8_t val)
+static inline void up_set_other_flags(struct up_pl_hdr *pl, uint8_t val)
 {
-    uint8_t current = pl->le_flags;
-    current &= 0x03;
-    current |= ((val & 0x3F) << 2);
-    pl->le_flags = current;
+	uint8_t current = pl->le_flags;
+	current &= 0x03;
+	current |= ((val & 0x3F) << 2);
+	pl->le_flags = current;
 }
 
 static inline bool up_valid_mjpeg_payload(const struct up_pl_hdr *pl)
