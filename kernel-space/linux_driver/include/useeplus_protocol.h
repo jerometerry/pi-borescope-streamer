@@ -111,7 +111,7 @@ struct up_parser {
 	bool building_frame;
 };
 
-size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len);
+size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len);
 
 static inline bool up_check_pkt_header(u16 delimeter, u8 device_id)
 {

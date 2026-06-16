@@ -21,7 +21,7 @@ static bool up_check_ghost_header(u8 *buffer, size_t len, size_t index,
 	return false;
 }
 
-size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
+size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 {
 	size_t pkt_len, total_size, ghost_off, pl_size;
 	struct up_pkt_hdr *pkt_hdr;
