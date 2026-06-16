@@ -46,6 +46,79 @@ enum up_config {
 	USB_TO = 1000,
 };
 
+static void kernel_on_frame_start(void *ctx, u8 frame_id, u8 cam_num)
+{
+	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
+	unsigned long flags;
+
+	drv_data->active_pl_len = 0;
+
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	if (!list_empty(&drv_data->ready_queue)) {
+		drv_data->active_buf = list_first_entry(&drv_data->ready_queue,
+							struct up_buffer, list);
+		list_del(&drv_data->active_buf->list);
+	} else {
+		drv_data->active_buf = NULL;
+	}
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+}
+
+static void kernel_on_video_payload(void *ctx, const u8 *data, size_t len)
+{
+	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
+	struct vb2_buffer *vb;
+	u8 *vaddr;
+
+	if (!drv_data->active_buf)
+		return;
+
+	if (drv_data->active_pl_len + len > MAX_FRAME_SIZE) {
+		drv_data->active_pl_len = 0;
+		return;
+	}
+
+	vb = &drv_data->active_buf->vb2_buffer.vb2_buf;
+	vaddr = vb2_plane_vaddr(vb, 0);
+
+	if (vaddr) {
+		memcpy(vaddr + drv_data->active_pl_len, data, len);
+		drv_data->active_pl_len += len;
+	}
+}
+
+static void kernel_on_frame_end(void *ctx)
+{
+	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
+	struct vb2_buffer *vb;
+	u8 *vaddr;
+	size_t eoi_off = 0;
+	bool found_eoi = false;
+
+	if (!drv_data->active_buf || drv_data->active_pl_len < 2)
+		return;
+
+	vb = &drv_data->active_buf->vb2_buffer.vb2_buf;
+	vaddr = vb2_plane_vaddr(vb, 0);
+
+	for (int j = drv_data->active_pl_len; j >= 2; j--) {
+		if (vaddr[j - 2] == 0xFF && vaddr[j - 1] == 0xD9) {
+			eoi_off = j;
+			found_eoi = true;
+			break;
+		}
+	}
+
+	if (found_eoi) {
+		vb2_set_plane_payload(vb, 0, eoi_off);
+		vb->timestamp = ktime_get_ns();
+		drv_data->active_buf->vb2_buffer.sequence =
+			drv_data->sequence++;
+		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
+		drv_data->active_buf = NULL;
+	}
+}
+
 static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 {
 	struct usb_device *u_dev = drv_data->usb_dev;
@@ -88,12 +161,12 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 
 static void up_work_handler(struct work_struct *work)
 {
-	struct up_parse_ctx ctx = { .index = 0 };
-	struct up_drv_data *drv_data;
-	size_t remaining;
+	struct up_drv_data *drv_data =
+		container_of(work, struct up_drv_data, work);
 	unsigned int len;
+	size_t consumed, remaining;
+	struct up_parser parser = { 0 };
 
-	drv_data = container_of(work, struct up_drv_data, work);
 	len = kfifo_out(&drv_data->fifo,
 			drv_data->decode_buf + drv_data->decode_buf_len,
 			MAX_WORKSPACE_SIZE - drv_data->decode_buf_len);
@@ -101,15 +174,27 @@ static void up_work_handler(struct work_struct *work)
 	drv_data->decode_buf_len += len;
 
 	if (drv_data->decode_buf_len > 0) {
-		up_decode_packets(drv_data, &ctx);
+		/* Setup the parser */
+		parser.ctx = drv_data;
+		parser.building_frame = drv_data->building_frame;
+		parser.frame_id = drv_data->frame_id;
+		parser.cb.on_frame_start = kernel_on_frame_start;
+		parser.cb.on_video_payload = kernel_on_video_payload;
+		parser.cb.on_frame_end = kernel_on_frame_end;
 
-		/*
-		 * Shift the remaining fractional packet down
-		 */
-		if (ctx.index < drv_data->decode_buf_len) {
-			remaining = drv_data->decode_buf_len - ctx.index;
+		/* Feed the pure parser */
+		consumed = up_parser_feed(&parser, drv_data->decode_buf,
+					  drv_data->decode_buf_len);
+
+		/* Save parser state back to driver for the next hardware interrupt */
+		drv_data->building_frame = parser.building_frame;
+		drv_data->frame_id = parser.frame_id;
+
+		/* Shift any remaining fractional packet down to the front of the buffer */
+		if (consumed < drv_data->decode_buf_len) {
+			remaining = drv_data->decode_buf_len - consumed;
 			memmove(drv_data->decode_buf,
-				drv_data->decode_buf + ctx.index, remaining);
+				drv_data->decode_buf + consumed, remaining);
 			drv_data->decode_buf_len = remaining;
 		} else {
 			drv_data->decode_buf_len = 0;
@@ -902,7 +987,8 @@ static int up_vidioc_enum_frameintervals(struct file *file, void *priv,
 	if (fival->pixel_format != V4L2_PIX_FMT_MJPEG)
 		return -EINVAL;
 
-	if (fival->width != drv_data->width || fival->height != drv_data->height)
+	if (fival->width != drv_data->width ||
+	    fival->height != drv_data->height)
 		return -EINVAL;
 
 	fival->type = V4L2_FRMIVAL_TYPE_DISCRETE;

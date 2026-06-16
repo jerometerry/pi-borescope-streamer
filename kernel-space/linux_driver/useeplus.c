@@ -9,7 +9,8 @@
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
 
-static_assert(UP_MAX_WIRE_LEN <= U16_MAX, "UP_MAX_WIRE_LEN exceeds absolute u16 bounds");
+static_assert(UP_MAX_WIRE_LEN <= U16_MAX,
+	      "UP_MAX_WIRE_LEN exceeds absolute u16 bounds");
 
 static inline struct up_pkt_hdr *up_get_pkt_hdr(struct up_drv_data *drv_data,
 						size_t index)
@@ -20,7 +21,8 @@ static inline struct up_pkt_hdr *up_get_pkt_hdr(struct up_drv_data *drv_data,
 static inline struct up_pl_hdr *up_get_pl_hdr(struct up_drv_data *drv_data,
 					      size_t index)
 {
-	return (struct up_pl_hdr *)(drv_data->decode_buf + index + UP_PKT_HDR_SIZE);
+	return (struct up_pl_hdr *)(drv_data->decode_buf + index +
+				    UP_PKT_HDR_SIZE);
 }
 
 static bool up_check_ghost_header(struct up_drv_data *drv_data,
@@ -204,9 +206,10 @@ overflow_reset:
 	/*
 	 * Hard, fail-secure rollback of the driver state
 	 */
-	dev_err_ratelimited(&drv_data->itf->dev,
-			    "useeplus: Overflow Prevention. Size: %zu, Current: %zu\n",
-			    pl_size, current_len);
+	dev_err_ratelimited(
+		&drv_data->itf->dev,
+		"useeplus: Overflow Prevention. Size: %zu, Current: %zu\n",
+		pl_size, current_len);
 
 	/*
 	 * We didn't successfully deliver a frame. Recycle drv_data->active_buf to use on the
@@ -232,7 +235,8 @@ static inline void up_extract_video_packet(struct up_drv_data *drv_data,
 	pl_start = cur_index + TOTAL_USB_HEADER_SIZE;
 	pl_size = pkt_size - TOTAL_USB_HEADER_SIZE;
 
-	if (unlikely(pl_start >= dec_buf_len || pl_size > (dec_buf_len - pl_start)))
+	if (unlikely(pl_start >= dec_buf_len ||
+		     pl_size > (dec_buf_len - pl_start)))
 		return;
 
 	pl_src = drv_data->decode_buf + pl_start;
@@ -253,7 +257,7 @@ static enum up_parse_status up_parse_envelope(struct up_drv_data *drv_data,
 	env->index = ctx->index;
 
 	pkt_hdr = up_get_pkt_hdr(drv_data, env->index);
-	pkt_len = le16_to_cpu(pkt_hdr->le_length);
+	pkt_len = UP_LE16_TO_CPU(pkt_hdr->le_length);
 
 	if (unlikely(pkt_len > UP_MAX_WIRE_LEN)) {
 		ctx->index++;
@@ -269,7 +273,9 @@ static enum up_parse_status up_parse_envelope(struct up_drv_data *drv_data,
 
 	if (up_check_ghost_header(drv_data, ctx, &hdr_off)) {
 		drv_data->dbg_ghost_headers++;
-		ctx->index += likely(hdr_off <= (dec_buf_len - env->index)) ? hdr_off : 1;
+		ctx->index += likely(hdr_off <= (dec_buf_len - env->index)) ?
+				      hdr_off :
+				      1;
 		return UP_PARSE_SKIP;
 	}
 
@@ -284,7 +290,8 @@ static enum up_parse_status up_parse_envelope(struct up_drv_data *drv_data,
 	}
 
 	pl_off = env->index + UP_PKT_HDR_SIZE;
-	if (unlikely(pl_off >= dec_buf_len || (dec_buf_len - pl_off) < UP_PL_HDR_SIZE)) {
+	if (unlikely(pl_off >= dec_buf_len ||
+		     (dec_buf_len - pl_off) < UP_PL_HDR_SIZE)) {
 		ctx->index += env->total_size;
 		return UP_PARSE_SKIP;
 	}
@@ -330,16 +337,19 @@ void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx)
 		if (unlikely(env.cam_num > MAX_CAM_NUM))
 			goto advance_parser;
 
-		if (drv_data->building_frame && drv_data->frame_id != env.frame_id)
+		if (drv_data->building_frame &&
+		    drv_data->frame_id != env.frame_id)
 			up_finalize_active_frame(drv_data);
 
 		drv_data->frame_id = env.frame_id;
 		drv_data->building_frame = true;
 
-		if (up_has_gravity_sensor(env.flags) || up_has_other_flags(env.flags))
+		if (up_has_gravity_sensor(env.flags) ||
+		    up_has_other_flags(env.flags))
 			goto advance_parser;
 
-		up_extract_video_packet(drv_data, ctx, env.index, env.total_size);
+		up_extract_video_packet(drv_data, ctx, env.index,
+					env.total_size);
 
 advance_parser:
 		ctx->index += env.total_size;

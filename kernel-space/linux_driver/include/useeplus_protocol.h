@@ -3,33 +3,33 @@
 #define _USEEPLUS_PROTOCOL_H_
 
 #ifdef __KERNEL__
-	#include <linux/types.h>
-	#include <asm/byteorder.h>
+#include <linux/types.h>
+#include <asm/byteorder.h>
 
-	#define UP_LE16_TO_CPU(x) le16_to_cpu(x)
-	#define UP_LE32_TO_CPU(x) le32_to_cpu(x)
+#define UP_LE16_TO_CPU(x) le16_to_cpu(x)
+#define UP_LE32_TO_CPU(x) le32_to_cpu(x)
 #else
-	#include <stdint.h>
-	#include <stdbool.h>
-	#include <stddef.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
 
-	typedef uint8_t  u8;
-	typedef uint16_t u16;
-	typedef uint32_t u32;
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
 
-	#ifndef __packed
-	#define __packed __attribute__((packed))
-	#endif
+#ifndef __packed
+#define __packed __attribute__((packed))
+#endif
 
-	#if defined(__APPLE__)
-		#include <libkern/OSByteOrder.h>
-		#define UP_LE16_TO_CPU(x) OSSwapLittleToHostInt16(x)
-		#define UP_LE32_TO_CPU(x) OSSwapLittleToHostInt32(x)
-	#else
-		#include <endian.h>
-		#define UP_LE16_TO_CPU(x) le16toh(x)
-		#define UP_LE32_TO_CPU(x) le32toh(x)
-	#endif
+#if defined(__APPLE__)
+#include <libkern/OSByteOrder.h>
+#define UP_LE16_TO_CPU(x) OSSwapLittleToHostInt16(x)
+#define UP_LE32_TO_CPU(x) OSSwapLittleToHostInt32(x)
+#else
+#include <endian.h>
+#define UP_LE16_TO_CPU(x) le16toh(x)
+#define UP_LE32_TO_CPU(x) le32toh(x)
+#endif
 #endif
 
 #ifdef __cplusplus
@@ -63,14 +63,14 @@ enum up_jpeg_marker {
 
 struct up_pkt_hdr {
 	u16 le_delimeter;
-	u8  le_device_id;
+	u8 le_device_id;
 	u16 le_length;
 } __packed;
 
 struct up_pl_hdr {
-	u8  le_frame_id;
-	u8  le_camera_number;
-	u8  le_flags;
+	u8 le_frame_id;
+	u8 le_camera_number;
+	u8 le_flags;
 	u32 le_gravity_sensor;
 } __packed;
 
@@ -80,19 +80,43 @@ struct up_parser_callbacks {
 	void (*on_frame_end)(void *ctx);
 };
 
+struct up_parse_ctx {
+	size_t index;
+	unsigned long flags;
+
+	u8 *vaddr;
+
+	struct up_buffer *active_buf;
+	size_t active_pl_len;
+
+	u8 *decode_buf;
+	size_t decode_buf_len;
+};
+
+enum up_parse_status { UP_PARSE_OK, UP_PARSE_SKIP, UP_PARSE_NEED_DATA };
+
+struct up_envelope {
+	size_t index;
+	size_t total_size;
+	u8 frame_id;
+	u8 cam_num;
+	u8 flags;
+};
+
 struct up_parser {
 	struct up_parser_callbacks cb;
 	void *ctx;
-	u8 current_frame_id;
-	bool is_building_frame;
+
+	int frame_id;
+	bool building_frame;
 };
 
-void up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len);
+size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len);
 
 static inline bool up_check_pkt_header(u16 delimeter, u8 device_id)
 {
-	return (delimeter == UP_PKT_DEL &&
-		(device_id == VIDEO_CAMERA_ID || device_id == GRAVITY_SENSOR_ID));
+	return (delimeter == UP_PKT_DEL && (device_id == VIDEO_CAMERA_ID ||
+					    device_id == GRAVITY_SENSOR_ID));
 }
 
 static inline bool up_is_valid_pkt_header(const struct up_pkt_hdr *pkt)

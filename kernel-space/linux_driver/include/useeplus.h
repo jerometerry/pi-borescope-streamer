@@ -104,25 +104,6 @@ struct up_drv_data {
 	unsigned long dbg_usb_errors;
 };
 
-struct up_parse_ctx {
-	size_t index;
-	unsigned long flags;
-};
-
-enum up_parse_status {
-	UP_PARSE_OK,
-	UP_PARSE_SKIP,
-	UP_PARSE_NEED_DATA
-};
-
-struct up_envelope {
-	size_t index;
-	size_t total_size;
-	u8 frame_id;
-	u8 cam_num;
-	u8 flags;
-};
-
 void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx);
 
 #endif /* _up_H_ */
