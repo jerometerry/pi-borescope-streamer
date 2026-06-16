@@ -5,10 +5,15 @@
 static bool up_check_ghost_header(const u8 *buffer, size_t len, size_t index,
 				  size_t *hdr_off)
 {
-	size_t limit = (len - index - 3 < 160) ? len - index - 3 : 160;
-	for (size_t o = UP_PKT_HDR_SIZE; o <= limit; o++) {
-		if (up_is_valid_pkt_header(
-			    (const struct up_pkt_hdr *)(buffer + index + o))) {
+	struct up_pkt_hdr *pkt_hdr;
+	size_t limit;
+	size_t o;
+
+	limit = (len - index - 3 < 160) ? len - index - 3 : 160;
+
+	for (o = UP_PKT_HDR_SIZE; o <= limit; o++) {
+		pkt_hdr = (struct up_pkt_hdr *)(buffer + index + o);
+		if (up_is_valid_pkt_header(pkt_hdr)) {
 			*hdr_off = o;
 			return true;
 		}
@@ -18,14 +23,16 @@ static bool up_check_ghost_header(const u8 *buffer, size_t len, size_t index,
 
 size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
 {
-	size_t index = 0;
+	size_t index, size_t pkt_len, size_t total_size, size_t ghost_off, size_t pl_size;
+	struct up_pkt_hdr *pkt_hdr;
+	struct up_pl_hdr *pl_hdr;
+	u8 *pl_src;
 
 	while (index + TOTAL_USB_HEADER_SIZE <= len) {
-		const struct up_pkt_hdr *pkt_hdr =
-			(const struct up_pkt_hdr *)(buffer + index);
-		size_t pkt_len = UP_LE16_TO_CPU(pkt_hdr->le_length);
-		size_t total_size = UP_PKT_HDR_SIZE + pkt_len;
-		size_t ghost_off = 0;
+		pkt_hdr = (struct up_pkt_hdr *)(buffer + index);
+		pkt_len = UP_LE16_TO_CPU(pkt_hdr->le_length);
+		total_size = UP_PKT_HDR_SIZE + pkt_len;
+		ghost_off = 0;
 
 		if (!up_is_valid_pkt_header(pkt_hdr)) {
 			index++;
@@ -37,46 +44,41 @@ size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
 			continue;
 		}
 
-		if (total_size > (len - index)) {
+		if (total_size > (len - index))
 			break;
+
+		if (pkt_len < UP_PL_HDR_SIZE) {
+			index += total_size;
+			continue;
 		}
 
-		if (pkt_len >= UP_PL_HDR_SIZE) {
-			const struct up_pl_hdr *pl_hdr =
-				(const struct up_pl_hdr *)(buffer + index +
-							   UP_PKT_HDR_SIZE);
+		pl_hdr = (struct up_pl_hdr *)(buffer + index + UP_PKT_HDR_SIZE);
 
-			/* Ignore non-video/telemetry payloads */
-			if (up_valid_mjpeg_payload(pl_hdr)) {
-				if (parser->building_frame &&
-				    parser->frame_id != pl_hdr->le_frame_id) {
-					if (parser->cb.on_frame_end)
-						parser->cb.on_frame_end(
-							parser->ctx);
-				}
-
-				if (!parser->building_frame ||
-				    parser->frame_id != pl_hdr->le_frame_id) {
-					if (parser->cb.on_frame_start)
-						parser->cb.on_frame_start(
-							parser->ctx,
-							pl_hdr->le_frame_id,
-							pl_hdr->le_camera_number);
-					parser->frame_id = pl_hdr->le_frame_id;
-					parser->building_frame = true;
-				}
-
-				if (parser->cb.on_video_payload) {
-					const u8 *pl_src =
-						buffer + index +
-						TOTAL_USB_HEADER_SIZE;
-					size_t pl_size = total_size -
-							 TOTAL_USB_HEADER_SIZE;
-					parser->cb.on_video_payload(
-						parser->ctx, pl_src, pl_size);
-				}
-			}
+		if (!up_valid_mjpeg_payload(pl_hdr)) {
+			index += total_size;
+			continue;
 		}
+
+		if (parser->building_frame && parser->frame_id != pl_hdr->le_frame_id) {
+			if (parser->cb.on_frame_end)
+				parser->cb.on_frame_end(parser->ctx);
+		}
+
+		if (!parser->building_frame || parser->frame_id != pl_hdr->le_frame_id) {
+			if (parser->cb.on_frame_start)
+				parser->cb.on_frame_start(parser->ctx,
+							  pl_hdr->le_frame_id,
+							  pl_hdr->le_camera_number);
+			parser->frame_id = pl_hdr->le_frame_id;
+			parser->building_frame = true;
+		}
+
+		if (parser->cb.on_video_payload) {
+			pl_src = buffer + index + TOTAL_USB_HEADER_SIZE;
+			pl_size = total_size - TOTAL_USB_HEADER_SIZE;
+			parser->cb.on_video_payload(parser->ctx, pl_src, pl_size);
+		}
+
 		index += total_size;
 	}
 	return index;

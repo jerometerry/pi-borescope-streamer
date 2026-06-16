@@ -119,7 +119,7 @@ static inline bool up_check_pkt_header(u16 delimeter, u8 device_id)
 					    device_id == GRAVITY_SENSOR_ID));
 }
 
-static inline bool up_is_valid_pkt_header(const struct up_pkt_hdr *pkt)
+static inline bool up_is_valid_pkt_header(struct up_pkt_hdr *pkt)
 {
 	u16 del = UP_LE16_TO_CPU(pkt->le_delimeter);
 	u8 dev_id = pkt->le_device_id;
@@ -180,7 +180,7 @@ static inline void up_set_other_flags(struct up_pl_hdr *pl, uint8_t val)
 	pl->le_flags = current;
 }
 
-static inline bool up_valid_mjpeg_payload(const struct up_pl_hdr *pl)
+static inline bool up_valid_mjpeg_payload(struct up_pl_hdr *pl)
 {
 	if (!pl)
 		return false;
