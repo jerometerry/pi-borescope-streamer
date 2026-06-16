@@ -123,31 +123,34 @@ static inline bool up_has_other_flags(u8 flags)
 	return up_get_other_flags(flags) != 0;
 }
 
-static inline void up_set_has_gravity_sensor(struct up_pl_hdr *pl, bool has)
+static inline void up_set_has_gravity_sensor(struct up_pl_hdr *pl, bool has_gs)
 {
 	uint8_t current = pl->le_flags;
-	if (has) {
+
+	if (has_gs)
 		current |= 0x01;
-	} else {
+	else
 		current &= ~0x01;
-	}
+
 	pl->le_flags = current;
 }
 
 static inline void up_set_button_pressed(struct up_pl_hdr *pl, bool pressed)
 {
 	uint8_t current = pl->le_flags;
-	if (pressed) {
+
+	if (pressed)
 		current |= 0x02;
-	} else {
+	else
 		current &= ~0x02;
-	}
+
 	pl->le_flags = current;
 }
 
 static inline void up_set_other_flags(struct up_pl_hdr *pl, uint8_t val)
 {
 	uint8_t current = pl->le_flags;
+
 	current &= 0x03;
 	current |= ((val & 0x3F) << 2);
 	pl->le_flags = current;
