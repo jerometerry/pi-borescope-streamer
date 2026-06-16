@@ -175,7 +175,7 @@ static void up_process_video_payload(struct up_drv_data *drv_data,
 		 * If we didn't get a virtual memory address to the video plane, recycle
 		 * drv_data->active_buf to use on the next attempt.
 		 */
-		drv_data->active_buf_len = 0;
+		drv_data->active_pl_len = 0;
 		return;
 	}
 
