@@ -391,7 +391,7 @@ if(BUILD_TESTING)
     # --- Linux Driver Tests ---
 
     add_executable(run_linux_driver_tests
-        "${KERNEL_DRIVER_DIR}/tests/test_useeplus_parser.cpp"
+        "${KERNEL_DRIVER_DIR}/tests/test_useeplus_decoder.cpp"
 	"${KERNEL_DRIVER_DIR}/tests/test_useeplus_protocol.cpp"
 	"${KERNEL_DRIVER_DIR}/useeplus_protocol.c"
     )
