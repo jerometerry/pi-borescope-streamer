@@ -47,6 +47,26 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 		return UP_DECODE_INVALID_PKT;
 	}
 
+	if (up_check_ghost_hdr(buf, len, index, &hdr_off)) {
+		/*
+		 * Hardware packs 4 944 byte packets into 4K pages, leaving the
+		 * remaining 320 bytes uninitialized. This uninitialized data
+		 * contains remnants of other packets, which we need to filter out.
+		 *
+		 * We found another valid packet within a short distance from the
+		 * previous one. Treat the short packet as a ghost, and skip it.
+		 */
+		*index_ptr += hdr_off;
+		return UP_DECODE_SKIP;
+	}
+
+	/*
+	 * A valid payload cannot be larger than the packet size (944 bytes),
+	 * less the packet header size (5 bytes) and payload header size (7 bytes).
+	 * A payload is at most 932 bytes. For our purposes, using an upper bound of
+	 * 1024 is quick sanity check against that we aren't looking at uninitialized
+	 * data.
+	 */
 	pl_len = up_get_pl_len(pkt_hdr);
 	if (pl_len > UP_MAX_WIRE_LEN) {
 		(*index_ptr)++;
@@ -54,11 +74,6 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 	}
 
 	state->pkt_size = UP_PKT_HDR_SIZE + pl_len;
-
-	if (up_check_ghost_hdr(buf, len, index, &hdr_off)) {
-		*index_ptr += hdr_off;
-		return UP_DECODE_SKIP;
-	}
 
 	if ((index + state->pkt_size) > len)
 		return UP_DECODE_NEED_DATA;

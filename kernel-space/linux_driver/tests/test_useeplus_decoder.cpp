@@ -164,3 +164,76 @@ TEST(DecoderTest, DropsChunkIfSoiNotFound) {
     EXPECT_EQ(mock_context.frames_started, 1);
     EXPECT_EQ(mock_context.payload_data.size(), 0);
 }
+
+TEST(DecoderTest, HuntsForSignatureOnInvalidPacket) {
+    MockContext mock_context{};
+    struct up_decoder decoder = {0};
+    decoder.context = &mock_context;
+    decoder.cb.on_frame_start = mock_on_frame_start;
+    decoder.cb.on_video_payload = mock_on_video_payload;
+    decoder.cb.on_frame_end = mock_on_frame_end;
+
+    std::vector<u8> buffer(1024, 0x00);
+
+    buffer[0] = 0xAA;
+    buffer[1] = 0xBB;
+    buffer[2] = 0xCC;
+
+    size_t valid_start = 3;
+    struct up_pkt_hdr* pkt = up_get_pkt_hdr(buffer.data(), valid_start);
+    pkt->le_delimeter = UP_LE16_TO_CPU(UP_PKT_DEL);
+    pkt->le_device_id = VIDEO_CAMERA_ID;
+    pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 4);
+
+    struct up_pl_hdr* pl = up_get_pl_hdr(buffer.data(), valid_start + UP_PKT_HDR_SIZE);
+    pl->le_frame_id = 1;
+
+    u8* payload_data = (u8*)(pl + 1);
+    payload_data[0] = JPEG_DEL;
+    payload_data[1] = JPEG_SOI;
+    payload_data[2] = JPEG_DEL;
+    payload_data[3] = JPEG_EOI;
+
+    size_t consumed = up_decode_bulk(&decoder, buffer.data(), 1024);
+
+    EXPECT_EQ(mock_context.frames_started, 1);
+    EXPECT_EQ(mock_context.frames_ended, 1);
+    EXPECT_EQ(mock_context.payload_data.size(), 4);
+}
+
+TEST(DecoderTest, RejectsMassiveLengthAndHunts) {
+    MockContext mock_context{};
+    struct up_decoder decoder = {0};
+    decoder.context = &mock_context;
+    decoder.cb.on_frame_start = mock_on_frame_start;
+    decoder.cb.on_video_payload = mock_on_video_payload;
+    decoder.cb.on_frame_end = mock_on_frame_end;
+
+    std::vector<u8> buffer(1024, 0x00);
+
+    struct up_pkt_hdr* bad_pkt = up_get_pkt_hdr(buffer.data(), 0);
+    bad_pkt->le_delimeter = UP_LE16_TO_CPU(UP_PKT_DEL);
+    bad_pkt->le_device_id = VIDEO_CAMERA_ID;
+    bad_pkt->le_length = UP_LE16_TO_CPU(UP_MAX_WIRE_LEN + 100);
+
+    size_t valid_start = 200;
+    struct up_pkt_hdr* good_pkt = up_get_pkt_hdr(buffer.data(), valid_start);
+    good_pkt->le_delimeter = UP_LE16_TO_CPU(UP_PKT_DEL);
+    good_pkt->le_device_id = VIDEO_CAMERA_ID;
+    good_pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 4);
+
+    struct up_pl_hdr* pl = up_get_pl_hdr(buffer.data(), valid_start + UP_PKT_HDR_SIZE);
+    pl->le_frame_id = 1;
+
+    u8* payload_data = (u8*)(pl + 1);
+    payload_data[0] = JPEG_DEL;
+    payload_data[1] = JPEG_SOI;
+    payload_data[2] = JPEG_DEL;
+    payload_data[3] = JPEG_EOI;
+
+    size_t consumed = up_decode_bulk(&decoder, buffer.data(), 1024);
+
+    EXPECT_EQ(mock_context.frames_started, 1);
+    EXPECT_EQ(mock_context.frames_ended, 1);
+    EXPECT_EQ(mock_context.payload_data.size(), 4);
+}
