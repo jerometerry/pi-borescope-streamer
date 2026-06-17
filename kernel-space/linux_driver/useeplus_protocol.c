@@ -11,8 +11,8 @@ static bool up_check_ghost_header(u8 *buf, size_t len, size_t index, size_t *hdr
 		return false;
 
 	limit = len - index - 3;
-	if (limit > MAX_GHOST_HEADER_OFFSET)
-		limit = MAX_GHOST_HEADER_OFFSET;
+	if (limit > MAX_GHOST_HDR_OFF)
+		limit = MAX_GHOST_HDR_OFF;
 
 	for (o = UP_PKT_HDR_SIZE; o <= limit; o++) {
 		o_pkt = up_get_pkt_hdr(buf, index + o);
@@ -90,7 +90,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	if (len == 0 || !buf)
 		return 0;
 
-	while ((len - index) >= TOTAL_USB_HEADER_SIZE) {
+	while ((len - index) >= TOTAL_USB_HDR_SIZE) {
 		switch (up_decode(buf, len, &index, &state)) {
 		case UP_DECODE_NEED_DATA:
 			return index;
@@ -127,8 +127,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 
 		pl_hdr = up_get_pl_hdr(buf, index + UP_PKT_HDR_SIZE);
 		if (up_valid_mjpeg_pl(pl_hdr)) {
-			pl_start = index + TOTAL_USB_HEADER_SIZE;
-			pl_size = state.pkt_size - TOTAL_USB_HEADER_SIZE;
+			pl_start = index + TOTAL_USB_HDR_SIZE;
+			pl_size = state.pkt_size - TOTAL_USB_HDR_SIZE;
 			pl_src = buf + pl_start;
 
 			if (!dec->found_soi) {

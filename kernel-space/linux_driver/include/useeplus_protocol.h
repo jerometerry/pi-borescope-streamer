@@ -38,11 +38,11 @@ extern "C" {
 
 #define UP_MAX_WIRE_LEN 1024
 #define JPEG_SOI_MAX_POS 256
-#define MAX_GHOST_HEADER_OFFSET 160
+#define MAX_GHOST_HDR_OFF 160
 
 #define UP_PKT_HDR_SIZE (sizeof(struct up_pkt_hdr))
 #define UP_PL_HDR_SIZE (sizeof(struct up_pl_hdr))
-#define TOTAL_USB_HEADER_SIZE (UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE)
+#define TOTAL_USB_HDR_SIZE (UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE)
 
 enum up_usb_topology {
 	UP_IAP_INTERFACE = 0,
