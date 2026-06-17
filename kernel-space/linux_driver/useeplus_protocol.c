@@ -43,33 +43,33 @@ static enum up_decode_status up_decode(u8 *buffer, size_t len, size_t *index_ptr
 
 	if (pkt_len > UP_MAX_WIRE_LEN) {
 		(*index_ptr)++;
-		return UP_PARSE_SKIP;
+		return UP_DECODE_SKIP;
 	}
 
 	state->total_size = UP_PKT_HDR_SIZE + pkt_len;
 
 	if (!up_is_valid_pkt_header(pkt_hdr)) {
 		(*index_ptr)++;
-		return UP_PARSE_SKIP;
+		return UP_DECODE_SKIP;
 	}
 
 	if (up_check_ghost_header(buffer, len, index, &hdr_off)) {
 		*index_ptr += (hdr_off <= (len - index)) ? hdr_off : 1;
-		return UP_PARSE_SKIP;
+		return UP_DECODE_SKIP;
 	}
 
 	if (state->total_size > (len - index))
-		return UP_PARSE_NEED_DATA;
+		return UP_DECODE_NEED_DATA;
 
 	if (pkt_len < UP_PL_HDR_SIZE) {
 		*index_ptr += state->total_size;
-		return UP_PARSE_SKIP;
+		return UP_DECODE_SKIP;
 	}
 
 	pl_off = index + UP_PKT_HDR_SIZE;
 	if (pl_off >= len || (len - pl_off) < UP_PL_HDR_SIZE) {
 		*index_ptr += state->total_size;
-		return UP_PARSE_SKIP;
+		return UP_DECODE_SKIP;
 	}
 
 	pl_hdr = (struct up_pl_hdr *)(buffer + pl_off);
@@ -78,7 +78,7 @@ static enum up_decode_status up_decode(u8 *buffer, size_t len, size_t *index_ptr
 	state->cam_num = pl_hdr->le_camera_number;
 	state->flags = pl_hdr->le_flags;
 
-	return UP_PARSE_OK;
+	return UP_DECODE_OK;
 }
 
 size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
