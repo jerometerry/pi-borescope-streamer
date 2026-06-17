@@ -168,14 +168,11 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 				}
 			}
 
-			if (parser->cb.on_video_payload) {
-				parser->cb.on_video_payload(parser->ctx, pl_src,
-							    emit_size);
-			}
+			if (parser->cb.on_video_payload)
+				parser->cb.on_video_payload(parser->ctx, pl_src, emit_size);
 
-			if (parser->eof_reached && parser->cb.on_frame_end) {
+			if (parser->eof_reached && parser->cb.on_frame_end)
 				parser->cb.on_frame_end(parser->ctx);
-			}
 		}
 
 advance_parser:
