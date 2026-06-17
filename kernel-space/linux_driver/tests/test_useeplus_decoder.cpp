@@ -31,21 +31,21 @@ TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame) {
     decoder.cb.on_frame_end = mock_on_frame_end;
 
     std::vector<u8> buffer(1024, 0x00);
-    struct up_pkt_hdr* pkt = (struct up_pkt_hdr*)buffer.data();
+    struct up_pkt_hdr* pkt = up_get_pkt_hdr(buffer.data(), 0);
     pkt->le_delimeter = UP_LE16_TO_CPU(0xBBAA);
-    pkt->le_device_id = 0x0B;
-    pkt->le_length = UP_LE16_TO_CPU(sizeof(struct up_pl_hdr) + 6);
+    pkt->le_device_id = VIDEO_CAMERA_ID;
+    pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 6);
 
-    struct up_pl_hdr* pl = (struct up_pl_hdr*)(buffer.data() + sizeof(struct up_pkt_hdr));
+    struct up_pl_hdr* pl = up_get_pl_hdr(buffer.data(), UP_PKT_HDR_SIZE);
     pl->le_frame_id = 1;
 
     u8* payload_data = (u8*)(pl + 1);
     payload_data[0] = 0x99;
-    payload_data[1] = 0xFF;
-    payload_data[2] = 0xD8;
+    payload_data[1] = JPEG_DEL;
+    payload_data[2] = JPEG_SOI;
     payload_data[3] = 0xAA;
-    payload_data[4] = 0xFF;
-    payload_data[5] = 0xD9;
+    payload_data[4] = JPEG_DEL;
+    payload_data[5] = JPEG_EOI;
 
     size_t consumed = up_decode_bulk(&decoder, buffer.data(), 1024);
 
@@ -53,6 +53,6 @@ TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame) {
     EXPECT_EQ(mock_context.frames_ended, 1);
 
     EXPECT_EQ(mock_context.payload_data.size(), 5);
-    EXPECT_EQ(mock_context.payload_data[0], 0xFF);
-    EXPECT_EQ(mock_context.payload_data[1], 0xD8);
+    EXPECT_EQ(mock_context.payload_data[0], JPEG_DEL);
+    EXPECT_EQ(mock_context.payload_data[1], JPEG_SOI);
 }

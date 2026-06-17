@@ -143,12 +143,12 @@ static inline bool up_check_pkt_hdr(u16 del, u8 dev_id)
 	return (up_is_valid_pkt_del(del) && up_is_valid_dev_id(dev_id));
 }
 
-static inline bool up_get_pkt_hdr(u8 *buffer, size_t index)
+static inline struct up_pkt_hdr * up_get_pkt_hdr(u8 *buffer, size_t index)
 {
 	return (struct up_pkt_hdr *)(buffer + index);
 }
 
-static inline bool up_get_pl_hdr(u8 *buffer, size_t index)
+static inline struct up_pl_hdr * up_get_pl_hdr(u8 *buffer, size_t index)
 {
 	return (struct up_pl_hdr *)(buffer + index);
 }

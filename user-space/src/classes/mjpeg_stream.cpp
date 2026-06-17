@@ -76,7 +76,7 @@ void MjpegStream::send(std::span<const uint8_t> data) {
 
         payloadHeader_ = payloadHeader;
 
-        if (up_valid_mjpeg_payload(&payloadHeader)) {
+        if (up_valid_mjpeg_pl(&payloadHeader)) {
             size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
             size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
 
