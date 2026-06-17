@@ -87,6 +87,8 @@ struct up_drv_data {
 	size_t active_pl_len;
 	int frame_id;
 	bool building_frame;
+	bool found_soi;
+	bool eof_reached;
 
 	DECLARE_KFIFO_PTR(fifo, u8);
 

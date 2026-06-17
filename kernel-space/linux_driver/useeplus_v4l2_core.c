@@ -46,31 +46,7 @@ enum up_config {
 	USB_TO = 1000,
 };
 
-static void kernel_on_frame_start(void *ctx, u8 frame_id, u8 cam_num)
-{
-	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
-	unsigned long flags;
-
-	if (drv_data->active_buf) {
-		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
-				VB2_BUF_STATE_ERROR);
-		drv_data->active_buf = NULL;
-	}
-
-	drv_data->active_pl_len = 0;
-
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	if (!list_empty(&drv_data->ready_queue)) {
-		drv_data->active_buf = list_first_entry(&drv_data->ready_queue,
-							struct up_buffer, list);
-		list_del(&drv_data->active_buf->list);
-	} else {
-		drv_data->active_buf = NULL;
-	}
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-}
-
-static void kernel_on_video_payload(void *ctx, u8 *data, size_t len)
+static void kernel_on_video_payload(void *ctx, const u8 *data, size_t len)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
 	struct vb2_buffer *vb;
@@ -80,10 +56,13 @@ static void kernel_on_video_payload(void *ctx, u8 *data, size_t len)
 		return;
 
 	if (drv_data->active_pl_len + len > MAX_FRAME_SIZE) {
+		dev_err_ratelimited(&drv_data->itf->dev,
+				    "useeplus: Overflow Prevention.\n");
 		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
 				VB2_BUF_STATE_ERROR);
 		drv_data->active_buf = NULL;
 		drv_data->active_pl_len = 0;
+		drv_data->dbg_frames_dropped_soi++;
 		return;
 	}
 
@@ -100,34 +79,25 @@ static void kernel_on_frame_end(void *ctx)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
 	struct vb2_buffer *vb;
-	u8 *vaddr;
-	size_t eoi_off = 0;
-	bool found_eoi = false;
-	int j;
 
-	if (!drv_data->active_buf || drv_data->active_pl_len < 2)
+	if (!drv_data->active_buf)
 		return;
 
-	vb = &drv_data->active_buf->vb2_buffer.vb2_buf;
-	vaddr = vb2_plane_vaddr(vb, 0);
+	/* The parser guarantees we only get here if data was written */
+	if (drv_data->active_pl_len < 2) {
+		drv_data->dbg_frames_dropped_eoi++;
+		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+				VB2_BUF_STATE_ERROR);
+	} else {
+		vb = &drv_data->active_buf->vb2_buffer.vb2_buf;
 
-	for (j = drv_data->active_pl_len; j >= 2; j--) {
-		if (vaddr[j - 2] == 0xFF && vaddr[j - 1] == 0xD9) {
-			eoi_off = j;
-			found_eoi = true;
-			break;
-		}
-	}
-
-	if (found_eoi) {
-		vb2_set_plane_payload(vb, 0, eoi_off);
+		/* The payload size is already perfect. No backward scanning needed! */
+		vb2_set_plane_payload(vb, 0, drv_data->active_pl_len);
 		vb->timestamp = ktime_get_ns();
 		drv_data->active_buf->vb2_buffer.sequence =
 			drv_data->sequence++;
 		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
-	} else {
-		drv_data->dbg_frames_dropped_eoi++;
-		vb2_buffer_done(vb, VB2_BUF_STATE_ERROR);
+		drv_data->dbg_frames_delivered++;
 	}
 
 	drv_data->active_buf = NULL;
@@ -176,12 +146,14 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 
 static void up_work_handler(struct work_struct *work)
 {
-	struct up_drv_data *drv_data =
-		container_of(work, struct up_drv_data, work);
-	unsigned int len;
+	struct up_drv_data *drv_data;
 	size_t consumed, remaining;
+	unsigned int len;
 	struct up_parser parser = { 0 };
 
+	drv_data = container_of(work, struct up_drv_data, work);
+
+	/* 1. Pull new raw bytes from the lockless hardware FIFO queue */
 	len = kfifo_out(&drv_data->fifo,
 			drv_data->decode_buf + drv_data->decode_buf_len,
 			MAX_WORKSPACE_SIZE - drv_data->decode_buf_len);
@@ -189,23 +161,30 @@ static void up_work_handler(struct work_struct *work)
 	drv_data->decode_buf_len += len;
 
 	if (drv_data->decode_buf_len > 0) {
-		/* Setup the parser */
+		/* 2. Load the persistent driver state into the transient parser */
 		parser.ctx = drv_data;
 		parser.building_frame = drv_data->building_frame;
 		parser.frame_id = drv_data->frame_id;
+		parser.found_soi = drv_data->found_soi;
+		parser.eof_reached = drv_data->eof_reached;
+
+		/* 3. Wire up the V4L2 memory plane callbacks */
 		parser.cb.on_frame_start = kernel_on_frame_start;
 		parser.cb.on_video_payload = kernel_on_video_payload;
 		parser.cb.on_frame_end = kernel_on_frame_end;
+		parser.cb.on_button_press = NULL;
 
-		/* Feed the pure parser */
+		/* 4. Feed the pure protocol parser */
 		consumed = up_parser_feed(&parser, drv_data->decode_buf,
 					  drv_data->decode_buf_len);
 
-		/* Save parser state back to driver for the next hardware interrupt */
+		/* 5. Save the mutated state back to the driver for the next URB interrupt */
 		drv_data->building_frame = parser.building_frame;
 		drv_data->frame_id = parser.frame_id;
+		drv_data->found_soi = parser.found_soi;
+		drv_data->eof_reached = parser.eof_reached;
 
-		/* Shift any remaining fractional packet down to the front of the buffer */
+		/* 6. Shift any remaining fractional packets to the front of the workspace */
 		if (consumed < drv_data->decode_buf_len) {
 			remaining = drv_data->decode_buf_len - consumed;
 			memmove(drv_data->decode_buf,

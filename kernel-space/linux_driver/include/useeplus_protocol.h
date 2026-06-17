@@ -109,6 +109,8 @@ struct up_parser {
 
 	int frame_id;
 	bool building_frame;
+	bool found_soi;
+	bool eof_reached;
 };
 
 size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len);
