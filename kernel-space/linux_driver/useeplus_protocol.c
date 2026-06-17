@@ -2,7 +2,7 @@
 
 #include "useeplus_protocol.h"
 
-static bool up_check_ghost_header(u8 *buf, size_t len, size_t index, size_t *hdr_off)
+static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t index, size_t *hdr_off)
 {
 	size_t limit, o;
 	struct up_pkt_hdr *o_pkt;
@@ -50,7 +50,7 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 		return UP_DECODE_SKIP;
 	}
 
-	if (up_check_ghost_header(buf, len, index, &hdr_off)) {
+	if (up_check_ghost_hdr(buf, len, index, &hdr_off)) {
 		*index_ptr += (hdr_off <= (len - index)) ? hdr_off : 1;
 		return UP_DECODE_SKIP;
 	}
