@@ -11,24 +11,24 @@ struct MockContext {
     std::vector<uint8_t> payload_data;
 };
 
-static void mock_on_frame_start(void* ctx, u8 frame_id, u8 cam_num) {
-    static_cast<MockContext*>(ctx)->frames_started++;
+static void mock_on_frame_start(void* context, u8 frame_id, u8 cam_num) {
+    static_cast<MockContext*>(context)->frames_started++;
 }
-static void mock_on_video_payload(void* ctx, u8* data, size_t len) {
-    auto* mock = static_cast<MockContext*>(ctx);
+static void mock_on_video_payload(void* context, u8* data, size_t len) {
+    auto* mock = static_cast<MockContext*>(context);
     mock->payload_data.insert(mock->payload_data.end(), data, data + len);
 }
-static void mock_on_frame_end(void* ctx) {
-    static_cast<MockContext*>(ctx)->frames_ended++;
+static void mock_on_frame_end(void* context) {
+    static_cast<MockContext*>(context)->frames_ended++;
 }
 
-TEST(ParserTest, SuccessfullyExtractsAndTrimsVideoFrame) {
+TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame) {
     MockContext mock_ctx{};
-    struct up_parser parser = {0};
-    parser.ctx = &mock_ctx;
-    parser.cb.on_frame_start = mock_on_frame_start;
-    parser.cb.on_video_payload = mock_on_video_payload;
-    parser.cb.on_frame_end = mock_on_frame_end;
+    struct up_decoder decoder = {0};
+    decoder.ctx = &mock_ctx;
+    decoder.cb.on_frame_start = mock_on_frame_start;
+    decoder.cb.on_video_payload = mock_on_video_payload;
+    decoder.cb.on_frame_end = mock_on_frame_end;
 
     std::vector<u8> buffer(1024, 0x00);
     struct up_pkt_hdr* pkt = (struct up_pkt_hdr*)buffer.data();
@@ -47,7 +47,7 @@ TEST(ParserTest, SuccessfullyExtractsAndTrimsVideoFrame) {
     payload_data[4] = 0xFF;
     payload_data[5] = 0xD9;
 
-    size_t consumed = up_parser_feed(&parser, buffer.data(), 1024);
+    size_t consumed = up_decode_bulk(&decoder, buffer.data(), 1024);
 
     EXPECT_EQ(mock_ctx.frames_started, 1);
     EXPECT_EQ(mock_ctx.frames_ended, 1);

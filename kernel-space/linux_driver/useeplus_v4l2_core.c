@@ -107,7 +107,7 @@ static void kernel_on_frame_end(void *ctx)
 	if (!drv_data->active_buf)
 		return;
 
-	/* The parser guarantees we only get here if data was written */
+	/* The decoder guarantees we only get here if data was written */
 	if (drv_data->active_pl_len < 2) {
 		drv_data->dbg_frames_dropped_eoi++;
 		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
@@ -173,7 +173,7 @@ static void up_work_handler(struct work_struct *work)
 	struct up_drv_data *drv_data;
 	size_t consumed, remaining;
 	unsigned int len;
-	struct up_parser parser = { 0 };
+	struct up_decoder decoder = { 0 };
 
 	drv_data = container_of(work, struct up_drv_data, work);
 
@@ -184,23 +184,23 @@ static void up_work_handler(struct work_struct *work)
 	drv_data->decode_buf_len += len;
 
 	if (drv_data->decode_buf_len > 0) {
-		parser.ctx = drv_data;
-		parser.building_frame = drv_data->building_frame;
-		parser.frame_id = drv_data->frame_id;
-		parser.found_soi = drv_data->found_soi;
-		parser.eof_reached = drv_data->eof_reached;
+		decoder.context = drv_data;
+		decoder.building_frame = drv_data->building_frame;
+		decoder.frame_id = drv_data->frame_id;
+		decoder.found_soi = drv_data->found_soi;
+		decoder.eof_reached = drv_data->eof_reached;
 
-		parser.cb.on_frame_start = kernel_on_frame_start;
-		parser.cb.on_video_payload = kernel_on_video_payload;
-		parser.cb.on_frame_end = kernel_on_frame_end;
+		decoder.cb.on_frame_start = kernel_on_frame_start;
+		decoder.cb.on_video_payload = kernel_on_video_payload;
+		decoder.cb.on_frame_end = kernel_on_frame_end;
 
-		consumed = up_parser_feed(&parser, drv_data->decode_buf,
+		consumed = up_decode_bulk(&decoder, drv_data->decode_buf,
 					  drv_data->decode_buf_len);
 
-		drv_data->building_frame = parser.building_frame;
-		drv_data->frame_id = parser.frame_id;
-		drv_data->found_soi = parser.found_soi;
-		drv_data->eof_reached = parser.eof_reached;
+		drv_data->building_frame = decoder.building_frame;
+		drv_data->frame_id = decoder.frame_id;
+		drv_data->found_soi = decoder.found_soi;
+		drv_data->eof_reached = decoder.eof_reached;
 
 		if (consumed < drv_data->decode_buf_len) {
 			remaining = drv_data->decode_buf_len - consumed;
@@ -282,7 +282,7 @@ static void up_read_bulk_callback(struct urb *urb)
 	}
 
 	/*
-	 * Wake up the parser thread
+	 * Wake up the decoder thread
 	 */
 	queue_work(drv_data->wq, &drv_data->work);
 

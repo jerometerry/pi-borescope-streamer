@@ -78,13 +78,13 @@ struct up_pl_hdr {
 	u32 le_gravity_sensor;
 } __packed;
 
-struct up_parser_callbacks {
-	void (*on_frame_start)(void *ctx, u8 frame_id, u8 cam_num);
-	void (*on_video_payload)(void *ctx, u8 *data, size_t len);
-	void (*on_frame_end)(void *ctx);
+struct up_decoder_callbacks {
+	void (*on_frame_start)(void *context, u8 frame_id, u8 cam_num);
+	void (*on_video_payload)(void *context, u8 *data, size_t len);
+	void (*on_frame_end)(void *context);
 };
 
-struct up_parse_ctx {
+struct up_decode_context {
 	size_t index;
 	unsigned long flags;
 
@@ -97,7 +97,7 @@ struct up_parse_ctx {
 	size_t decode_buf_len;
 };
 
-enum up_parse_status { UP_PARSE_OK, UP_PARSE_SKIP, UP_PARSE_NEED_DATA };
+enum up_decode_status { UP_DECODE_OK, UP_DECODE_SKIP, UP_DECODE_NEED_DATA };
 
 struct up_envelope {
 	size_t index;
@@ -107,9 +107,9 @@ struct up_envelope {
 	u8 flags;
 };
 
-struct up_parser {
-	struct up_parser_callbacks cb;
-	void *ctx;
+struct up_decoder {
+	struct up_decoder_callbacks cb;
+	void *context;
 
 	int frame_id;
 	bool building_frame;
@@ -117,7 +117,7 @@ struct up_parser {
 	bool eof_reached;
 };
 
-size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len);
+size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len);
 
 static inline bool up_check_pkt_header(u16 delimeter, u8 device_id)
 {

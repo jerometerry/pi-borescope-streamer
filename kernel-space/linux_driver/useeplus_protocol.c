@@ -26,9 +26,9 @@ static bool up_check_ghost_header(u8 *buffer, size_t len,
 	return false;
 }
 
-static enum up_parse_status up_parse_envelope(u8 *buffer, size_t len,
-					      size_t *index_ptr,
-					      struct up_envelope *env)
+static enum up_decode_status up_decode_envelope(u8 *buffer, size_t len,
+						size_t *index_ptr,
+						struct up_envelope *env)
 {
 	struct up_pkt_hdr *pkt_hdr;
 	struct up_pl_hdr *pl_hdr;
@@ -82,7 +82,7 @@ static enum up_parse_status up_parse_envelope(u8 *buffer, size_t len,
 	return UP_PARSE_OK;
 }
 
-size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
+size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 {
 	size_t i, pl_start, pl_size, emit_size, limit;
 	struct up_pl_hdr *pl_hdr;
@@ -95,7 +95,7 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 		return 0;
 
 	while ((len - index) >= TOTAL_USB_HEADER_SIZE) {
-		switch (up_parse_envelope(buffer, len, &index, &env)) {
+		switch (up_decode_envelope(buffer, len, &index, &env)) {
 		case UP_PARSE_NEED_DATA:
 			return index;
 		case UP_PARSE_SKIP:
@@ -107,25 +107,25 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 		if (env.cam_num > MAX_CAM_NUM)
 			goto advance_parser;
 
-		if (parser->building_frame &&
-		    parser->frame_id != env.frame_id) {
-			if (!parser->eof_reached && parser->cb.on_frame_end)
-				parser->cb.on_frame_end(parser->ctx);
+		if (decoder->building_frame &&
+		    decoder->frame_id != env.frame_id) {
+			if (!decoder->eof_reached && decoder->cb.on_frame_end)
+				decoder->cb.on_frame_end(decoder->context);
 		}
 
-		if (!parser->building_frame ||
-		    parser->frame_id != env.frame_id) {
-			if (parser->cb.on_frame_start)
-				parser->cb.on_frame_start(parser->ctx, env.frame_id, env.cam_num);
+		if (!decoder->building_frame ||
+		    decoder->frame_id != env.frame_id) {
+			if (decoder->cb.on_frame_start)
+				decoder->cb.on_frame_start(decoder->context, env.frame_id, env.cam_num);
 
-			parser->frame_id = env.frame_id;
-			parser->building_frame = true;
+			decoder->frame_id = env.frame_id;
+			decoder->building_frame = true;
 
-			parser->found_soi = false;
-			parser->eof_reached = false;
+			decoder->found_soi = false;
+			decoder->eof_reached = false;
 		}
 
-		if (parser->eof_reached)
+		if (decoder->eof_reached)
 			goto advance_parser;
 
 		pl_hdr = (struct up_pl_hdr *)(buffer + env.index + UP_PKT_HDR_SIZE);
@@ -134,7 +134,7 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 			pl_size = env.total_size - TOTAL_USB_HEADER_SIZE;
 			pl_src = buffer + pl_start;
 
-			if (!parser->found_soi) {
+			if (!decoder->found_soi) {
 				found = false;
 				limit = pl_size;
 				if (limit > JPEG_SOI_MAX_POS)
@@ -146,7 +146,7 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 						    pl_src[i + 1] == JPEG_SOI) {
 							pl_src += i;
 							pl_size -= i;
-							parser->found_soi = true;
+							decoder->found_soi = true;
 							found = true;
 							break;
 						}
@@ -162,17 +162,17 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 					if (pl_src[i] == JPEG_DEL &&
 					    pl_src[i + 1] == JPEG_EOI) {
 						emit_size = i + 2;
-						parser->eof_reached = true;
+						decoder->eof_reached = true;
 						break;
 					}
 				}
 			}
 
-			if (parser->cb.on_video_payload)
-				parser->cb.on_video_payload(parser->ctx, pl_src, emit_size);
+			if (decoder->cb.on_video_payload)
+				decoder->cb.on_video_payload(decoder->context, pl_src, emit_size);
 
-			if (parser->eof_reached && parser->cb.on_frame_end)
-				parser->cb.on_frame_end(parser->ctx);
+			if (decoder->eof_reached && decoder->cb.on_frame_end)
+				decoder->cb.on_frame_end(decoder->context);
 		}
 
 advance_parser:
