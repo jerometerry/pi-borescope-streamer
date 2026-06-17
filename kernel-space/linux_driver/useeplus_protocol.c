@@ -30,8 +30,8 @@ static enum up_parse_status up_parse_envelope(u8 *buffer, size_t len,
 					      size_t *index_ptr,
 					      struct up_envelope *env)
 {
-	const struct up_pkt_hdr *pkt_hdr;
-	const struct up_pl_hdr *pl_hdr;
+	struct up_pkt_hdr *pkt_hdr;
+	struct up_pl_hdr *pl_hdr;
 	size_t hdr_off = 0;
 	size_t pl_off;
 	u16 pkt_len;
@@ -39,7 +39,7 @@ static enum up_parse_status up_parse_envelope(u8 *buffer, size_t len,
 
 	env->index = index;
 
-	pkt_hdr = (const struct up_pkt_hdr *)(buffer + index);
+	pkt_hdr = (struct up_pkt_hdr *)(buffer + index);
 	pkt_len = UP_LE16_TO_CPU(pkt_hdr->le_length);
 
 	if (pkt_len > UP_MAX_WIRE_LEN) {
@@ -73,7 +73,7 @@ static enum up_parse_status up_parse_envelope(u8 *buffer, size_t len,
 		return UP_PARSE_SKIP;
 	}
 
-	pl_hdr = (const struct up_pl_hdr *)(buffer + pl_off);
+	pl_hdr = (struct up_pl_hdr *)(buffer + pl_off);
 
 	env->frame_id = pl_hdr->le_frame_id;
 	env->cam_num = pl_hdr->le_camera_number;
@@ -126,12 +126,6 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 			/* Reset the JPEG markers for the new frame */
 			parser->found_soi = false;
 			parser->eof_reached = false;
-		}
-
-		/* Forward telemetry / hardware button presses if needed */
-		if (up_is_button_pressed(env.flags) &&
-		    parser->cb.on_button_press) {
-			parser->cb.on_button_press(parser->ctx);
 		}
 
 		/* Ignore remaining chunks for this frame if we already hit the End of Image */
