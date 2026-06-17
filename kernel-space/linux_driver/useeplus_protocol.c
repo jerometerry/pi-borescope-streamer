@@ -6,6 +6,7 @@ static bool up_check_ghost_header(u8 *buffer, size_t len,
 				  size_t current_index, size_t *hdr_off)
 {
 	size_t limit, o;
+	struct up_pkt_hdr *o_pkt;
 
 	if (len - current_index < 3)
 		return false;
@@ -15,8 +16,7 @@ static bool up_check_ghost_header(u8 *buffer, size_t len,
 		limit = MAX_GHOST_HEADER_OFFSET;
 
 	for (o = UP_PKT_HDR_SIZE; o <= limit; o++) {
-		const struct up_pkt_hdr *o_pkt =
-			(const struct up_pkt_hdr *)(buffer + current_index + o);
+		o_pkt = (struct up_pkt_hdr *)(buffer + current_index + o);
 
 		if (up_is_valid_pkt_header(o_pkt)) {
 			*hdr_off = o;
@@ -26,7 +26,7 @@ static bool up_check_ghost_header(u8 *buffer, size_t len,
 	return false;
 }
 
-static enum up_parse_status up_parse_envelope(const u8 *buffer, size_t len,
+static enum up_parse_status up_parse_envelope(u8 *buffer, size_t len,
 					      size_t *index_ptr,
 					      struct up_envelope *env)
 {
@@ -42,7 +42,7 @@ static enum up_parse_status up_parse_envelope(const u8 *buffer, size_t len,
 	pkt_hdr = (const struct up_pkt_hdr *)(buffer + index);
 	pkt_len = UP_LE16_TO_CPU(pkt_hdr->le_length);
 
-	if (unlikely(pkt_len > UP_MAX_WIRE_LEN)) {
+	if (pkt_len > UP_MAX_WIRE_LEN) {
 		(*index_ptr)++;
 		return UP_PARSE_SKIP;
 	}
@@ -55,7 +55,7 @@ static enum up_parse_status up_parse_envelope(const u8 *buffer, size_t len,
 	}
 
 	if (up_check_ghost_header(buffer, len, index, &hdr_off)) {
-		*index_ptr += likely(hdr_off <= (len - index)) ? hdr_off : 1;
+		*index_ptr += (hdr_off <= (len - index)) ? hdr_off : 1;
 		return UP_PARSE_SKIP;
 	}
 
@@ -68,7 +68,7 @@ static enum up_parse_status up_parse_envelope(const u8 *buffer, size_t len,
 	}
 
 	pl_off = index + UP_PKT_HDR_SIZE;
-	if (unlikely(pl_off >= len || (len - pl_off) < UP_PL_HDR_SIZE)) {
+	if (pl_off >= len || (len - pl_off) < UP_PL_HDR_SIZE) {
 		*index_ptr += env->total_size;
 		return UP_PARSE_SKIP;
 	}
@@ -82,18 +82,21 @@ static enum up_parse_status up_parse_envelope(const u8 *buffer, size_t len,
 	return UP_PARSE_OK;
 }
 
-size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
+size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 {
-	size_t index = 0;
+	size_t i, pl_start, pl_size, emit_size, limit;
+	struct up_pl_hdr *pl_hdr;
 	struct up_envelope env;
+	size_t index = 0;
+	u8 *pl_src;
+	bool found = false;
 
-	if (unlikely(len == 0 || !buffer))
+	if (len == 0 || !buffer)
 		return 0;
 
 	while ((len - index) >= TOTAL_USB_HEADER_SIZE) {
 		switch (up_parse_envelope(buffer, len, &index, &env)) {
 		case UP_PARSE_NEED_DATA:
-			/* Return exactly how many bytes were cleanly consumed */
 			return index;
 		case UP_PARSE_SKIP:
 			continue;
@@ -101,7 +104,7 @@ size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
 			break;
 		}
 
-		if (unlikely(env.cam_num > MAX_CAM_NUM))
+		if (env.cam_num > MAX_CAM_NUM)
 			goto advance_parser;
 
 		/* Manage Frame Boundaries */
@@ -115,8 +118,7 @@ size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
 		if (!parser->building_frame ||
 		    parser->frame_id != env.frame_id) {
 			if (parser->cb.on_frame_start)
-				parser->cb.on_frame_start(
-					parser->ctx, env.frame_id, env.cam_num);
+				parser->cb.on_frame_start(parser->ctx, env.frame_id, env.cam_num);
 
 			parser->frame_id = env.frame_id;
 			parser->building_frame = true;
@@ -137,27 +139,26 @@ size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
 			goto advance_parser;
 
 		/* Process Video Payloads */
-		if (up_valid_mjpeg_payload(
-			    (const struct up_pl_hdr *)(buffer + env.index +
-						       UP_PKT_HDR_SIZE))) {
-			size_t pl_start = env.index + TOTAL_USB_HEADER_SIZE;
-			size_t pl_size = env.total_size - TOTAL_USB_HEADER_SIZE;
-			const u8 *pl_src = buffer + pl_start;
-			size_t emit_size;
+		pl_hdr = (struct up_pl_hdr *)(buffer + env.index + UP_PKT_HDR_SIZE);
+		if (up_valid_mjpeg_payload(pl_hdr)) {
+			pl_start = env.index + TOTAL_USB_HEADER_SIZE;
+			pl_size = env.total_size - TOTAL_USB_HEADER_SIZE;
+			pl_src = buffer + pl_start;
 
 			/* Trim Preamble until Start of Image (FF D8) is found */
 			if (!parser->found_soi) {
-				bool found = false;
-				size_t limit = (pl_size < 256) ? pl_size : 256;
+				found = false;
+				limit = pl_size;
+				if (limit > JPEG_SOI_MAX_POS)
+					limit = JPEG_SOI_MAX_POS;
 
 				if (pl_size >= 2) {
-					for (size_t i = 0; i < limit - 1; i++) {
+					for (i = 0; i < limit - 1; i++) {
 						if (pl_src[i] == JPEG_DEL &&
 						    pl_src[i + 1] == JPEG_SOI) {
 							pl_src += i;
 							pl_size -= i;
-							parser->found_soi =
-								true;
+							parser->found_soi = true;
 							found = true;
 							break;
 						}
@@ -170,12 +171,10 @@ size_t up_parser_feed(struct up_parser *parser, const u8 *buffer, size_t len)
 			/* Scan chunk for End of Image (FF D9) */
 			emit_size = pl_size;
 			if (pl_size >= 2) {
-				for (size_t i = 0; i < pl_size - 1; i++) {
+				for (i = 0; i < pl_size - 1; i++) {
 					if (pl_src[i] == JPEG_DEL &&
 					    pl_src[i + 1] == JPEG_EOI) {
-						emit_size =
-							i +
-							2; /* Include the marker bytes */
+						emit_size = i + 2;
 						parser->eof_reached = true;
 						break;
 					}

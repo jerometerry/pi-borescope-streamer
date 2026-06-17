@@ -18,7 +18,6 @@
 #define NUM_URBS 4
 #define URB_SIZE (16 * 1024)
 #define MAX_FRAME_SIZE (256 * 1024)
-#define UP_MAX_WIRE_LEN 1024
 #define MAX_WORKSPACE_SIZE (512 * 1024)
 #define FIFO_Q_SIZE (256 * 1024)
 

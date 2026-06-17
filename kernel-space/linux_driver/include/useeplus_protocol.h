@@ -36,6 +36,7 @@ typedef uint32_t u32;
 extern "C" {
 #endif
 
+#define UP_MAX_WIRE_LEN 1024
 #define JPEG_SOI_MAX_POS 256
 #define MAX_GHOST_HEADER_OFFSET 160
 
