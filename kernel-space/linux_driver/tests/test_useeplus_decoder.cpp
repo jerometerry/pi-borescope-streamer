@@ -23,9 +23,9 @@ static void mock_on_frame_end(void* context) {
 }
 
 TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame) {
-    MockContext mock_ctx{};
+    MockContext mock_context{};
     struct up_decoder decoder = {0};
-    decoder.ctx = &mock_ctx;
+    decoder.context = &mock_context;
     decoder.cb.on_frame_start = mock_on_frame_start;
     decoder.cb.on_video_payload = mock_on_video_payload;
     decoder.cb.on_frame_end = mock_on_frame_end;
@@ -49,10 +49,10 @@ TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame) {
 
     size_t consumed = up_decode_bulk(&decoder, buffer.data(), 1024);
 
-    EXPECT_EQ(mock_ctx.frames_started, 1);
-    EXPECT_EQ(mock_ctx.frames_ended, 1);
+    EXPECT_EQ(mock_context.frames_started, 1);
+    EXPECT_EQ(mock_context.frames_ended, 1);
 
-    EXPECT_EQ(mock_ctx.payload_data.size(), 5);
-    EXPECT_EQ(mock_ctx.payload_data[0], 0xFF);
-    EXPECT_EQ(mock_ctx.payload_data[1], 0xD8);
+    EXPECT_EQ(mock_context.payload_data.size(), 5);
+    EXPECT_EQ(mock_context.payload_data[0], 0xFF);
+    EXPECT_EQ(mock_context.payload_data[1], 0xD8);
 }
