@@ -5,8 +5,8 @@
 
 static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t index, size_t *hdr_off)
 {
-	size_t limit, o;
 	struct up_pkt_hdr *o_pkt;
+	size_t o, limit;
 
 	if (index + UP_PKT_HDR_SIZE > len)
 		return false;
@@ -30,12 +30,13 @@ static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t index, size_t *hdr_of
 static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 				       struct up_decode_state *state)
 {
+	size_t hdr_off, pl_off, index;
 	struct up_pkt_hdr *pkt_hdr;
 	struct up_pl_hdr *pl_hdr;
-	size_t hdr_off = 0;
-	size_t pl_off;
 	u16 pl_len;
-	size_t index = *index_ptr;
+
+	hdr_off = 0;
+	index = *index_ptr;
 
 	if (index + UP_PKT_HDR_SIZE > len)
 		return UP_DECODE_NEED_DATA;
@@ -87,7 +88,7 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 	pl_hdr = up_get_pl_hdr(buf, pl_off);
 
 	state->frame_id = pl_hdr->le_frame_id;
-	state->cam_num = pl_hdr->le_camera_number;
+	state->dev_num = pl_hdr->le_device_number;
 	state->flags = pl_hdr->le_flags;
 
 	return UP_DECODE_OK;
@@ -95,12 +96,14 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 
 size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 {
-	size_t i, pl_start, pl_size, emit_size, limit;
-	struct up_pl_hdr *pl_hdr;
+	size_t i, pl_start, pl_size, emit_size, limit, index;
 	struct up_decode_state state;
-	size_t index = 0;
+	struct up_pl_hdr *pl_hdr;
 	u8 *pl_src;
-	bool found = false;
+	bool found;
+
+	index = 0;
+	found = false;
 
 	if (len == 0 || !buf)
 		return 0;
@@ -117,7 +120,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			break;
 		}
 
-		if (state.cam_num > MAX_CAM_NUM)
+		if (state.dev_num > MAX_DEV_NUM)
 			goto advance;
 
 		if (dec->building_frame && dec->frame_id != state.frame_id) {
@@ -129,11 +132,10 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			if (dec->cb.on_frame_start)
 				dec->cb.on_frame_start(dec->context,
 						       state.frame_id,
-						       state.cam_num);
+						       state.dev_num);
 
 			dec->frame_id = state.frame_id;
 			dec->building_frame = true;
-
 			dec->found_soi = false;
 			dec->eof_reached = false;
 		}

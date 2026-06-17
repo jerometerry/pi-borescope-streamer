@@ -36,6 +36,90 @@ typedef uint32_t u32;
 extern "C" {
 #endif
 
+/*
+ * Useeplus USB Packet Structure (Applies to ALL packets)
+ *
+ * | Byte Offset | Field Name       | Size | Description                         |
+ * |-------------|------------------|------|-------------------------------------|
+ * | 0x00        | Packet Delimiter | 2    | 0xBBAA (Little-Endian)              |
+ * | 0x02        | Device ID        | 1    | 0x0B = Video, 0x07 = Gravity Sensor |
+ * | 0x03        | Payload Length   | 2    | Total bytes following Packet Header |
+ * | 0x05        | Frame ID         | 1    | Rolls over when a new frame starts  |
+ * | 0x06        | Device Number    | 1    | Secondary internal lens index       |
+ * | 0x07        | Flags            | 1    | Bit 0: Gravity, Bit 1: Button       |
+ * | 0x08        | IMU Matrix       | 4    | 32-bit accelerometer telemetry      |
+ * | 0x0C        | Video Payload    | Var  | Fragmented chunk of MJPEG stream    |
+ *
+ * Video Payload Stream Rules
+ *
+ * - Start of Frame: The Video Payload of the first packet for a given Frame ID
+ * will begin with the JPEG SOI Marker (FF D8), usually followed by the
+ * APP0/JFIF headers.
+ * - Continuation: Subsequent packets for the same Frame ID will contain raw
+ * JPEG stream data starting immediately at Byte 0x0C.
+ * - End of Frame: The final packet for a given Frame ID will contain the JPEG
+ * EOI Marker (FF D9) somewhere within its Video Payload block. Uninitialized
+ * padding bytes may exist between the EOI marker and the declared Payload
+ * Length.
+ *
+ * Memory Alignment and Uninitialized Memory
+ *
+ * 4KB Page Alignment
+ *
+ * The hardware's internal DMA (Direct Memory Access) buffers are aligned into
+ * 4-Kilobyte (4096 bytes) pages. A standard Useeplus video packet is exactly
+ * 944 bytes long (12 bytes of transport header + 932 bytes of payload).
+ *
+ * The hardware aggressively packs exactly four full packets into a single 4KB
+ * page: 4 packets * 944 bytes = 3776 bytes.
+ *
+ * This packing leaves exactly 320 bytes of unused space at the tail end of
+ * every 4KB page (4096 - 3776 = 320).
+ *
+ * Uninitialized Memory
+ *
+ * The hardware does not zero out or initialize these 320 bytes before
+ * transmitting the USB buffer. The data in the unused memory is arbitrary,
+ * often containing valid packet headers from previous or newer packets. There
+ * are no checksums built into the protocol for error detection, which poses a
+ * challenge when decoding the video stream.
+ *
+ * 1. Signature Check
+ *
+ * Every packet evaluation begins by ensuring the current pointer sits exactly
+ * on the 0xBBAA delimiter and a valid Device ID (0x0B or 0x07). If this
+ * signature fails, the parser enters Seek Mode (see Step 4).
+ *
+ * 2. Ghost Header Look-Ahead
+ *
+ * Before the decoder ever reads or trusts the le_length field of a newly
+ * discovered signature, it performs a bounded look-ahead. It scans the next
+ * 160 bytes of memory.
+ *
+ * - If another perfect 0xBBAA signature is found within a short distance, it
+ * proves the hardware stuttered or the current header is a ghost remnant.
+ * - The decoder treats the current header as a ghost, advances the pointer to
+ * the newly discovered real header, skipping the "garbage data".
+ *
+ * 3. Length Validation
+ *
+ * If no ghost header is found, the decoder reads le_length and sanity-checks it
+ * against an upper bound of UP_MAX_WIRE_LEN (1024 bytes).
+ *
+ * - If the length exceeds 1024, it means the decoder is looking at garbage data
+ * that happens to start with 0xBBAA. The decoder rejects the packet and
+ * enters Seek Mode.
+ *
+ * 4. Seek Mode
+ *
+ * Whenever the signature fails, or a massive garbage length is detected, the
+ * decoder returns an INVALID_PKT state.
+ *
+ * - Continue the decoding loop, moving ahead by 1 byte. The decoder will
+ * continue incrementally until a valid 0xBBAA hardware signature is found, or
+ * until it exhausts the data arriving from the FIFO work queue.
+ */
+
 #define UP_MAX_WIRE_LEN 1024
 #define JPEG_SOI_MAX_POS 256
 #define MAX_GHOST_HDR_OFF 160
@@ -56,7 +140,7 @@ enum up_hw_signatures {
 	UP_PKT_DEL = 0xBBAA,
 	VIDEO_CAMERA_ID = 0x0B,
 	GRAVITY_SENSOR_ID = 0x07,
-	MAX_CAM_NUM = 1,
+	MAX_DEV_NUM = 1,
 };
 
 enum up_jpeg_marker {
@@ -66,20 +150,20 @@ enum up_jpeg_marker {
 };
 
 struct up_pkt_hdr {
-	u16 le_delimeter;
+	u16 le_delimiter;
 	u8 le_device_id;
 	u16 le_length;
 } __packed;
 
 struct up_pl_hdr {
 	u8 le_frame_id;
-	u8 le_camera_number;
+	u8 le_device_number;
 	u8 le_flags;
 	u32 le_gravity_sensor;
 } __packed;
 
 struct up_decoder_callbacks {
-	void (*on_frame_start)(void *context, u8 frame_id, u8 cam_num);
+	void (*on_frame_start)(void *context, u8 frame_id, u8 dev_num);
 	void (*on_video_payload)(void *context, u8 *data, size_t len);
 	void (*on_frame_end)(void *context);
 };
@@ -107,7 +191,7 @@ enum up_decode_status {
 struct up_decode_state {
 	size_t pkt_size;
 	u8 frame_id;
-	u8 cam_num;
+	u8 dev_num;
 	u8 flags;
 };
 
@@ -128,14 +212,14 @@ static inline bool up_is_valid_dev_id(u8 dev_id)
 	return (dev_id == VIDEO_CAMERA_ID || dev_id == GRAVITY_SENSOR_ID);
 }
 
-static inline bool up_is_valid_pkt_del(u16 del)
+static inline bool up_is_valid_pkt_del(u16 delimiter)
 {
-	return (del == UP_PKT_DEL);
+	return (delimiter == UP_PKT_DEL);
 }
 
 static inline u16 up_get_pkt_del(struct up_pkt_hdr *pkt)
 {
-	return UP_LE16_TO_CPU(pkt->le_delimeter);
+	return UP_LE16_TO_CPU(pkt->le_delimiter);
 }
 
 static inline u16 up_get_pl_len(struct up_pkt_hdr *pkt)
@@ -188,42 +272,42 @@ static inline bool up_has_other_flags(u8 flags)
 
 static inline void up_set_has_gravity_sensor(struct up_pl_hdr *pl, bool has_gs)
 {
-	uint8_t current = pl->le_flags;
+	uint8_t val = pl->le_flags;
 
 	if (has_gs)
-		current |= 0x01;
+		val |= 0x01;
 	else
-		current &= ~0x01;
+		val &= ~0x01;
 
-	pl->le_flags = current;
+	pl->le_flags = val;
 }
 
 static inline void up_set_button_pressed(struct up_pl_hdr *pl, bool pressed)
 {
-	uint8_t current = pl->le_flags;
+	uint8_t val = pl->le_flags;
 
 	if (pressed)
-		current |= 0x02;
+		val |= 0x02;
 	else
-		current &= ~0x02;
+		val &= ~0x02;
 
-	pl->le_flags = current;
+	pl->le_flags = val;
 }
 
-static inline void up_set_other_flags(struct up_pl_hdr *pl, uint8_t val)
+static inline void up_set_other_flags(struct up_pl_hdr *pl, uint8_t other)
 {
-	uint8_t current = pl->le_flags;
+	uint8_t val = pl->le_flags;
 
-	current &= 0x03;
-	current |= ((val & 0x3F) << 2);
-	pl->le_flags = current;
+	val &= 0x03;
+	val |= ((other & 0x3F) << 2);
+	pl->le_flags = val;
 }
 
 static inline bool up_valid_mjpeg_pl(struct up_pl_hdr *pl)
 {
 	if (!pl)
 		return false;
-	if (pl->le_camera_number > MAX_CAM_NUM)
+	if (pl->le_device_number > MAX_DEV_NUM)
 		return false;
 	if (up_has_gravity_sensor(pl->le_flags))
 		return false;

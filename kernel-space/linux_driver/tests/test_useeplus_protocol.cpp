@@ -19,7 +19,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithInvalidCameraNumber)
 	struct up_pl_hdr payload_header = {};
 	bool valid;
 
-	payload_header.le_camera_number = 99;
+	payload_header.le_device_number = 99;
 	valid = up_valid_mjpeg_pl(&payload_header);
 
 	EXPECT_FALSE(valid);
@@ -77,7 +77,7 @@ TEST(ProtocolTest, ChecksPacketHeaderCombination) {
 
 TEST(ProtocolTest, GetsPacketDelimeterAndLength) {
 	struct up_pkt_hdr pkt = {};
-	pkt.le_delimeter = UP_LE16_TO_CPU(UP_PKT_DEL);
+	pkt.le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt.le_length = UP_LE16_TO_CPU(500);
 
 	EXPECT_EQ(up_get_pkt_del(&pkt), UP_PKT_DEL);
@@ -86,7 +86,7 @@ TEST(ProtocolTest, GetsPacketDelimeterAndLength) {
 
 TEST(ProtocolTest, ValidatesFullPacketHeaderStruct) {
 	struct up_pkt_hdr pkt = {};
-	pkt.le_delimeter = UP_LE16_TO_CPU(UP_PKT_DEL);
+	pkt.le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt.le_device_id = VIDEO_CAMERA_ID;
 
 	EXPECT_TRUE(up_is_valid_pkt_hdr(&pkt));
