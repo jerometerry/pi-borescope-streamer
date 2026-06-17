@@ -177,7 +177,6 @@ static void up_work_handler(struct work_struct *work)
 
 	drv_data = container_of(work, struct up_drv_data, work);
 
-	/* 1. Pull new raw bytes from the lockless hardware FIFO queue */
 	len = kfifo_out(&drv_data->fifo,
 			drv_data->decode_buf + drv_data->decode_buf_len,
 			MAX_WORKSPACE_SIZE - drv_data->decode_buf_len);
@@ -185,30 +184,24 @@ static void up_work_handler(struct work_struct *work)
 	drv_data->decode_buf_len += len;
 
 	if (drv_data->decode_buf_len > 0) {
-		/* 2. Load the persistent driver state into the transient parser */
 		parser.ctx = drv_data;
 		parser.building_frame = drv_data->building_frame;
 		parser.frame_id = drv_data->frame_id;
 		parser.found_soi = drv_data->found_soi;
 		parser.eof_reached = drv_data->eof_reached;
 
-		/* 3. Wire up the V4L2 memory plane callbacks */
 		parser.cb.on_frame_start = kernel_on_frame_start;
 		parser.cb.on_video_payload = kernel_on_video_payload;
 		parser.cb.on_frame_end = kernel_on_frame_end;
-		parser.cb.on_button_press = NULL;
 
-		/* 4. Feed the pure protocol parser */
 		consumed = up_parser_feed(&parser, drv_data->decode_buf,
 					  drv_data->decode_buf_len);
 
-		/* 5. Save the mutated state back to the driver for the next URB interrupt */
 		drv_data->building_frame = parser.building_frame;
 		drv_data->frame_id = parser.frame_id;
 		drv_data->found_soi = parser.found_soi;
 		drv_data->eof_reached = parser.eof_reached;
 
-		/* 6. Shift any remaining fractional packets to the front of the workspace */
 		if (consumed < drv_data->decode_buf_len) {
 			remaining = drv_data->decode_buf_len - consumed;
 			memmove(drv_data->decode_buf,
