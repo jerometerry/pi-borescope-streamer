@@ -75,6 +75,30 @@ static void kernel_on_video_payload(void *ctx, const u8 *data, size_t len)
 	}
 }
 
+static void kernel_on_frame_start(void *ctx, u8 frame_id, u8 cam_num)
+{
+	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
+	unsigned long flags;
+
+	if (drv_data->active_buf) {
+		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+				VB2_BUF_STATE_ERROR);
+		drv_data->active_buf = NULL;
+	}
+
+	drv_data->active_pl_len = 0;
+
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	if (!list_empty(&drv_data->ready_queue)) {
+		drv_data->active_buf = list_first_entry(&drv_data->ready_queue,
+							struct up_buffer, list);
+		list_del(&drv_data->active_buf->list);
+	} else {
+		drv_data->active_buf = NULL;
+	}
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+}
+
 static void kernel_on_frame_end(void *ctx)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)ctx;
