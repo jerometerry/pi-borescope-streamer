@@ -107,10 +107,8 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 		if (env.cam_num > MAX_CAM_NUM)
 			goto advance_parser;
 
-		/* Manage Frame Boundaries */
 		if (parser->building_frame &&
 		    parser->frame_id != env.frame_id) {
-			/* If we changed frames but didn't cleanly hit an EOI marker, end it anyway */
 			if (!parser->eof_reached && parser->cb.on_frame_end)
 				parser->cb.on_frame_end(parser->ctx);
 		}
@@ -123,23 +121,19 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 			parser->frame_id = env.frame_id;
 			parser->building_frame = true;
 
-			/* Reset the JPEG markers for the new frame */
 			parser->found_soi = false;
 			parser->eof_reached = false;
 		}
 
-		/* Ignore remaining chunks for this frame if we already hit the End of Image */
 		if (parser->eof_reached)
 			goto advance_parser;
 
-		/* Process Video Payloads */
 		pl_hdr = (struct up_pl_hdr *)(buffer + env.index + UP_PKT_HDR_SIZE);
 		if (up_valid_mjpeg_payload(pl_hdr)) {
 			pl_start = env.index + TOTAL_USB_HEADER_SIZE;
 			pl_size = env.total_size - TOTAL_USB_HEADER_SIZE;
 			pl_src = buffer + pl_start;
 
-			/* Trim Preamble until Start of Image (FF D8) is found */
 			if (!parser->found_soi) {
 				found = false;
 				limit = pl_size;
@@ -159,10 +153,9 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 					}
 				}
 				if (!found)
-					goto advance_parser; /* Drop chunk, still hunting for SOI */
+					goto advance_parser;
 			}
 
-			/* Scan chunk for End of Image (FF D9) */
 			emit_size = pl_size;
 			if (pl_size >= 2) {
 				for (i = 0; i < pl_size - 1; i++) {
@@ -175,13 +168,11 @@ size_t up_parser_feed(struct up_parser *parser, u8 *buffer, size_t len)
 				}
 			}
 
-			/* Emit the cleanly trimmed payload chunk */
 			if (parser->cb.on_video_payload) {
 				parser->cb.on_video_payload(parser->ctx, pl_src,
 							    emit_size);
 			}
 
-			/* Trigger Frame End immediately if we hit EOI */
 			if (parser->eof_reached && parser->cb.on_frame_end) {
 				parser->cb.on_frame_end(parser->ctx);
 			}
