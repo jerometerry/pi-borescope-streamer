@@ -100,8 +100,7 @@ struct up_decode_context {
 enum up_decode_status { UP_DECODE_OK, UP_DECODE_SKIP, UP_DECODE_NEED_DATA };
 
 struct up_decode_state {
-	size_t index;
-	size_t total_size;
+	size_t pkt_size;
 	u8 frame_id;
 	u8 cam_num;
 	u8 flags;
@@ -119,18 +118,47 @@ struct up_decoder {
 
 size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len);
 
-static inline bool up_check_pkt_header(u16 delimeter, u8 device_id)
+static inline bool up_is_valid_dev_id(u8 dev_id)
 {
-	return (delimeter == UP_PKT_DEL && (device_id == VIDEO_CAMERA_ID ||
-					    device_id == GRAVITY_SENSOR_ID));
+	return (dev_id == VIDEO_CAMERA_ID || dev_id == GRAVITY_SENSOR_ID);
 }
 
-static inline bool up_is_valid_pkt_header(struct up_pkt_hdr *pkt)
+static inline bool up_is_valid_pkt_del(u16 del)
 {
-	u16 del = UP_LE16_TO_CPU(pkt->le_delimeter);
+	return (del == UP_PKT_DEL);
+}
+
+static inline u16 up_get_pkt_del(struct up_pkt_hdr *pkt)
+{
+	return UP_LE16_TO_CPU(pkt->le_delimeter);
+}
+
+static inline u16 up_get_pl_len(struct up_pkt_hdr *pkt)
+{
+	return UP_LE16_TO_CPU(pkt->le_length);
+}
+
+static inline bool up_check_pkt_hdr(u16 del, u8 dev_id)
+{
+	return (up_is_valid_pkt_del(del) && up_is_valid_dev_id(dev_id));
+}
+
+static inline bool up_get_pkt_hdr(u8 *buffer, size_t index)
+{
+	return (struct up_pkt_hdr *)(buffer + index);
+}
+
+static inline bool up_get_pl_hdr(u8 *buffer, size_t index)
+{
+	return (struct up_pl_hdr *)(buffer + index);
+}
+
+static inline bool up_is_valid_pkt_hdr(struct up_pkt_hdr *pkt)
+{
+	u16 del = up_get_pkt_del(pkt);
 	u8 dev_id = pkt->le_device_id;
 
-	return up_check_pkt_header(del, dev_id);
+	return up_check_pkt_hdr(del, dev_id);
 }
 
 static inline bool up_has_gravity_sensor(u8 flags)
@@ -186,7 +214,7 @@ static inline void up_set_other_flags(struct up_pl_hdr *pl, uint8_t val)
 	pl->le_flags = current;
 }
 
-static inline bool up_valid_mjpeg_payload(struct up_pl_hdr *pl)
+static inline bool up_valid_mjpeg_pl(struct up_pl_hdr *pl)
 {
 	if (!pl)
 		return false;

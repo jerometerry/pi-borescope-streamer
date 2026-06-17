@@ -2,23 +2,22 @@
 
 #include "useeplus_protocol.h"
 
-static bool up_check_ghost_header(u8 *buffer, size_t len,
-				  size_t current_index, size_t *hdr_off)
+static bool up_check_ghost_header(u8 *buf, size_t len, size_t index, size_t *hdr_off)
 {
 	size_t limit, o;
 	struct up_pkt_hdr *o_pkt;
 
-	if (len - current_index < 3)
+	if (len - index < 3)
 		return false;
 
-	limit = len - current_index - 3;
+	limit = len - index - 3;
 	if (limit > MAX_GHOST_HEADER_OFFSET)
 		limit = MAX_GHOST_HEADER_OFFSET;
 
 	for (o = UP_PKT_HDR_SIZE; o <= limit; o++) {
-		o_pkt = (struct up_pkt_hdr *)(buffer + current_index + o);
+		o_pkt = up_get_pkt_hdr(buf, index + o);
 
-		if (up_is_valid_pkt_header(o_pkt)) {
+		if (up_is_valid_pkt_hdr(o_pkt)) {
 			*hdr_off = o;
 			return true;
 		}
@@ -26,53 +25,51 @@ static bool up_check_ghost_header(u8 *buffer, size_t len,
 	return false;
 }
 
-static enum up_decode_status up_decode(u8 *buffer, size_t len, size_t *index_ptr,
+static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 				       struct up_decode_state *state)
 {
 	struct up_pkt_hdr *pkt_hdr;
 	struct up_pl_hdr *pl_hdr;
 	size_t hdr_off = 0;
 	size_t pl_off;
-	u16 pkt_len;
+	u16 pl_len;
 	size_t index = *index_ptr;
 
-	state->index = index;
+	pkt_hdr = up_get_pkt_hdr(buf, index);
+	pl_len = up_get_pl_len(pkt_hdr);
 
-	pkt_hdr = (struct up_pkt_hdr *)(buffer + index);
-	pkt_len = UP_LE16_TO_CPU(pkt_hdr->le_length);
-
-	if (pkt_len > UP_MAX_WIRE_LEN) {
+	if (pl_len > UP_MAX_WIRE_LEN) {
 		(*index_ptr)++;
 		return UP_DECODE_SKIP;
 	}
 
-	state->total_size = UP_PKT_HDR_SIZE + pkt_len;
+	state->pkt_size = UP_PKT_HDR_SIZE + pl_len;
 
-	if (!up_is_valid_pkt_header(pkt_hdr)) {
+	if (!up_is_valid_pkt_hdr(pkt_hdr)) {
 		(*index_ptr)++;
 		return UP_DECODE_SKIP;
 	}
 
-	if (up_check_ghost_header(buffer, len, index, &hdr_off)) {
+	if (up_check_ghost_header(buf, len, index, &hdr_off)) {
 		*index_ptr += (hdr_off <= (len - index)) ? hdr_off : 1;
 		return UP_DECODE_SKIP;
 	}
 
-	if (state->total_size > (len - index))
+	if (state->pkt_size > (len - index))
 		return UP_DECODE_NEED_DATA;
 
-	if (pkt_len < UP_PL_HDR_SIZE) {
-		*index_ptr += state->total_size;
+	if (pl_len < UP_PL_HDR_SIZE) {
+		*index_ptr += state->pkt_size;
 		return UP_DECODE_SKIP;
 	}
 
 	pl_off = index + UP_PKT_HDR_SIZE;
 	if (pl_off >= len || (len - pl_off) < UP_PL_HDR_SIZE) {
-		*index_ptr += state->total_size;
+		*index_ptr += state->pkt_size;
 		return UP_DECODE_SKIP;
 	}
 
-	pl_hdr = (struct up_pl_hdr *)(buffer + pl_off);
+	pl_hdr = up_get_pl_hdr(buf, pl_off);
 
 	state->frame_id = pl_hdr->le_frame_id;
 	state->cam_num = pl_hdr->le_camera_number;
@@ -81,7 +78,7 @@ static enum up_decode_status up_decode(u8 *buffer, size_t len, size_t *index_ptr
 	return UP_DECODE_OK;
 }
 
-size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
+size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 {
 	size_t i, pl_start, pl_size, emit_size, limit;
 	struct up_pl_hdr *pl_hdr;
@@ -90,11 +87,11 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 	u8 *pl_src;
 	bool found = false;
 
-	if (len == 0 || !buffer)
+	if (len == 0 || !buf)
 		return 0;
 
 	while ((len - index) >= TOTAL_USB_HEADER_SIZE) {
-		switch (up_decode(buffer, len, &index, &state)) {
+		switch (up_decode(buf, len, &index, &state)) {
 		case UP_DECODE_NEED_DATA:
 			return index;
 		case UP_DECODE_SKIP:
@@ -106,35 +103,35 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 		if (state.cam_num > MAX_CAM_NUM)
 			goto advance;
 
-		if (decoder->building_frame &&
-		    decoder->frame_id != state.frame_id) {
-			if (!decoder->eof_reached && decoder->cb.on_frame_end)
-				decoder->cb.on_frame_end(decoder->context);
+		if (dec->building_frame &&
+		    dec->frame_id != state.frame_id) {
+			if (!dec->eof_reached && dec->cb.on_frame_end)
+				dec->cb.on_frame_end(dec->context);
 		}
 
-		if (!decoder->building_frame ||
-		    decoder->frame_id != state.frame_id) {
-			if (decoder->cb.on_frame_start)
-				decoder->cb.on_frame_start(decoder->context, state.frame_id,
+		if (!dec->building_frame ||
+		    dec->frame_id != state.frame_id) {
+			if (dec->cb.on_frame_start)
+				dec->cb.on_frame_start(dec->context, state.frame_id,
 							   state.cam_num);
 
-			decoder->frame_id = state.frame_id;
-			decoder->building_frame = true;
+			dec->frame_id = state.frame_id;
+			dec->building_frame = true;
 
-			decoder->found_soi = false;
-			decoder->eof_reached = false;
+			dec->found_soi = false;
+			dec->eof_reached = false;
 		}
 
-		if (decoder->eof_reached)
+		if (dec->eof_reached)
 			goto advance;
 
-		pl_hdr = (struct up_pl_hdr *)(buffer + state.index + UP_PKT_HDR_SIZE);
-		if (up_valid_mjpeg_payload(pl_hdr)) {
-			pl_start = state.index + TOTAL_USB_HEADER_SIZE;
-			pl_size = state.total_size - TOTAL_USB_HEADER_SIZE;
-			pl_src = buffer + pl_start;
+		pl_hdr = up_get_pl_hdr(buf, index + UP_PKT_HDR_SIZE);
+		if (up_valid_mjpeg_pl(pl_hdr)) {
+			pl_start = index + TOTAL_USB_HEADER_SIZE;
+			pl_size = state.pkt_size - TOTAL_USB_HEADER_SIZE;
+			pl_src = buf + pl_start;
 
-			if (!decoder->found_soi) {
+			if (!dec->found_soi) {
 				found = false;
 				limit = pl_size;
 				if (limit > JPEG_SOI_MAX_POS)
@@ -146,7 +143,7 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 						    pl_src[i + 1] == JPEG_SOI) {
 							pl_src += i;
 							pl_size -= i;
-							decoder->found_soi = true;
+							dec->found_soi = true;
 							found = true;
 							break;
 						}
@@ -162,21 +159,21 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 					if (pl_src[i] == JPEG_DEL &&
 					    pl_src[i + 1] == JPEG_EOI) {
 						emit_size = i + 2;
-						decoder->eof_reached = true;
+						dec->eof_reached = true;
 						break;
 					}
 				}
 			}
 
-			if (decoder->cb.on_video_payload)
-				decoder->cb.on_video_payload(decoder->context, pl_src, emit_size);
+			if (dec->cb.on_video_payload)
+				dec->cb.on_video_payload(dec->context, pl_src, emit_size);
 
-			if (decoder->eof_reached && decoder->cb.on_frame_end)
-				decoder->cb.on_frame_end(decoder->context);
+			if (dec->eof_reached && dec->cb.on_frame_end)
+				dec->cb.on_frame_end(dec->context);
 		}
 
 advance:
-		index += state.total_size;
+		index += state.pkt_size;
 	}
 
 	return index;

@@ -33,7 +33,7 @@ void BufferedMjpegStream::send(std::span<const uint8_t> data) {
         up_pkt_hdr packetHeader{};
         std::memcpy(&packetHeader, &inputBuffer_[i], USB_PACKET_HEADER_SIZE);
 
-        if (!up_is_valid_pkt_header(&packetHeader)) {
+        if (!up_is_valid_pkt_hdr(&packetHeader)) {
             i++;
             continue;
         }
