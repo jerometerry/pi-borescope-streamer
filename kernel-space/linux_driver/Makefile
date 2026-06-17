@@ -3,7 +3,7 @@
 	check-format fix-format
 
 obj-m += useeplus_v4l2.o
-useeplus_v4l2-y := useeplus_v4l2_core.o useeplus.o useeplus_protocol.o
+useeplus_v4l2-y := useeplus_v4l2_core.o useeplus_protocol.o
 
 MODULE_NAME := useeplus_v4l2
 GIT_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "no-git")
@@ -101,15 +101,15 @@ check-stack: default
 
 check-patch:
 	@$(KDIR)/scripts/checkpatch.pl --strict --no-tree --root=$$(pwd) --file \
-	useeplus_v4l2_core.c useeplus.c useeplus_protocol.c \
+	useeplus_v4l2_core.c useeplus_protocol.c \
 	./include/useeplus.h ./include/useeplus_protocol.h
 
 check-format:
-	@clang-format --dry-run --Werror useeplus_v4l2_core.c useeplus.c useeplus_protocol.c \
+	@clang-format --dry-run --Werror useeplus_v4l2_core.c useeplus_protocol.c \
 	include/useeplus.h include/useeplus_protocol.h
 
 fix-format:
-	@clang-format -i useeplus_v4l2_core.c useeplus.c useeplus_protocol.c \
+	@clang-format -i useeplus_v4l2_core.c useeplus_protocol.c \
 	include/useeplus.h include/useeplus_protocol.h
 
 check-includes:

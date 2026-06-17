@@ -104,6 +104,4 @@ struct up_drv_data {
 	unsigned long dbg_usb_errors;
 };
 
-void up_decode_packets(struct up_drv_data *drv_data, struct up_parse_ctx *ctx);
-
 #endif /* _up_H_ */
