@@ -26,9 +26,8 @@ static bool up_check_ghost_header(u8 *buffer, size_t len,
 	return false;
 }
 
-static enum up_decode_status up_decode_envelope(u8 *buffer, size_t len,
-						size_t *index_ptr,
-						struct up_envelope *env)
+static enum up_decode_status up_decode(u8 *buffer, size_t len, size_t *index_ptr,
+				       struct up_decode_state *state)
 {
 	struct up_pkt_hdr *pkt_hdr;
 	struct up_pl_hdr *pl_hdr;
@@ -37,7 +36,7 @@ static enum up_decode_status up_decode_envelope(u8 *buffer, size_t len,
 	u16 pkt_len;
 	size_t index = *index_ptr;
 
-	env->index = index;
+	state->index = index;
 
 	pkt_hdr = (struct up_pkt_hdr *)(buffer + index);
 	pkt_len = UP_LE16_TO_CPU(pkt_hdr->le_length);
@@ -47,7 +46,7 @@ static enum up_decode_status up_decode_envelope(u8 *buffer, size_t len,
 		return UP_PARSE_SKIP;
 	}
 
-	env->total_size = UP_PKT_HDR_SIZE + pkt_len;
+	state->total_size = UP_PKT_HDR_SIZE + pkt_len;
 
 	if (!up_is_valid_pkt_header(pkt_hdr)) {
 		(*index_ptr)++;
@@ -59,25 +58,25 @@ static enum up_decode_status up_decode_envelope(u8 *buffer, size_t len,
 		return UP_PARSE_SKIP;
 	}
 
-	if (env->total_size > (len - index))
+	if (state->total_size > (len - index))
 		return UP_PARSE_NEED_DATA;
 
 	if (pkt_len < UP_PL_HDR_SIZE) {
-		*index_ptr += env->total_size;
+		*index_ptr += state->total_size;
 		return UP_PARSE_SKIP;
 	}
 
 	pl_off = index + UP_PKT_HDR_SIZE;
 	if (pl_off >= len || (len - pl_off) < UP_PL_HDR_SIZE) {
-		*index_ptr += env->total_size;
+		*index_ptr += state->total_size;
 		return UP_PARSE_SKIP;
 	}
 
 	pl_hdr = (struct up_pl_hdr *)(buffer + pl_off);
 
-	env->frame_id = pl_hdr->le_frame_id;
-	env->cam_num = pl_hdr->le_camera_number;
-	env->flags = pl_hdr->le_flags;
+	state->frame_id = pl_hdr->le_frame_id;
+	state->cam_num = pl_hdr->le_camera_number;
+	state->flags = pl_hdr->le_flags;
 
 	return UP_PARSE_OK;
 }
@@ -86,7 +85,7 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 {
 	size_t i, pl_start, pl_size, emit_size, limit;
 	struct up_pl_hdr *pl_hdr;
-	struct up_envelope env;
+	struct up_decode_state state;
 	size_t index = 0;
 	u8 *pl_src;
 	bool found = false;
@@ -95,30 +94,31 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 		return 0;
 
 	while ((len - index) >= TOTAL_USB_HEADER_SIZE) {
-		switch (up_decode_envelope(buffer, len, &index, &env)) {
-		case UP_PARSE_NEED_DATA:
+		switch (up_decode(buffer, len, &index, &state)) {
+		case UP_DECODE_NEED_DATA:
 			return index;
-		case UP_PARSE_SKIP:
+		case UP_DECODE_SKIP:
 			continue;
-		case UP_PARSE_OK:
+		case UP_DECODE_OK:
 			break;
 		}
 
-		if (env.cam_num > MAX_CAM_NUM)
-			goto advance_parser;
+		if (state.cam_num > MAX_CAM_NUM)
+			goto advance;
 
 		if (decoder->building_frame &&
-		    decoder->frame_id != env.frame_id) {
+		    decoder->frame_id != state.frame_id) {
 			if (!decoder->eof_reached && decoder->cb.on_frame_end)
 				decoder->cb.on_frame_end(decoder->context);
 		}
 
 		if (!decoder->building_frame ||
-		    decoder->frame_id != env.frame_id) {
+		    decoder->frame_id != state.frame_id) {
 			if (decoder->cb.on_frame_start)
-				decoder->cb.on_frame_start(decoder->context, env.frame_id, env.cam_num);
+				decoder->cb.on_frame_start(decoder->context, state.frame_id,
+							   state.cam_num);
 
-			decoder->frame_id = env.frame_id;
+			decoder->frame_id = state.frame_id;
 			decoder->building_frame = true;
 
 			decoder->found_soi = false;
@@ -126,12 +126,12 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 		}
 
 		if (decoder->eof_reached)
-			goto advance_parser;
+			goto advance;
 
-		pl_hdr = (struct up_pl_hdr *)(buffer + env.index + UP_PKT_HDR_SIZE);
+		pl_hdr = (struct up_pl_hdr *)(buffer + state.index + UP_PKT_HDR_SIZE);
 		if (up_valid_mjpeg_payload(pl_hdr)) {
-			pl_start = env.index + TOTAL_USB_HEADER_SIZE;
-			pl_size = env.total_size - TOTAL_USB_HEADER_SIZE;
+			pl_start = state.index + TOTAL_USB_HEADER_SIZE;
+			pl_size = state.total_size - TOTAL_USB_HEADER_SIZE;
 			pl_src = buffer + pl_start;
 
 			if (!decoder->found_soi) {
@@ -153,7 +153,7 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 					}
 				}
 				if (!found)
-					goto advance_parser;
+					goto advance;
 			}
 
 			emit_size = pl_size;
@@ -175,8 +175,8 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len)
 				decoder->cb.on_frame_end(decoder->context);
 		}
 
-advance_parser:
-		index += env.total_size;
+advance:
+		index += state.total_size;
 	}
 
 	return index;

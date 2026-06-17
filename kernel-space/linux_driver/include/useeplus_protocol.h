@@ -99,7 +99,7 @@ struct up_decode_context {
 
 enum up_decode_status { UP_DECODE_OK, UP_DECODE_SKIP, UP_DECODE_NEED_DATA };
 
-struct up_envelope {
+struct up_decode_state {
 	size_t index;
 	size_t total_size;
 	u8 frame_id;
