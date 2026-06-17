@@ -36,6 +36,9 @@ typedef uint32_t u32;
 extern "C" {
 #endif
 
+#define JPEG_SOI_MAX_POS 256
+#define MAX_GHOST_HEADER_OFFSET 160
+
 #define UP_PKT_HDR_SIZE (sizeof(struct up_pkt_hdr))
 #define UP_PL_HDR_SIZE (sizeof(struct up_pl_hdr))
 #define TOTAL_USB_HEADER_SIZE (UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE)

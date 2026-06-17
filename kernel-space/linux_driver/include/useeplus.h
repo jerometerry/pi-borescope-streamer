@@ -25,9 +25,6 @@
 #define UP_DEF_WIDTH 640
 #define UP_DEF_HEIGHT 480
 
-#define JPEG_SOI_MAX_POS 256
-#define MAX_GHOST_HEADER_OFFSET 160
-
 /* Global Diagnostic String Macro */
 #define DIAG_DATA_FORMAT \
 	"URBs:%lu Err:%lu Pkt:%lu Frm:%lu Deliv:%lu D-SOI:%lu D-EOI:%lu D-Q:%lu Ghost:%lu\n"
