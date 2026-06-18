@@ -185,7 +185,7 @@ int main(int argc, const char* argv[]) {
     try {
         VideoFrameBuffer ringBuffer;
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        V42lMjpegStream stream(ringBuffer);
+        V4l2MjpegStream stream(ringBuffer);
 
         FrameHandler handler = [&stream](std::span<const uint8_t> payload) -> bool {
             if (!running.load(std::memory_order_relaxed)) {
