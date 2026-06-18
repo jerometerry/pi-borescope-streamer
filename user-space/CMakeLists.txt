@@ -31,7 +31,10 @@ find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
+
+if(APPLE)
+    pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
+endif()
 
 # --- HTML to Header Conversion ---
 set(HTML_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/index.html")
@@ -227,17 +230,22 @@ add_library(borescope_core STATIC
     src/classes/mjpeg_frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp
     src/classes/mjpeg_stream.cpp
-    src/classes/mjpeg_stream_capture.cpp
-    src/classes/usb_camera.cpp
-    src/classes/usb_context.cpp
-    src/classes/usb_device_finder.cpp
-    src/classes/usb_driver.cpp
-    src/classes/v4l2.cpp
     src/classes/zero_allocation_response_builder.cpp
-    ${KERNEL_DRIVER_DIR}/useeplus_protocol.c
     ${GENERATED_HPP}
 )
 add_library(Borescope::Core ALIAS borescope_core)
+
+if(APPLE)
+    target_sources(borescope_core PRIVATE
+        src/classes/mjpeg_stream_capture.cpp
+        src/classes/usb_camera.cpp
+        src/classes/usb_context.cpp
+        src/classes/usb_device_finder.cpp
+        src/classes/usb_driver.cpp
+	${KERNEL_DRIVER_DIR}/useeplus_protocol.c
+    )
+    target_link_libraries(borescope_core PUBLIC PkgConfig::LIBUSB)
+endif()
 
 target_include_directories(borescope_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -245,67 +253,39 @@ target_include_directories(borescope_core
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
-target_link_libraries(borescope_core
-    PUBLIC
-        PkgConfig::LIBUSB
-        uNetworking
-    PRIVATE
-        project_warnings
-)
+target_link_libraries(borescope_core PUBLIC uNetworking PRIVATE project_warnings)
 
 if(ENABLE_COVERAGE)
     target_compile_options(borescope_core PUBLIC --coverage)
     target_link_options(borescope_core PUBLIC --coverage)
 endif()
 
-# --- Executables ---
-add_executable(mjpeg_server src/apps/mjpeg_server_main.cpp)
-target_link_libraries(mjpeg_server PRIVATE Borescope::Core project_warnings)
-
-add_executable(buffered_mjpeg_server src/apps/buffered_mjpeg_server_main.cpp)
-target_link_libraries(buffered_mjpeg_server PRIVATE Borescope::Core project_warnings)
-
-add_executable(attached_usb_devices src/apps/attached_usb_devices.cpp)
-target_link_libraries(attached_usb_devices PRIVATE Borescope::Core project_warnings)
-
-add_executable(mjpeg_stream_capture src/apps/mjpeg_stream_capture_main.cpp)
-target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
-
-add_executable(buffered_mjpeg_stream_capture src/apps/buffered_mjpeg_stream_capture_main.cpp)
-target_link_libraries(buffered_mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
-
-add_executable(mjpeg_frame_extractor src/apps/mjpeg_frame_extractor_main.cpp)
-target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
-
-# --- Linux-Specific Targets ---
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    target_sources(borescope_core PRIVATE
-        src/classes/buffered_v4l2_publisher.cpp
-        src/classes/v4l2_publisher.cpp
-    )
+    message(STATUS "Linux detected: Building v4l2 targets.")
 
-    add_executable(v4l2-borescope-daemon
-        src/classes/v4l2.cpp
-        src/classes/buffered_v4l2_publisher.cpp
-        src/classes/v4l2_publisher.cpp
-        src/apps/v4l2_main.cpp
+    add_executable(v4l2_mjpeg_server
+        src/apps/v4l2_mjpeg_server_main.cpp
     )
-    target_link_libraries(v4l2-borescope-daemon
-        PRIVATE borescope_core project_warnings ${LIBUSB_LIBRARIES}
+    target_link_libraries(v4l2_mjpeg_server
+        PRIVATE Borescope::Core project_warnings
     )
+elseif(APPLE)
+    message(STATUS "MacOS detected: Building libusb targets.")
 
-    add_executable(buffered-v4l2-borescope-daemon
-        src/classes/v4l2.cpp
-        src/classes/buffered_v4l2_publisher.cpp
-        src/classes/v4l2_publisher.cpp
-        src/apps/buffered_v4l2_main.cpp
-    )
-    target_link_libraries(buffered-v4l2-borescope-daemon
-        PRIVATE borescope_core project_warnings ${LIBUSB_LIBRARIES}
-    )
-    message(STATUS "Linux detected: Building v4l2-borescope-daemon target.")
-else()
-    message(STATUS "macOS detected: Skipping v4l2-borescope-daemon target.")
+    add_executable(mjpeg_server src/apps/mjpeg_server_main.cpp)
+    target_link_libraries(mjpeg_server PRIVATE Borescope::Core project_warnings)
+
+    add_executable(buffered_mjpeg_server src/apps/buffered_mjpeg_server_main.cpp)
+    target_link_libraries(buffered_mjpeg_server PRIVATE Borescope::Core project_warnings)
+
+    add_executable(mjpeg_stream_capture src/apps/mjpeg_stream_capture_main.cpp)
+    target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
+
+    add_executable(buffered_mjpeg_stream_capture src/apps/buffered_mjpeg_stream_capture_main.cpp)
+    target_link_libraries(buffered_mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
+
+    add_executable(mjpeg_frame_extractor src/apps/mjpeg_frame_extractor_main.cpp)
+    target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
 endif()
 
 # --- Documentation (Opt-In) ---
@@ -371,7 +351,6 @@ if(BUILD_TESTING)
         tests/test_mjpeg_server.cpp
         tests/test_mjpeg_stream.cpp
         tests/test_usb_device_finder.cpp
-        tests/test_v4l2.cpp
         tests/test_zero_allocation_response_builder.cpp
     )
 
