@@ -2,7 +2,7 @@
 	remove uninstall check-status insert check-deps check-stack check-patch check-includes \
 	check-format fix-format
 
-obj-m += useeplus_core.o
+obj-m += useeplus.o
 useeplus-y := useeplus_core.o useeplus_protocol.o
 
 MODULE_NAME := useeplus
