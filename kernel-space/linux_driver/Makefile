@@ -2,10 +2,10 @@
 	remove uninstall check-status insert check-deps check-stack check-patch check-includes \
 	check-format fix-format
 
-obj-m += useeplus_v4l2.o
-useeplus_v4l2-y := useeplus_v4l2_core.o useeplus_protocol.o
+obj-m += useeplus_core.o
+useeplus-y := useeplus_core.o useeplus_protocol.o
 
-MODULE_NAME := useeplus_v4l2
+MODULE_NAME := useeplus
 GIT_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "no-git")
 BUILD_DATE  := $(shell date +"%Y-%m-%d_%H:%M:%S")
 VERSION_STR := $(BUILD_DATE)-$(GIT_VERSION)
@@ -97,20 +97,20 @@ check-deps: default
 	fi
 
 check-stack: default
-	objdump -d useeplus_v4l2.ko | $(KDIR)/scripts/checkstack.pl aarch64
+	objdump -d useeplus.ko | $(KDIR)/scripts/checkstack.pl aarch64
 
 check-patch:
 	@$(KDIR)/scripts/checkpatch.pl --strict --no-tree --root=$$(pwd) --file \
-	useeplus_v4l2_core.c useeplus_protocol.c \
-	./include/useeplus.h ./include/useeplus_protocol.h
+	useeplus_core.c useeplus_protocol.c \
+	./include/useeplus_core.h ./include/useeplus_protocol.h
 
 check-format:
-	@clang-format --dry-run --Werror useeplus_v4l2_core.c useeplus_protocol.c \
-	include/useeplus.h include/useeplus_protocol.h
+	@clang-format --dry-run --Werror useeplus_core.c useeplus_protocol.c \
+	include/useeplus_core.h include/useeplus_protocol.h
 
 fix-format:
-	@clang-format -i useeplus_v4l2_core.c useeplus_protocol.c \
-	include/useeplus.h include/useeplus_protocol.h
+	@clang-format -i useeplus_core.c useeplus_protocol.c \
+	include/useeplus_core.h include/useeplus_protocol.h
 
 check-includes:
 	$(KDIR)/scripts/checkincludes.pl *.c include/*.h
