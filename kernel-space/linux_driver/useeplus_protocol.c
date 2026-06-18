@@ -144,51 +144,53 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			goto advance;
 
 		pl_hdr = up_get_pl_hdr(buf, index + UP_PKT_HDR_SIZE);
-		if (up_valid_mjpeg_pl(pl_hdr)) {
-			pl_start = index + TOTAL_USB_HDR_SIZE;
-			pl_size = state.pkt_size - TOTAL_USB_HDR_SIZE;
-			pl_src = buf + pl_start;
 
-			if (!dec->found_soi) {
-				found = false;
-				limit = pl_size;
-				if (limit > JPEG_SOI_MAX_POS)
-					limit = JPEG_SOI_MAX_POS;
+		if (!up_valid_mjpeg_pl(pl_hdr))
+			goto advance;
 
-				if (pl_size >= 2) {
-					for (i = 0; i < limit - 1; i++) {
-						if (pl_src[i] == JPEG_DEL &&
-						    pl_src[i + 1] == JPEG_SOI) {
-							pl_src += i;
-							pl_size -= i;
-							dec->found_soi = true;
-							found = true;
-							break;
-						}
-					}
-				}
-				if (!found)
-					goto advance;
-			}
+		pl_start = index + TOTAL_USB_HDR_SIZE;
+		pl_size = state.pkt_size - TOTAL_USB_HDR_SIZE;
+		pl_src = buf + pl_start;
 
-			emit_size = pl_size;
+		if (!dec->found_soi) {
+			found = false;
+			limit = pl_size;
+			if (limit > JPEG_SOI_MAX_POS)
+				limit = JPEG_SOI_MAX_POS;
+
 			if (pl_size >= 2) {
-				for (i = 0; i < pl_size - 1; i++) {
+				for (i = 0; i < limit - 1; i++) {
 					if (pl_src[i] == JPEG_DEL &&
-					    pl_src[i + 1] == JPEG_EOI) {
-						emit_size = i + 2;
-						dec->eof_reached = true;
+						pl_src[i + 1] == JPEG_SOI) {
+						pl_src += i;
+						pl_size -= i;
+						dec->found_soi = true;
+						found = true;
 						break;
 					}
 				}
 			}
-
-			if (dec->cb.on_video_payload)
-				dec->cb.on_video_payload(dec->context, pl_src, emit_size);
-
-			if (dec->eof_reached && dec->cb.on_frame_complete)
-				dec->cb.on_frame_complete(dec->context);
+			if (!found)
+				goto advance;
 		}
+
+		emit_size = pl_size;
+		if (pl_size >= 2) {
+			for (i = 0; i < pl_size - 1; i++) {
+				if (pl_src[i] == JPEG_DEL &&
+					pl_src[i + 1] == JPEG_EOI) {
+					emit_size = i + 2;
+					dec->eof_reached = true;
+					break;
+				}
+			}
+		}
+
+		if (dec->cb.on_video_payload)
+			dec->cb.on_video_payload(dec->context, pl_src, emit_size);
+
+		if (dec->eof_reached && dec->cb.on_frame_complete)
+			dec->cb.on_frame_complete(dec->context);
 
 advance:
 		index += state.pkt_size;
