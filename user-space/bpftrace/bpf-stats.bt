@@ -1,7 +1,7 @@
 #!/usr/bin/env bpftrace
 
 BEGIN {
-    printf("Monitoring v4l2_mjpeg_serv... Hit Ctrl-C to exit.\n");
+    printf("Monitoring v4l2_mjpeg_server... Hit Ctrl-C to exit.\n");
     printf("=================================================================================\n");
     printf("%-12s %-15s %-15s %-15s %-15s\n", "TIME", "MALLOCS/sec", "FREES/sec", "SENDS/sec", "BANDWIDTH");
     printf("=================================================================================\n");

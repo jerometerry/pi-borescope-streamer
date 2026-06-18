@@ -1,7 +1,7 @@
 #!/usr/bin/env bpftrace
 
 BEGIN {
-    printf("Tracing memory allocations in v4l2_mjpeg_serv...\n");
+    printf("Tracing memory allocations in v4l2_mjpeg_server...\n");
     printf("Capturing user-space stack traces. Let it run for 10 seconds, then hit Ctrl-C.\n");
 }
 
