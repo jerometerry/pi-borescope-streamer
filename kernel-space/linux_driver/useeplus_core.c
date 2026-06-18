@@ -257,7 +257,6 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 	struct up_drv_data *drv_data = (struct up_drv_data *)context;
 	struct up_buffer *active_buf;
 	struct list_head *rdy_q;
-	spinlock_t *q_lock;
 	unsigned long flags;
 
 	if (drv_data->active_buf) {
@@ -270,9 +269,8 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 	drv_data->active_pl_len = 0;
 
 	rdy_q = &drv_data->ready_queue;
-	q_lock = &drv_data->ready_queue_lock;
 
-	spin_lock_irqsave(q_lock, flags);
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
 	if (!list_empty(rdy_q)) {
 		active_buf = list_first_entry(rdy_q, struct up_buffer, list);
 		list_del(&active_buf->list);
@@ -281,7 +279,7 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 	} else {
 		drv_data->active_buf = NULL;
 	}
-	spin_unlock_irqrestore(q_lock, flags);
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
 static void up_on_frame_complete(void *context)
