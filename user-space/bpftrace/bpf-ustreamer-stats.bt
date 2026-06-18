@@ -1,0 +1,71 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+printf("Competitive Analysis: Monitoring uStreamer... Hit Ctrl-C to exit.\n");
+printf("=================================================================================\n");
+printf("%-12s %-15s %-15s %-15s %-15s\n", "TIME", "MALLOCS/sec", "FREES/sec", "NET_CALLS/sec", "BANDWIDTH");
+printf("=================================================================================\n");
+}
+
+/_ 1. Track all heap allocations _/
+uprobe:libc:malloc,
+uprobe:libc:calloc,
+uprobe:libc:realloc
+/comm == "ustreamer" || comm == "http"/ {
+@allocs++;
+}
+
+uprobe:libc:free
+/comm == "ustreamer" || comm == "http"/ {
+@frees++;
+}
+
+/_ 2. Track network/socket dispatches individually based on their C-signatures _/
+
+tracepoint:syscalls:sys_enter_sendto
+/comm == "ustreamer" || comm == "http"/ {
+@sends++;
+@bytes_per_sec += args->len;
+@total_bytes += args->len;
+}
+
+tracepoint:syscalls:sys_enter_write
+/comm == "ustreamer" || comm == "http"/ {
+@sends++;
+@bytes_per_sec += args->count;
+@total_bytes += args->count;
+}
+
+tracepoint:syscalls:sys_enter_sendmsg
+/comm == "ustreamer" || comm == "http"/ {
+@sends++;
+// sendmsg uses an iovec array instead of a flat length.
+// Counting the syscall, but omitting the deep byte extraction to keep the probe fast.
+}
+
+/_ 3. Output 1-second summaries _/
+interval:s:1 {
+$mbps = (@bytes_per_sec \* 8) / 1000000;
+
+    time("%H:%M:%S    ");
+    printf("%-15d %-15d %-15d %d Mbps\n", @allocs, @frees, @sends, $mbps);
+
+    // Reset accumulators
+    @allocs = 0;
+    @frees = 0;
+    @sends = 0;
+    @bytes_per_sec = 0;
+
+}
+
+END {
+$total_mb = @total_bytes / 1024 / 1024;
+printf("\n--- Session Complete ---\nTotal Data Transferred: %d MB\n", $total_mb);
+
+    clear(@allocs);
+    clear(@frees);
+    clear(@sends);
+    clear(@bytes_per_sec);
+    clear(@total_bytes);
+
+}
