@@ -84,7 +84,7 @@ sudo cp arch/arm64/boot/dts/overlays/README /boot/firmware/overlays/
 sudo reboot
 ```
 
-### Deploying useeplus driver updates
+### Deploying Modules
 
 Driver modules are hot reloadable, so we don't have to recompile the kernel after making driver
 changes. Just recompile and install the modules
@@ -96,4 +96,19 @@ changes. Just recompile and install the modules
 make modules -j6
 # install the drivers
 sudo make modules_install
+```
+
+### Deploying useeplus Driver module independently
+
+```bash
+# run this in the linux tree root folder
+
+# compile all the modules
+make modules -j6
+
+# install just the useeplus driver module
+sudo cp drivers/media/usb/useeplus/useeplus.ko /lib/modules/$(uname -r)/kernel/drivers/media/usb/useeplus/
+
+# have the kernel reload updated modules
+sudo depmod -a
 ```
