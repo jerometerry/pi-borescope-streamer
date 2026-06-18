@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+if USB && MEDIA_SUPPORT
+
+menuconfig MEDIA_USB_SUPPORT
+	bool "Media USB Adapters"
+	help
+	  Enable media drivers for USB bus.
+	  If you have such devices, say Y.
+
+if MEDIA_USB_SUPPORT
+
+if MEDIA_CAMERA_SUPPORT
+	comment "Webcam devices"
+
+...
+
+source "drivers/media/usb/useeplus/Kconfig"
+
+...
+
+endif
+
+if MEDIA_ANALOG_TV_SUPPORT
+	comment "Analog TV USB devices"
+
+...
+
+endif
+
+if (MEDIA_ANALOG_TV_SUPPORT || MEDIA_DIGITAL_TV_SUPPORT)
+	comment "Analog/digital TV USB devices"
+
+...
+
+endif
+
+if I2C && MEDIA_DIGITAL_TV_SUPPORT
+	comment "Digital TV USB devices"
+
+...
+
+endif
+
+if (MEDIA_CAMERA_SUPPORT || MEDIA_ANALOG_TV_SUPPORT || MEDIA_DIGITAL_TV_SUPPORT)
+	comment "Webcam, TV (analog/digital) USB devices"
+
+...
+
+endif
+
+if MEDIA_SDR_SUPPORT
+	comment "Software defined radio USB devices"
+
+...
+
+endif
+
+endif #MEDIA_USB_SUPPORT
+endif #USB
