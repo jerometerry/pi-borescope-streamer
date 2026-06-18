@@ -33,7 +33,7 @@
 
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
-#include "mjpeg_stream.hpp"
+#include "v42l_mjpeg_stream.hpp"
 #include "video_frame_buffer.hpp"
 
 namespace {
@@ -185,7 +185,7 @@ int main(int argc, const char* argv[]) {
     try {
         VideoFrameBuffer ringBuffer;
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        MjpegStream stream(ringBuffer);
+        V42lMjpegStream stream(ringBuffer);
 
         FrameHandler handler = [&stream](std::span<const uint8_t> payload) -> bool {
             if (!running.load(std::memory_order_relaxed)) {
