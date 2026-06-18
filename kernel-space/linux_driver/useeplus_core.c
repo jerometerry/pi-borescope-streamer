@@ -294,7 +294,7 @@ static void up_on_frame_complete(void *context)
 	drv_data->active_pl_len = 0;
 }
 
-static void up_on_frame_complete(void *context)
+static void up_on_frame_incomplete(void *context)
 {
 }
 
@@ -357,7 +357,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 
 	usb_dev = interface_to_usbdev(itf);
 	itf_num = itf->cur_altsetting->desc.bInterfaceNumber;
-	drv_data = NULL:
+	drv_data = NULL;
 
 	/*
 	 * Only bind the driver when the Video Interface is probed
@@ -365,7 +365,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	if (itf_num != UP_VIDEO_INTERFACE)
 		return -ENODEV;
 
-	dev_info(&interface->dev, "Useeplus borescope identified\n");
+	dev_info(&itf->dev, "Useeplus borescope identified\n");
 
 	drv_data = kzalloc(sizeof(*drv_data), GFP_KERNEL);
 	if (!drv_data)
@@ -571,7 +571,7 @@ static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
 	struct usb_device *u_dev;
 	u8 *buf;
 
-	udev = data->usb_dev;
+	u_dev = data->usb_dev;
 	buf = kmemdup(tokens, len, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
@@ -1043,7 +1043,7 @@ static struct usb_driver up_driver = {
 
 static int __init up_init(void)
 {
-	pr_debug("useeplus_v4l2: Module initialized. Version: %s\n", BUILD_VER);
+	pr_debug("useeplus_v4l2: Module initialized.\n");
 	return usb_register(&up_driver);
 }
 
