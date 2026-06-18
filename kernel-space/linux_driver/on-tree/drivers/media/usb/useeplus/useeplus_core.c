@@ -216,51 +216,66 @@ static void up_device_release(struct v4l2_device *v4l2_dev)
 static void up_on_video_payload(void *context, u8 *data, size_t len)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)context;
-	struct vb2_buffer *vb;
+	struct vb2_v4l2_buffer *v4l2_buf;
+	struct up_buffer *active_buf;
+	struct vb2_buffer *vb2_buf;
+	struct device *dev;
+	size_t pl_len;
 	u8 *vaddr;
 
 	if (!drv_data->active_buf)
 		return;
 
-	if (drv_data->active_pl_len + len > MAX_FRAME_SIZE) {
-		dev_err_ratelimited(&drv_data->itf->dev,
-				    "useeplus: Overflow Prevention.\n");
-		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
-				VB2_BUF_STATE_ERROR);
+	active_buf = drv_data->active_buf;
+	v4l2_buf = &active_buf->vb2_buffer;
+	vb2_buf = &v4l2_buf->vb2_buf;
+
+	pl_len = drv_data->active_pl_len;
+	if (pl_len + len > MAX_FRAME_SIZE) {
+		dev = &drv_data->itf->dev;
+		dev_err_ratelimited(dev, "useeplus: Overflow Prevention.\n");
+
+		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
+
 		drv_data->active_buf = NULL;
 		drv_data->active_pl_len = 0;
 		drv_data->dbg_frames_dropped_soi++;
+
 		return;
 	}
 
-	vb = &drv_data->active_buf->vb2_buffer.vb2_buf;
-	vaddr = vb2_plane_vaddr(vb, 0);
+	vaddr = vb2_plane_vaddr(vb2_buf, 0);
 
 	if (vaddr) {
-		memcpy(vaddr + drv_data->active_pl_len, data, len);
+		memcpy(vaddr + pl_len, data, len);
 		drv_data->active_pl_len += len;
 	}
 }
 
 static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 {
-	struct up_drv_data *drv_data;
+	struct up_drv_data *drv_data = (struct up_drv_data *)context;
+	struct up_buffer *active_buf;
+	struct list_head *rdy_q;
 	unsigned long flags;
 
-	drv_data = (struct up_drv_data *)context;
 	if (drv_data->active_buf) {
-		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+		active_buf = drv_data->active_buf;
+		vb2_buffer_done(&active_buf->vb2_buffer.vb2_buf,
 				VB2_BUF_STATE_ERROR);
 		drv_data->active_buf = NULL;
 	}
 
 	drv_data->active_pl_len = 0;
 
+	rdy_q = &drv_data->ready_queue;
+
 	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	if (!list_empty(&drv_data->ready_queue)) {
-		drv_data->active_buf = list_first_entry(&drv_data->ready_queue,
-							struct up_buffer, list);
-		list_del(&drv_data->active_buf->list);
+	if (!list_empty(rdy_q)) {
+		active_buf = list_first_entry(rdy_q, struct up_buffer, list);
+		list_del(&active_buf->list);
+
+		drv_data->active_buf = active_buf;
 	} else {
 		drv_data->active_buf = NULL;
 	}
@@ -270,23 +285,30 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 static void up_on_frame_complete(void *context)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)context;
-	struct vb2_buffer *vb;
+	struct vb2_v4l2_buffer *v4l2_buf;
+	struct up_buffer *active_buf;
+	struct vb2_buffer *vb2_buf;
+	size_t pl_len;
 
 	if (!drv_data->active_buf)
 		return;
 
-	if (drv_data->active_pl_len < 2) {
-		drv_data->dbg_frames_dropped_eoi++;
-		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
-				VB2_BUF_STATE_ERROR);
-	} else {
-		vb = &drv_data->active_buf->vb2_buffer.vb2_buf;
+	active_buf = drv_data->active_buf;
+	v4l2_buf = &active_buf->vb2_buffer;
+	vb2_buf = &v4l2_buf->vb2_buf;
 
-		vb2_set_plane_payload(vb, 0, drv_data->active_pl_len);
-		vb->timestamp = ktime_get_ns();
-		drv_data->active_buf->vb2_buffer.sequence =
-			drv_data->sequence++;
-		vb2_buffer_done(vb, VB2_BUF_STATE_DONE);
+	pl_len = drv_data->active_pl_len;
+	if (pl_len < 2) {
+		drv_data->dbg_frames_dropped_eoi++;
+		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
+	} else {
+		vb2_set_plane_payload(vb2_buf, 0, pl_len);
+
+		vb2_buf->timestamp = ktime_get_ns();
+		v4l2_buf->sequence = drv_data->sequence++;
+
+		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_DONE);
+
 		drv_data->dbg_frames_delivered++;
 	}
 
@@ -297,17 +319,23 @@ static void up_on_frame_complete(void *context)
 static void up_on_frame_incomplete(void *context)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)context;
+	struct vb2_v4l2_buffer *v4l2_buf;
+	struct up_buffer *active_buf;
+	struct vb2_buffer *vb2_buf;
 
 	if (!drv_data->active_buf)
 		return;
+
+	active_buf = drv_data->active_buf;
+	v4l2_buf = &active_buf->vb2_buffer;
+	vb2_buf = &v4l2_buf->vb2_buf;
 
 	/*
 	 * The hardware dropped the End of Image (EOI) marker and rolled over.
 	 * Return the buffer to the V4L2 subsystem with an error state to
 	 * prevent kernel memory starvation and notify userspace of the tear.
 	 */
-	vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
-			VB2_BUF_STATE_ERROR);
+	vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 
 	/*
 	 * Clear the active pointer so the upcoming on_frame_start
@@ -319,16 +347,18 @@ static void up_on_frame_incomplete(void *context)
 
 static void up_work_handler(struct work_struct *work)
 {
-	struct up_drv_data *drv_data;
-	size_t consumed, remaining;
-	unsigned int len;
+	size_t consumed, remaining, buf_len;
 	struct up_decoder decoder = { 0 };
+	struct up_drv_data *drv_data;
+	unsigned int len;
+	u8 *buf, *dec_buf;
 
 	drv_data = container_of(work, struct up_drv_data, work);
 
-	len = kfifo_out(&drv_data->fifo,
-			drv_data->decode_buf + drv_data->decode_buf_len,
-			MAX_WORKSPACE_SIZE - drv_data->decode_buf_len);
+	dec_buf = drv_data->decode_buf;
+	buf = dec_buf + drv_data->decode_buf_len;
+	buf_len = MAX_WORKSPACE_SIZE - drv_data->decode_buf_len;
+	len = kfifo_out(&drv_data->fifo, buf, buf_len);
 
 	drv_data->decode_buf_len += len;
 
@@ -344,18 +374,18 @@ static void up_work_handler(struct work_struct *work)
 		decoder.cb.on_frame_complete = up_on_frame_complete;
 		decoder.cb.on_frame_incomplete = up_on_frame_incomplete;
 
-		consumed = up_decode_bulk(&decoder, drv_data->decode_buf,
-					  drv_data->decode_buf_len);
+		buf_len = drv_data->decode_buf_len;
+		consumed = up_decode_bulk(&decoder, dec_buf, buf_len);
 
 		drv_data->building_frame = decoder.building_frame;
 		drv_data->frame_id = decoder.frame_id;
 		drv_data->found_soi = decoder.found_soi;
 		drv_data->eof_reached = decoder.eof_reached;
 
-		if (consumed < drv_data->decode_buf_len) {
-			remaining = drv_data->decode_buf_len - consumed;
-			memmove(drv_data->decode_buf,
-				drv_data->decode_buf + consumed, remaining);
+		buf_len = drv_data->decode_buf_len;
+		if (consumed < buf_len) {
+			remaining = buf_len - consumed;
+			memmove(dec_buf, dec_buf + consumed, remaining);
 			drv_data->decode_buf_len = remaining;
 		} else {
 			drv_data->decode_buf_len = 0;

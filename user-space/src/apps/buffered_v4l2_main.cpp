@@ -78,7 +78,7 @@ int main(int argc, const char* argv[]) {
         if (!running.load(std::memory_order_relaxed)) {
             return false;
         }
-	if (status == UsbTransferStatus::Completed) {
+        if (status == UsbTransferStatus::Completed) {
             if (!payload.empty()) {
                 stream.send(payload);
             }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0+ OR MIT
 
 #include "useeplus_protocol.h"
-#include "include/useeplus_protocol.h"
+#include "useeplus_protocol.h"
 
 static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t index, size_t *hdr_off)
 {

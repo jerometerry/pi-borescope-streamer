@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT OR GPL-2.0-only */
 
-#ifndef _up_H_
-#define _up_H_
+#ifndef _USEEPLUS_CORE_H_
+#define _USEEPLUS_CORE_H_
 
 #include "useeplus_protocol.h"
 #include <linux/types.h>
@@ -102,4 +102,4 @@ struct up_drv_data {
 	unsigned long dbg_usb_errors;
 };
 
-#endif /* _up_H_ */
+#endif /* _USEEPLUS_CORE_H_ */

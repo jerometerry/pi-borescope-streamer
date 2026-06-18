@@ -241,7 +241,7 @@ add_library(Borescope::Core ALIAS borescope_core)
 
 target_include_directories(borescope_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    PUBLIC "${KERNEL_DRIVER_DIR}/include"
+    PUBLIC "${KERNEL_DRIVER_DIR}"
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
@@ -398,7 +398,7 @@ if(BUILD_TESTING)
 
     target_include_directories(run_linux_driver_tests PRIVATE
         "${KERNEL_DRIVER_DIR}/tests/mock_kernel"
-        "${KERNEL_DRIVER_DIR}/include"
+        "${KERNEL_DRIVER_DIR}"
     )
 
     target_link_libraries(run_linux_driver_tests

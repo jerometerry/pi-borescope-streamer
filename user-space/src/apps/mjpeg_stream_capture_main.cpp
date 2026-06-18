@@ -182,7 +182,7 @@ int main() {
                 return false;
             }
 
-	    if (status == UsbTransferStatus::Completed && !payload.empty()) {
+            if (status == UsbTransferStatus::Completed && !payload.empty()) {
                 auto seq_opt = ringBuffer.tryClaim();
 
                 if (seq_opt.has_value()) {

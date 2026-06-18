@@ -70,14 +70,14 @@ int main(int argc, const char* argv[]) {
             return false;
         }
 
-	if (status == UsbTransferStatus::Completed) {
+        if (status == UsbTransferStatus::Completed) {
             if (!payload.empty()) {
                 stream.send(payload);
             }
             return true;
         }
 
-	return status != UsbTransferStatus::Disconnected;
+        return status != UsbTransferStatus::Disconnected;
     };
 
     UsbDriver driver(transfer, &running);

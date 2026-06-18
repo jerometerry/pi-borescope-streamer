@@ -13,7 +13,6 @@ KDIR ?= /lib/modules/$(shell uname -r)/build
 SMATCH := $(HOME)/github/smatch/smatch
 PWD  := $(shell pwd)
 
-ccflags-y += -I$(src)/include
 ccflags-y += -DBUILD_VER='"$(VERSION_STR)"'
 
 ifeq ($(DEBUG),1)
@@ -102,15 +101,15 @@ check-stack: default
 check-patch:
 	@$(KDIR)/scripts/checkpatch.pl --strict --no-tree --root=$$(pwd) --file \
 	useeplus_core.c useeplus_protocol.c \
-	./include/useeplus_core.h ./include/useeplus_protocol.h
+	useeplus_core.h useeplus_protocol.h
 
 check-format:
 	@clang-format --dry-run --Werror useeplus_core.c useeplus_protocol.c \
-	include/useeplus_core.h include/useeplus_protocol.h
+	useeplus_core.h useeplus_protocol.h
 
 fix-format:
 	@clang-format -i useeplus_core.c useeplus_protocol.c \
-	include/useeplus_core.h include/useeplus_protocol.h
+	useeplus_core.h useeplus_protocol.h
 
 check-includes:
-	$(KDIR)/scripts/checkincludes.pl *.c include/*.h
+	$(KDIR)/scripts/checkincludes.pl *.c *.h
