@@ -165,7 +165,8 @@ struct up_pl_hdr {
 struct up_decoder_callbacks {
 	void (*on_frame_start)(void *context, u8 frame_id, u8 dev_num);
 	void (*on_video_payload)(void *context, u8 *data, size_t len);
-	void (*on_frame_end)(void *context);
+	void (*on_frame_complete)(void *context);
+	void (*on_frame_incomplete)(void *context);
 };
 
 struct up_decode_context {

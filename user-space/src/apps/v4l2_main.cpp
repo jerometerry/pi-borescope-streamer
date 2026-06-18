@@ -66,13 +66,18 @@ int main(int argc, const char* argv[]) {
     MjpegStream stream(ringBuffer);
 
     auto transfer = [&stream](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
-        if (status == UsbTransferStatus::Completed) {
+        if (!running.load(std::memory_order_relaxed)) {
+            return false;
+        }
+
+	if (status == UsbTransferStatus::Completed) {
             if (!payload.empty()) {
                 stream.send(payload);
             }
             return true;
         }
-        return status != UsbTransferStatus::Disconnected;
+
+	return status != UsbTransferStatus::Disconnected;
     };
 
     UsbDriver driver(transfer, &running);

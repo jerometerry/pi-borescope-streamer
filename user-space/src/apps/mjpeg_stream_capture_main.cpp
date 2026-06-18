@@ -178,7 +178,11 @@ int main() {
         });
 
         auto transfer = [&](UsbTransferStatus status, std::span<const uint8_t> payload) -> bool {
-            if (status == UsbTransferStatus::Completed && !payload.empty()) {
+            if (!running.load(std::memory_order_relaxed)) {
+                return false;
+            }
+
+	    if (status == UsbTransferStatus::Completed && !payload.empty()) {
                 auto seq_opt = ringBuffer.tryClaim();
 
                 if (seq_opt.has_value()) {
@@ -192,8 +196,7 @@ int main() {
                     metrics.totalFramesDropped.fetch_add(1, std::memory_order_relaxed);
                 }
             }
-            return running.load(std::memory_order_relaxed) &&
-                   status != UsbTransferStatus::Disconnected;
+            return status != UsbTransferStatus::Disconnected;
         };
 
         UsbDriver driver(transfer, &running);

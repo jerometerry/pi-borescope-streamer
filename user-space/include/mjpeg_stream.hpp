@@ -62,6 +62,18 @@ class MjpegStream {
     bool frameActive_{false};
 
     /**
+     * @brief
+     *
+     */
+    uint8_t lastFrameId_{0};
+
+    /**
+     * @brief
+     *
+     */
+    uint64_t hardwareDroppedFrames_{0};
+
+    /**
      * @brief The waiting room for raw bytes that haven't been sorted yet.
      */
     std::vector<uint8_t> inputBuffer_{};
@@ -74,25 +86,13 @@ class MjpegStream {
     size_t readOffset_{0};
 
     /**
-     * @brief The memory of what the current picture is supposed to look like.
-     * @details Keeps track of things like the current frame ID and which lens the
-     * data is coming from, so we don't accidentally stitch chunks from two different
-     * pictures together.
-     */
-    up_pl_hdr payloadHeader_{};
-
-    /**
-     * @brief Get the Active VideoFrame Slot object
+     * @brief
      *
-     * @return VideoFrame&
      */
-    VideoFrame& getActiveFrameSlot();
+    struct up_decoder decoder_{};
 
-    /**
-     * @brief Snip out the exact picture and send it off.
-     * @details Standard JPEG files have strict start (`FF D8`) and end (`FF D9`) markers.
-     * This function scans the workbench, cuts out the JPEG file, and fires it
-     * into the `frameSink`.
-     */
-    void outputFrame();
+    static void onFrameStartCallback(void* context, uint8_t frameId, uint8_t devNum);
+    static void onVideoPayloadCallback(void* context, uint8_t* data, size_t len);
+    static void onFrameCompleteCallback(void* context);
+    static void onFrameIncompleteCallback(void* context);
 };

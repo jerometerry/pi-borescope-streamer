@@ -22,81 +22,25 @@ BufferedMjpegStream::BufferedMjpegStream(std::shared_ptr<BufferPool> bufferPool,
     : bufferPool_(std::move(bufferPool)), onFrameReady_(std::move(onFrameReady)) {
     inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
     activeFrame_ = bufferPool_->borrow();
+
+    decoder_.context = this;
+    decoder_.cb.on_frame_start = BufferedMjpegStream::onFrameStartCallback;
+    decoder_.cb.on_video_payload = BufferedMjpegStream::onVideoPayloadCallback;
+    decoder_.cb.on_frame_complete = BufferedMjpegStream::onFrameCompleteCallback;
+    decoder_.cb.on_frame_incomplete = BufferedMjpegStream::onFrameIncompleteCallback;
 }
 
 void BufferedMjpegStream::send(std::span<const uint8_t> data) {
     inputBuffer_.insert(inputBuffer_.end(), data.begin(), data.end());
 
-    size_t i = readOffset_;
-
-    while (i + TOTAL_USB_HEADER_SIZE <= inputBuffer_.size()) {
-        up_pkt_hdr packetHeader{};
-        std::memcpy(&packetHeader, &inputBuffer_[i], USB_PACKET_HEADER_SIZE);
-
-        if (!up_is_valid_pkt_hdr(&packetHeader)) {
-            i++;
-            continue;
-        }
-
-        bool isGhost = false;
-        size_t nextHeaderOffset = 0;
-        size_t maxScan = std::min<size_t>(UsbProtocol::MAX_SCAN_LIMIT, inputBuffer_.size() - i - 3);
-
-        for (size_t d = USB_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
-            if (inputBuffer_[i + d] == UsbProtocol::USB_FRAME_HEADER_A &&
-                inputBuffer_[i + d + 1] == UsbProtocol::USB_FRAME_HEADER_B &&
-                (inputBuffer_[i + d + 2] == UsbProtocol::VIDEO_CAMERA_ID ||
-                 inputBuffer_[i + d + 2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
-                isGhost = true;
-                nextHeaderOffset = d;
-                break;
-            }
-        }
-
-        if (isGhost) {
-            i += nextHeaderOffset;
-            continue;
-        }
-
-        size_t packetLength = EndianConversion::wireToHost(packetHeader.le_length);
-        size_t totalPacketSize = USB_PACKET_HEADER_SIZE + packetLength;
-
-        if (i + totalPacketSize > inputBuffer_.size()) {
-            break;
-        }
-
-        if (packetLength < USB_PAYLOAD_HEADER_SIZE) {
-            i++;
-            continue;
-        }
-
-        up_pl_hdr payloadHeader{};
-        std::memcpy(&payloadHeader, &inputBuffer_[i + USB_PACKET_HEADER_SIZE],
-                    USB_PAYLOAD_HEADER_SIZE);
-
-        if (activeFrame_ && !activeFrame_->empty() &&
-            payloadHeader_.le_frame_id != payloadHeader.le_frame_id) {
-            outputFrame();
-        }
-
-        payloadHeader_ = payloadHeader;
-
-        if (up_valid_mjpeg_pl(&payloadHeader)) {
-            size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
-            size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
-
-            if (!activeFrame_) {
-                activeFrame_ = bufferPool_->borrow();
-            }
-
-            std::span<const uint8_t> toInsert(inputBuffer_.data() + payloadStart, payloadSize);
-            activeFrame_->insertContent(toInsert);
-        }
-
-        i += totalPacketSize;
+    size_t available = inputBuffer_.size() - readOffset_;
+    if (available == 0) {
+        return;
     }
 
-    readOffset_ = i;
+    size_t consumed = up_decode_bulk(&decoder_, inputBuffer_.data() + readOffset_, available);
+
+    readOffset_ += consumed;
 
     if (readOffset_ == inputBuffer_.size()) {
         inputBuffer_.clear();
@@ -107,45 +51,49 @@ void BufferedMjpegStream::send(std::span<const uint8_t> data) {
     }
 }
 
-void BufferedMjpegStream::outputFrame() {
-    if (!activeFrame_ || activeFrame_->empty()) {
-        return;
-    }
+void BufferedMjpegStream::onFrameStartCallback(void* context, uint8_t frameId, uint8_t devNum) {
+    auto* self = static_cast<BufferedMjpegStream*>(context);
 
-    auto buffer = activeFrame_->getContentSlice();
-    size_t soiOffset = std::string::npos;
-    size_t eoiOffset = std::string::npos;
-
-    // Scan forward for Start of Image (FF D8)
-    size_t maxSoiPosition =
-        std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, buffer.size());
-    for (size_t j = 0; j + 1 < maxSoiPosition; ++j) {
-        if (buffer[j] == UsbProtocol::BOUNDARY_MARKER &&
-            buffer[j + 1] == UsbProtocol::START_MARKER) {
-            soiOffset = j;
-            break;
+    if (self->lastFrameId_ != 0 || frameId != 0) {
+        uint8_t expectedId = self->lastFrameId_ + 1;
+        if (frameId != expectedId) {
+            self->hardwareDroppedFrames_ += (frameId - expectedId);
         }
     }
+    self->lastFrameId_ = frameId;
 
-    // Scan backwards for End of Image (FF D9)
-    for (size_t j = buffer.size(); j >= 2; --j) {
-        if (buffer[j - 2] == UsbProtocol::BOUNDARY_MARKER &&
-            buffer[j - 1] == UsbProtocol::END_MARKER) {
-            eoiOffset = j;
-            break;
-        }
+    if (!self->activeFrame_) {
+        self->activeFrame_ = self->bufferPool_->borrow();
+    } else {
+        self->activeFrame_->clear();
     }
 
-    if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
-        size_t startTrim = soiOffset;
-        size_t endTrim = eoiOffset;
+    self->frameActive_ = true;
+}
 
-        activeFrame_->trim(startTrim, endTrim);
+void BufferedMjpegStream::onVideoPayloadCallback(void* context, uint8_t* data, size_t len) {
+    auto* self = static_cast<BufferedMjpegStream*>(context);
 
-        if (onFrameReady_) {
-            onFrameReady_(std::move(activeFrame_));
-        }
+    if (self->frameActive_ && self->activeFrame_) {
+        self->activeFrame_->insertContent(std::span<const uint8_t>(data, len));
     }
+}
 
-    activeFrame_ = bufferPool_->borrow();
+void BufferedMjpegStream::onFrameCompleteCallback(void* context) {
+    auto* self = static_cast<BufferedMjpegStream*>(context);
+
+    if (self->frameActive_ && self->onFrameReady_ && self->activeFrame_) {
+        self->onFrameReady_(std::move(self->activeFrame_));
+        self->frameActive_ = false;
+        self->activeFrame_ = nullptr;
+    }
+}
+
+void BufferedMjpegStream::onFrameIncompleteCallback(void* context) {
+    auto* self = static_cast<BufferedMjpegStream*>(context);
+
+    if (self->frameActive_ && self->activeFrame_) {
+        self->activeFrame_->clear();
+        self->frameActive_ = false;
+    }
 }

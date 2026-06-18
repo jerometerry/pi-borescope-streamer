@@ -17,79 +17,25 @@ extern "C" {
 
 MjpegStream::MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {
     inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
+
+    decoder_.context = this;
+    decoder_.cb.on_frame_start = MjpegStream::onFrameStartCallback;
+    decoder_.cb.on_video_payload = MjpegStream::onVideoPayloadCallback;
+    decoder_.cb.on_frame_complete = MjpegStream::onFrameCompleteCallback;
+    decoder_.cb.on_frame_incomplete = MjpegStream::onFrameIncompleteCallback;
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {
     inputBuffer_.insert(inputBuffer_.end(), data.begin(), data.end());
 
-    size_t i = readOffset_;
-
-    while (i + TOTAL_USB_HEADER_SIZE <= inputBuffer_.size()) {
-        up_pkt_hdr packetHeader{};
-        std::memcpy(&packetHeader, &inputBuffer_[i], USB_PACKET_HEADER_SIZE);
-
-        if (!up_is_valid_pkt_hdr(&packetHeader)) {
-            i++;
-            continue;
-        }
-
-        bool isGhost = false;
-        size_t nextHeaderOffset = 0;
-        size_t maxScan = std::min<size_t>(UsbProtocol::MAX_SCAN_LIMIT, inputBuffer_.size() - i - 3);
-
-        for (size_t d = USB_PACKET_HEADER_SIZE; d <= maxScan; ++d) {
-            if (inputBuffer_[i + d] == UsbProtocol::USB_FRAME_HEADER_A &&
-                inputBuffer_[i + d + 1] == UsbProtocol::USB_FRAME_HEADER_B &&
-                (inputBuffer_[i + d + 2] == UsbProtocol::VIDEO_CAMERA_ID ||
-                 inputBuffer_[i + d + 2] == UsbProtocol::GRAVITY_SENSOR_CAMERA_ID)) {
-                isGhost = true;
-                nextHeaderOffset = d;
-                break;
-            }
-        }
-
-        if (isGhost) {
-            i += nextHeaderOffset;
-            continue;
-        }
-
-        size_t packetLength = EndianConversion::wireToHost(packetHeader.le_length);
-        size_t totalPacketSize = USB_PACKET_HEADER_SIZE + packetLength;
-
-        if (i + totalPacketSize > inputBuffer_.size()) {
-            break;
-        }
-
-        if (packetLength < USB_PAYLOAD_HEADER_SIZE) {
-            i++;
-            continue;
-        }
-
-        up_pl_hdr payloadHeader{};
-        std::memcpy(&payloadHeader, &inputBuffer_[i + USB_PACKET_HEADER_SIZE],
-                    USB_PAYLOAD_HEADER_SIZE);
-
-        if (frameActive_ && disruptor_->getBySequence(currentClaimSequence_).contentSize() > 0 &&
-            payloadHeader_.le_frame_id != payloadHeader.le_frame_id) {
-            outputFrame();
-        }
-
-        payloadHeader_ = payloadHeader;
-
-        if (up_valid_mjpeg_pl(&payloadHeader)) {
-            size_t payloadStart = i + TOTAL_USB_HEADER_SIZE;
-            size_t payloadSize = totalPacketSize - TOTAL_USB_HEADER_SIZE;
-
-            VideoFrame& slot = getActiveFrameSlot();
-
-            std::span<const uint8_t> toInsert(inputBuffer_.data() + payloadStart, payloadSize);
-            slot.insertContent(toInsert);
-        }
-
-        i += totalPacketSize;
+    size_t available = inputBuffer_.size() - readOffset_;
+    if (available == 0) {
+        return;
     }
 
-    readOffset_ = i;
+    size_t consumed = up_decode_bulk(&decoder_, inputBuffer_.data() + readOffset_, available);
+
+    readOffset_ += consumed;
 
     if (readOffset_ == inputBuffer_.size()) {
         inputBuffer_.clear();
@@ -100,61 +46,54 @@ void MjpegStream::send(std::span<const uint8_t> data) {
     }
 }
 
-void MjpegStream::outputFrame() {
-    if (!frameActive_) {
-        return;
+void MjpegStream::onFrameStartCallback(void* context, uint8_t frameId, uint8_t devNum) {
+    auto* self = static_cast<MjpegStream*>(context);
+
+    if (self->frameActive_) {
+        self->disruptor_->publish(self->currentClaimSequence_);
     }
 
-    VideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);
+    if (self->lastFrameId_ != 0 || frameId != 0) {
+        uint8_t expectedId = self->lastFrameId_ + 1;
 
-    if (slot.contentSize() == 0) {
-        disruptor_->publish(currentClaimSequence_);
-        frameActive_ = false;
-        return;
-    }
-
-    size_t soiOffset = std::string::npos;
-    size_t eoiOffset = std::string::npos;
-
-    // Scan forward for Start of Image (FF D8)
-    size_t maxSoiPosition =
-        std::min<size_t>(UsbProtocol::JPEG_SOI_MARKERS_MAX_POSITION, slot.contentSize());
-    for (size_t j = 0; j + 1 < maxSoiPosition; ++j) {
-        if (slot.storage[slot.paddingSize() + j] == UsbProtocol::BOUNDARY_MARKER &&
-            slot.storage[slot.paddingSize() + j + 1] == UsbProtocol::START_MARKER) {
-            soiOffset = j;
-            break;
+        if (frameId != expectedId) {
+            uint8_t framesLost = frameId - expectedId;
+            self->hardwareDroppedFrames_ += framesLost;
         }
     }
+    self->lastFrameId_ = frameId;
 
-    // Scan backwards for End of Image (FF D9)
-    for (size_t j = slot.contentSize(); j >= 2; --j) {
-        if (slot.storage[slot.paddingSize() + j - 2] == UsbProtocol::BOUNDARY_MARKER &&
-            slot.storage[slot.paddingSize() + j - 1] == UsbProtocol::END_MARKER) {
-            eoiOffset = j;
-            break;
-        }
-    }
+    self->currentClaimSequence_ = self->disruptor_->claim();
+    VideoFrame& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
+    slot.clear();
 
-    if (soiOffset != std::string::npos && eoiOffset != std::string::npos && soiOffset < eoiOffset) {
-        size_t startTrim = soiOffset;
-        size_t endTrim = eoiOffset;
-        slot.trim(startTrim, endTrim);
-    } else {
-        slot.clear();
-    }
-
-    disruptor_->publish(currentClaimSequence_);
-    frameActive_ = false;
+    self->frameActive_ = true;
 }
 
-VideoFrame& MjpegStream::getActiveFrameSlot() {
-    if (!frameActive_) {
-        currentClaimSequence_ = disruptor_->claim();
-        VideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);
-        slot.clear();
-        frameActive_ = true;
-        return slot;
+void MjpegStream::onVideoPayloadCallback(void* context, uint8_t* data, size_t len) {
+    auto* self = static_cast<MjpegStream*>(context);
+    if (self->frameActive_) {
+        VideoFrame& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
+        slot.insertContent(std::span<const uint8_t>(data, len));
     }
-    return disruptor_->getBySequence(currentClaimSequence_);
+}
+
+void MjpegStream::onFrameCompleteCallback(void* context) {
+    auto* self = static_cast<MjpegStream*>(context);
+
+    if (self->frameActive_) {
+        self->disruptor_->publish(self->currentClaimSequence_);
+        self->frameActive_ = false;
+    }
+}
+
+void MjpegStream::onFrameIncompleteCallback(void* context) {
+    auto* self = static_cast<MjpegStream*>(context);
+
+    if (self->frameActive_) {
+        VideoFrame& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
+        slot.clear();
+        self->disruptor_->publish(self->currentClaimSequence_);
+        self->frameActive_ = false;
+    }
 }

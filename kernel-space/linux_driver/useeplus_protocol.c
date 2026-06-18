@@ -124,8 +124,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			goto advance;
 
 		if (dec->building_frame && dec->frame_id != state.frame_id) {
-			if (!dec->eof_reached && dec->cb.on_frame_end)
-				dec->cb.on_frame_end(dec->context);
+			if (!dec->eof_reached && dec->cb.on_frame_incomplete)
+				dec->cb.on_frame_incomplete(dec->context);
 		}
 
 		if (!dec->building_frame || dec->frame_id != state.frame_id) {
@@ -186,8 +186,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			if (dec->cb.on_video_payload)
 				dec->cb.on_video_payload(dec->context, pl_src, emit_size);
 
-			if (dec->eof_reached && dec->cb.on_frame_end)
-				dec->cb.on_frame_end(dec->context);
+			if (dec->eof_reached && dec->cb.on_frame_complete)
+				dec->cb.on_frame_complete(dec->context);
 		}
 
 advance:

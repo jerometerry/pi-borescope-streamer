@@ -121,6 +121,9 @@ int main(int argc, const char* argv[]) {
 
         auto transfer = [&stream](UsbTransferStatus status,
                                   std::span<const uint8_t> payload) -> bool {
+            if (!running.load(std::memory_order_relaxed)) {
+                return false;
+            }
             if (status == UsbTransferStatus::Completed) {
                 if (!payload.empty()) {
                     stream.send(payload);

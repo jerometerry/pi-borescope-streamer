@@ -29,7 +29,7 @@ TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame) {
     struct up_decoder_callbacks cb = {
         .on_frame_start = mock_on_frame_start,
         .on_video_payload = mock_on_video_payload,
-        .on_frame_end = mock_on_frame_end
+        .on_frame_complete = mock_on_frame_end
     };
     struct up_decoder decoder = {
         .cb = cb,
@@ -72,7 +72,7 @@ TEST(DecoderTest, SkipsGhostHeadersAndFindsValidPayload) {
     struct up_decoder_callbacks cb = {
         .on_frame_start = mock_on_frame_start,
         .on_video_payload = mock_on_video_payload,
-        .on_frame_end = mock_on_frame_end
+        .on_frame_complete = mock_on_frame_end
     };
     struct up_decoder decoder = {
         .cb = cb,
@@ -116,7 +116,7 @@ TEST(DecoderTest, ReturnsNeedDataForFragmentedUrbs) {
     struct up_decoder_callbacks cb = {
         .on_frame_start = mock_on_frame_start,
         .on_video_payload = mock_on_video_payload,
-        .on_frame_end = mock_on_frame_end
+        .on_frame_complete = mock_on_frame_end
     };
     struct up_decoder decoder = {
         .cb = cb,
@@ -144,7 +144,7 @@ TEST(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames) {
     struct up_decoder_callbacks cb = {
         .on_frame_start = mock_on_frame_start,
         .on_video_payload = mock_on_video_payload,
-        .on_frame_end = mock_on_frame_end
+        .on_frame_complete = mock_on_frame_end
     };
     struct up_decoder decoder = {
         .cb = cb,
@@ -183,7 +183,7 @@ TEST(DecoderTest, DropsChunkIfSoiNotFound) {
     struct up_decoder_callbacks cb = {
         .on_frame_start = mock_on_frame_start,
         .on_video_payload = mock_on_video_payload,
-        .on_frame_end = mock_on_frame_end
+        .on_frame_complete = mock_on_frame_end
     };
     struct up_decoder decoder = {
         .cb = cb,
@@ -222,7 +222,7 @@ TEST(DecoderTest, HuntsForSignatureOnInvalidPacket) {
    struct up_decoder_callbacks cb = {
         .on_frame_start = mock_on_frame_start,
         .on_video_payload = mock_on_video_payload,
-        .on_frame_end = mock_on_frame_end
+        .on_frame_complete = mock_on_frame_end
     };
     struct up_decoder decoder = {
         .cb = cb,
@@ -267,7 +267,7 @@ TEST(DecoderTest, RejectsMassiveLengthAndHunts) {
    struct up_decoder_callbacks cb = {
         .on_frame_start = mock_on_frame_start,
         .on_video_payload = mock_on_video_payload,
-        .on_frame_end = mock_on_frame_end
+        .on_frame_complete = mock_on_frame_end
     };
     struct up_decoder decoder = {
         .cb = cb,

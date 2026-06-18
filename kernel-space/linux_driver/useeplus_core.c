@@ -267,7 +267,7 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
-static void up_on_frame_end(void *context)
+static void up_on_frame_complete(void *context)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)context;
 	struct vb2_buffer *vb;
@@ -294,6 +294,10 @@ static void up_on_frame_end(void *context)
 	drv_data->active_pl_len = 0;
 }
 
+static void up_on_frame_complete(void *context)
+{
+}
+
 static void up_work_handler(struct work_struct *work)
 {
 	struct up_drv_data *drv_data;
@@ -318,7 +322,8 @@ static void up_work_handler(struct work_struct *work)
 
 		decoder.cb.on_frame_start = up_on_frame_start;
 		decoder.cb.on_video_payload = up_on_video_payload;
-		decoder.cb.on_frame_end = up_on_frame_end;
+		decoder.cb.on_frame_complete = up_on_frame_complete;
+		decoder.cb.on_frame_incomplete = up_on_frame_incomplete;
 
 		consumed = up_decode_bulk(&decoder, drv_data->decode_buf,
 					  drv_data->decode_buf_len);

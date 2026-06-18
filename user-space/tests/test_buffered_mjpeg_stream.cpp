@@ -100,12 +100,6 @@ TEST_F(BufferedMjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     packet[USB_PACKET_HEADER_SIZE + packetHeader->le_length - 2] = UsbProtocol::BOUNDARY_MARKER;
     packet[USB_PACKET_HEADER_SIZE + packetHeader->le_length - 1] = UsbProtocol::END_MARKER;
 
-    std::vector<uint8_t> triggerPacket = packet;
-
-    auto* triggerPayloadHeader = getPayloadHeader(triggerPacket);
-
-    triggerPayloadHeader->le_frame_id = 3;
-
     std::vector<uint8_t> expectedOutput(
         packet.begin() + USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE,
         packet.begin() + USB_PACKET_HEADER_SIZE + packetHeader->le_length);
@@ -113,7 +107,6 @@ TEST_F(BufferedMjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     EXPECT_CALL(GetOutputHandler(), output(FrameDataEq(expectedOutput))).Times(1);
 
     GetStream().send(packet);
-    GetStream().send(triggerPacket);
 }
 
 TEST_F(BufferedMjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
@@ -138,19 +131,12 @@ TEST_F(BufferedMjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
     packet[packet.size() - 1] = UsbProtocol::END_MARKER;
 
     std::vector<uint8_t> shortPacket(80, UsbProtocol::BOUNDARY_MARKER);
-    std::vector<uint8_t> triggerPacket = packet;
-
-    auto* triggerPayloadHeader = getPayloadHeader(triggerPacket);
-
-    triggerPayloadHeader->le_frame_id = 2;
-
     std::vector<uint8_t> expectedOutput(packet.begin() + TOTAL_USB_HEADER_SIZE, packet.end());
 
     EXPECT_CALL(GetOutputHandler(), output(FrameDataEq(expectedOutput))).Times(1);
 
     GetStream().send(packet);
     GetStream().send(shortPacket);
-    GetStream().send(triggerPacket);
 }
 
 TEST_F(BufferedMjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
