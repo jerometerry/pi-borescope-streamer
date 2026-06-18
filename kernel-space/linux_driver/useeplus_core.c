@@ -296,6 +296,25 @@ static void up_on_frame_complete(void *context)
 
 static void up_on_frame_incomplete(void *context)
 {
+	struct up_drv_data *drv_data = (struct up_drv_data *)context;
+
+	if (!drv_data->active_buf)
+		return;
+
+	/*
+	 * The hardware dropped the End of Image (EOI) marker and rolled over.
+	 * Return the buffer to the V4L2 subsystem with an error state to
+	 * prevent kernel memory starvation and notify userspace of the tear.
+	 */
+	vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+			VB2_BUF_STATE_ERROR);
+
+	/*
+	 * Clear the active pointer so the upcoming on_frame_start
+	 * knows it needs to pull a fresh buffer from the ready_queue.
+	 */
+	drv_data->active_buf = NULL;
+	drv_data->active_pl_len = 0;
 }
 
 static void up_work_handler(struct work_struct *work)
