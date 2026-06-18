@@ -19,7 +19,6 @@
 
 #include "constants.hpp"
 #include "index_html.hpp"
-#include "usb_device_finder.hpp"
 #include "video_frame.hpp"
 #include "video_frame_buffer.hpp"
 #include "zero_allocation_response_builder.hpp"
@@ -153,13 +152,6 @@ void MjpegServer::start() {
             res->writeHeader("Connection", "close")
                 ->writeHeader("Content-Type", "text/html")
                 ->end(Resources::index_html);
-        });
-        app.get("/api/cameras", [](auto* res, auto*) {
-            auto cameras = UsbDeviceFinder::superCameras();
-            std::string jsonPayload = UsbDeviceFinder::toJson(cameras);
-            res->writeHeader("Connection", "close")
-                ->writeHeader("Content-Type", "application/json")
-                ->end(jsonPayload);
         });
         app.get("/favicon.ico", [](auto* res, auto*) {
             res->writeStatus("404 Not Found")
