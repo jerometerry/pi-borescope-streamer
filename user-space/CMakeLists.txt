@@ -221,11 +221,6 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 
 # --- Core Library ---
 add_library(borescope_core STATIC
-    src/classes/buffer.cpp
-    src/classes/buffer_pool.cpp
-    src/classes/buffered_zero_allocation_response_builder.cpp
-    src/classes/mjpeg_frame_queue.cpp
-    src/classes/mjpeg_frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp
     src/classes/v4l2_mjpeg_stream.cpp
     src/classes/zero_allocation_response_builder.cpp
@@ -240,10 +235,8 @@ if(APPLE)
         src/classes/usb_context.cpp
         src/classes/usb_device_finder.cpp
         src/classes/usb_driver.cpp
-	src/classes/mjpeg_stream.cpp
-	src/classes/buffered_mjpeg_stream.cpp
-	src/classes/buffered_mjpeg_server.cpp
-	${KERNEL_DRIVER_DIR}/useeplus_protocol.c
+        src/classes/mjpeg_stream.cpp
+        ${KERNEL_DRIVER_DIR}/useeplus_protocol.c
     )
     target_link_libraries(borescope_core PUBLIC PkgConfig::LIBUSB)
 endif()
@@ -276,14 +269,8 @@ elseif(APPLE)
     add_executable(mjpeg_server src/apps/mjpeg_server_main.cpp)
     target_link_libraries(mjpeg_server PRIVATE Borescope::Core project_warnings)
 
-    add_executable(buffered_mjpeg_server src/apps/buffered_mjpeg_server_main.cpp)
-    target_link_libraries(buffered_mjpeg_server PRIVATE Borescope::Core project_warnings)
-
     add_executable(mjpeg_stream_capture src/apps/mjpeg_stream_capture_main.cpp)
     target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
-
-    add_executable(buffered_mjpeg_stream_capture src/apps/buffered_mjpeg_stream_capture_main.cpp)
-    target_link_libraries(buffered_mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
 
     add_executable(mjpeg_frame_extractor src/apps/mjpeg_frame_extractor_main.cpp)
     target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
@@ -342,13 +329,7 @@ if(BUILD_TESTING)
     target_link_libraries(borescope_core PRIVATE GTest::gtest)
 
     add_executable(run_project_tests
-        tests/test_buffer.cpp
-        tests/test_buffer_pool.cpp
-        tests/test_buffered_mjpeg_server.cpp
-        tests/test_buffered_mjpeg_stream.cpp
         tests/test_disruptor.cpp
-        tests/test_mjpeg_frame_queue.cpp
-        tests/test_mjpeg_frame_ring_buffer.cpp
         tests/test_mjpeg_server.cpp
         tests/test_mjpeg_stream.cpp
         tests/test_usb_device_finder.cpp
