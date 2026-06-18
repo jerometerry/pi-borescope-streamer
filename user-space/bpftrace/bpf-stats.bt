@@ -1,7 +1,7 @@
 #!/usr/bin/env bpftrace
 
 BEGIN {
-    printf("Monitoring mjpeg_server... Hit Ctrl-C to exit.\n");
+    printf("Monitoring v4l2_mjpeg_serv... Hit Ctrl-C to exit.\n");
     printf("=================================================================================\n");
     printf("%-12s %-15s %-15s %-15s %-15s\n", "TIME", "MALLOCS/sec", "FREES/sec", "SENDS/sec", "BANDWIDTH");
     printf("=================================================================================\n");
@@ -10,17 +10,17 @@ BEGIN {
 uprobe:libc:malloc,
 uprobe:libc:calloc,
 uprobe:libc:realloc
-/comm == "mjpeg_server"/ {
+/comm == "v4l2_mjpeg_serv"/ {
     @allocs++;
 }
 
 uprobe:libc:free
-/comm == "mjpeg_server"/ {
+/comm == "v4l2_mjpeg_serv"/ {
     @frees++;
 }
 
 tracepoint:syscalls:sys_enter_sendto
-/comm == "mjpeg_server"/ {
+/comm == "v4l2_mjpeg_serv"/ {
     @sends++;
     @bytes_per_sec += args->len;
     @total_bytes += args->len;
@@ -28,10 +28,10 @@ tracepoint:syscalls:sys_enter_sendto
 
 interval:s:1 {
     $mbps = (@bytes_per_sec * 8) / 1000000;
-    
+
     time("%H:%M:%S    ");
     printf("%-15d %-15d %-15d %d Mbps\n", @allocs, @frees, @sends, $mbps);
-    
+
     // Reset the per-second accumulators
     @allocs = 0;
     @frees = 0;
@@ -42,7 +42,7 @@ interval:s:1 {
 END {
     $total_mb = @total_bytes / 1024 / 1024;
     printf("\n--- Session Complete ---\nTotal Data Transferred: %d MB\n", $total_mb);
-    
+
     // Clean up global variables
     clear(@allocs);
     clear(@frees);
