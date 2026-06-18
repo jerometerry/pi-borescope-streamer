@@ -1,7 +1,7 @@
 #!/usr/bin/env bpftrace
 
 BEGIN {
-    printf("Monitoring CPU Scheduler for mjpeg_server...\n");
+    printf("Monitoring CPU Scheduler for v4l2_mjpeg_server...\n");
     printf("===============================================================\n");
     printf("%-12s %-20s %-20s\n", "TIME", "VOLUNTARY_CSW/sec", "INVOLUNTARY_CSW/sec");
     printf("===============================================================\n");
@@ -12,7 +12,7 @@ BEGIN {
  * args->prev_state > 0 means the thread went to sleep/blocked (Voluntary).
  */
 tracepoint:sched:sched_switch
-/args->prev_comm == "mjpeg_server"/
+/args->prev_comm == "v4l2_mjpeg_serv"/
 {
     if (args->prev_state == 0) {
         @involuntary++;
@@ -24,7 +24,7 @@ tracepoint:sched:sched_switch
 interval:s:1 {
     time("%H:%M:%S    ");
     printf("%-20d %-20d\n", @voluntary, @involuntary);
-    
+
     // Reset accumulators
     @voluntary = 0;
     @involuntary = 0;

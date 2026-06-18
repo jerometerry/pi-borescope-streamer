@@ -1,15 +1,15 @@
 #!/usr/bin/env bpftrace
 
 BEGIN {
-    printf("Monitoring pi-borescope-streamer USB Kernel Subsystem... Hit Ctrl-C.\n");
+    printf("Monitoring v4l2_mjpeg_serv USB Kernel Subsystem... Hit Ctrl-C.\n");
     printf("%-10s %-18s %-10s %-12s %s\n", "TIME", "COMM", "PID", "SYSCALL", "DETAIL / BYTES");
 }
 
 /* 1. Track Async URB Submissions from userspace */
 tracepoint:syscalls:sys_enter_ioctl
-/comm == "pi-borescope-st"/ {
+/comm == "v4l2_mjpeg_serv"/ {
     $cmd = args->cmd;
-    // Common USBFS ioctl codes: 
+    // Common USBFS ioctl codes:
     // 0x802c550a -> USBDEVFS_SUBMITURB
     // 0x4008550c -> USBDEVFS_REAPURB
     if ($cmd == 0x802c550a) {
@@ -31,8 +31,8 @@ kretprobe:usbdevfs_ioctl {
 
 // Track memory allocation or copies executed down the USB core path
 kprobe:copy_to_user,
-kprobe:copy_from_user 
-/comm == "pi-borescope-st" && @in_usb_ioctl[tid]/ {
+kprobe:copy_from_user
+/comm == "v4l2_mjpeg_serv" && @in_usb_ioctl[tid]/ {
     // arg2 contains the byte length of the transfer buffer
     @usb_shuttle_bytes_total += arg2;
     @usb_shuttle_counts[arg2] = count();
