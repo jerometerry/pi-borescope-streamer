@@ -160,8 +160,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 
 			if (pl_size >= 2) {
 				for (i = 0; i < limit - 1; i++) {
-					if (pl_src[i] == JPEG_DEL &&
-						pl_src[i + 1] == JPEG_SOI) {
+					if (up_is_jpg_soi(pl_src, i)) {
 						pl_src += i;
 						pl_size -= i;
 						dec->found_soi = true;
@@ -170,6 +169,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 					}
 				}
 			}
+
 			if (!found)
 				goto advance;
 		}
@@ -177,8 +177,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		emit_size = pl_size;
 		if (pl_size >= 2) {
 			for (i = 0; i < pl_size - 1; i++) {
-				if (pl_src[i] == JPEG_DEL &&
-					pl_src[i + 1] == JPEG_EOI) {
+				if (up_is_jpg_eoi(pl_src, i)) {
 					emit_size = i + 2;
 					dec->eof_reached = true;
 					break;

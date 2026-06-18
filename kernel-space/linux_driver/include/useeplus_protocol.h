@@ -251,6 +251,16 @@ static inline bool up_is_valid_pkt_hdr(struct up_pkt_hdr *pkt)
 	return up_check_pkt_hdr(del, dev_id);
 }
 
+static inline bool up_is_jpg_soi(u8 *pl, size_t i)
+{
+	return (pl[i] == JPEG_DEL && pl[i + 1] == JPEG_SOI);
+}
+
+static inline bool up_is_jpg_eoi(u8 *pl, size_t i)
+{
+	return (pl[i] == JPEG_DEL && pl[i + 1] == JPEG_EOI);
+}
+
 static inline bool up_has_gravity_sensor(u8 flags)
 {
 	return (flags & 0x01) != 0;
