@@ -223,13 +223,11 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 add_library(borescope_core STATIC
     src/classes/buffer.cpp
     src/classes/buffer_pool.cpp
-    src/classes/buffered_mjpeg_server.cpp
-    src/classes/buffered_mjpeg_stream.cpp
     src/classes/buffered_zero_allocation_response_builder.cpp
     src/classes/mjpeg_frame_queue.cpp
     src/classes/mjpeg_frame_ring_buffer.cpp
     src/classes/mjpeg_server.cpp
-    src/classes/mjpeg_stream.cpp
+    src/classes/v4l2_mjpeg_stream.cpp
     src/classes/zero_allocation_response_builder.cpp
     ${GENERATED_HPP}
 )
@@ -242,6 +240,9 @@ if(APPLE)
         src/classes/usb_context.cpp
         src/classes/usb_device_finder.cpp
         src/classes/usb_driver.cpp
+	src/classes/mjpeg_stream.cpp
+	src/classes/buffered_mjpeg_stream.cpp
+	src/classes/buffered_mjpeg_server.cpp
 	${KERNEL_DRIVER_DIR}/useeplus_protocol.c
     )
     target_link_libraries(borescope_core PUBLIC PkgConfig::LIBUSB)

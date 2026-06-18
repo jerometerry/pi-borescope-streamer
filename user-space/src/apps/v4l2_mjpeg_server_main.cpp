@@ -33,7 +33,7 @@
 
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
-#include "v42l_mjpeg_stream.hpp"
+#include "v4l2_mjpeg_stream.hpp"
 #include "video_frame_buffer.hpp"
 
 namespace {
