@@ -117,7 +117,7 @@ cmake --preset release
 cmake --build --preset release -j$(nproc)
 
 # Run as usual
-./out/build/release/mjpeg_server
+./out/build/release/v4l2_mjpeg_server
 
 ```
 

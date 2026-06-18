@@ -12,9 +12,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Define the path to the kernel space directory relative to the user-space CMake root
-set(KERNEL_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../kernel-space/linux_driver")
-set(SHARED_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../shared")
+set(KERNEL_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_v4l2")
 
 # --- Build Configuration Options ---
 option(ENABLE_CLANG_TIDY "Enable clang-tidy analysis during build" OFF)
@@ -221,21 +219,21 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 
 # --- Core Library ---
 add_library(borescope_core STATIC
-    src/classes/mjpeg_server.cpp
-    src/classes/v4l2_mjpeg_stream.cpp
-    src/classes/zero_allocation_response_builder.cpp
+    src/mjpeg_server.cpp
+    src/v4l2_mjpeg_stream.cpp
+    src/zero_allocation_response_builder.cpp
     ${GENERATED_HPP}
 )
 add_library(Borescope::Core ALIAS borescope_core)
 
 if(APPLE)
     target_sources(borescope_core PRIVATE
-        src/classes/mjpeg_stream_capture.cpp
-        src/classes/usb_camera.cpp
-        src/classes/usb_context.cpp
-        src/classes/usb_device_finder.cpp
-        src/classes/usb_driver.cpp
-        src/classes/mjpeg_stream.cpp
+        src/mjpeg_stream_capture.cpp
+        src/usb_camera.cpp
+        src/usb_context.cpp
+        src/usb_device_finder.cpp
+        src/usb_driver.cpp
+        src/mjpeg_stream.cpp
         ${KERNEL_DRIVER_DIR}/useeplus_protocol.c
     )
     target_link_libraries(borescope_core PUBLIC PkgConfig::LIBUSB)
@@ -258,7 +256,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(STATUS "Linux detected: Building v4l2 targets.")
 
     add_executable(v4l2_mjpeg_server
-        src/apps/v4l2_mjpeg_server_main.cpp
+        src/v4l2_mjpeg_server_main.cpp
     )
     target_link_libraries(v4l2_mjpeg_server
         PRIVATE Borescope::Core project_warnings
@@ -266,13 +264,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 elseif(APPLE)
     message(STATUS "MacOS detected: Building libusb targets.")
 
-    add_executable(mjpeg_server src/apps/mjpeg_server_main.cpp)
+    add_executable(mjpeg_server src/mjpeg_server_main.cpp)
     target_link_libraries(mjpeg_server PRIVATE Borescope::Core project_warnings)
 
-    add_executable(mjpeg_stream_capture src/apps/mjpeg_stream_capture_main.cpp)
+    add_executable(mjpeg_stream_capture src/mjpeg_stream_capture_main.cpp)
     target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
 
-    add_executable(mjpeg_frame_extractor src/apps/mjpeg_frame_extractor_main.cpp)
+    add_executable(mjpeg_frame_extractor src/mjpeg_frame_extractor_main.cpp)
     target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
 endif()
 
@@ -427,8 +425,8 @@ if(CLANG_FORMAT_EXE)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../kernel-space/linux_driver/tests/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../kernel-space/linux_driver/tests/mock_kernel/**/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_v4l2/tests/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_v4l2/tests/mock_kernel/**/*.h"
     )
 
     add_custom_target(format
