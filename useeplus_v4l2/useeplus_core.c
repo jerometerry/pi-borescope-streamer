@@ -325,7 +325,7 @@ static void up_work_handler(struct work_struct *work)
 	unsigned int len;
 	u8 *buf, *dec_buf;
 
-	drv_data = container_of(work, struct up_drv_data, pipeline.work);
+	drv_data = container_of(work, struct up_drv_data, decoder.work);
 
 	dec_buf = drv_data->decoder.workspace_buf;
 	buf = dec_buf + drv_data->decoder.workspace_len;
