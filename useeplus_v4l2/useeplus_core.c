@@ -895,8 +895,8 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->video_in_ep);
 	iap_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->iap_in_ep);
 
-	drv_data->v4l2_dev.release = up_device_release;
-	retval = v4l2_device_register(&itf->dev, &drv_data->v4l2_dev);
+	drv_data->v4l2.v4l2_dev.release = up_device_release;
+	retval = v4l2_device_register(&itf->dev, &drv_data->v4l2.v4l2_dev);
 	if (retval) {
 		dev_err(&itf->dev,
 			"v4l2_device_register failed with error %d\n", retval);
@@ -922,8 +922,8 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 		goto error_unreg_v4l2;
 	}
 
-	strscpy(drv_data->video_dev.name, VIDEO_DEVICE_NAME,
-		sizeof(drv_data->video_dev.name));
+	strscpy(drv_data->v4l2.video_dev.name, VIDEO_DEVICE_NAME,
+		sizeof(drv_data->v4l2.video_dev.name));
 	drv_data->v4l2.video_dev.v4l2_dev = &drv_data->v4l2.v4l2_dev;
 	drv_data->v4l2.video_dev.fops = &up_v4l2_fops;
 	drv_data->v4l2.video_dev.ioctl_ops = &up_v4l2_ioctl_ops;
@@ -970,7 +970,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	usb_set_intfdata(itf, drv_data);
 
 	retval =
-		video_register_device(&drv_data->video_dev, VFL_TYPE_VIDEO, -1);
+		video_register_device(&drv_data->v4l2.video_dev, VFL_TYPE_VIDEO, -1);
 	if (retval) {
 		dev_err(&itf->dev,
 			"video_register_device failed with error %d\n", retval);
@@ -986,7 +986,7 @@ error_urbs:
 
 error_unreg_v4l2:
 	dev_dbg(&itf->dev, "Unregistering device\n");
-	v4l2_device_unregister(&drv_data->v4l2_dev);
+	v4l2_device_unregister(&drv_data->v4l2.v4l2_dev);
 
 error_release_iap:
 	usb_driver_release_interface(driver, iap_intf);
@@ -1039,11 +1039,11 @@ static void up_disconnect(struct usb_interface *itf)
 		drv_data->wq = NULL;
 	}
 
-	if (video_is_registered(&drv_data->video_dev))
-		video_unregister_device(&drv_data->video_dev);
+	if (video_is_registered(&drv_data->v4l2.video_dev))
+		video_unregister_device(&drv_data->v4l2.video_dev);
 
-	v4l2_device_disconnect(&drv_data->v4l2_dev);
-	v4l2_device_put(&drv_data->v4l2_dev);
+	v4l2_device_disconnect(&drv_data->v4l2.v4l2_dev);
+	v4l2_device_put(&drv_data->v4l2.v4l2_dev);
 
 	dev_info(&itf->dev, "Device disconnected.\n");
 }
