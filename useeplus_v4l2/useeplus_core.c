@@ -181,7 +181,7 @@ static void up_device_release(struct v4l2_device *v4l2_dev)
 	drv_data = container_of(v4l2_dev, struct up_drv_data, v4l2_dev);
 
 	kfifo_free(&drv_data->decoder.fifo);
-	kfree(drv_data->decode_buf);
+	kfree(drv_data->decoder.workspace_buf);
 	kfree(drv_data);
 }
 
@@ -327,14 +327,14 @@ static void up_work_handler(struct work_struct *work)
 
 	drv_data = container_of(work, struct up_drv_data, work);
 
-	dec_buf = drv_data->decode_buf;
-	buf = dec_buf + drv_data->decode_buf_len;
-	buf_len = MAX_WORKSPACE_SIZE - drv_data->decode_buf_len;
+	dec_buf = drv_data->decoder.workspace_buf;
+	buf = dec_buf + drv_data->decoder.workspace_buf_len;
+	buf_len = MAX_WORKSPACE_SIZE - drv_data->decoder.workspace_buf_len;
 	len = kfifo_out(&drv_data->decoder.fifo, buf, buf_len);
 
-	drv_data->decode_buf_len += len;
+	drv_data->decoder.workspace_buf_len += len;
 
-	if (drv_data->decode_buf_len > 0) {
+	if (drv_data->decoder.workspace_buf_len > 0) {
 		decoder.context = drv_data;
 		decoder.building_frame = drv_data->building_frame;
 		decoder.frame_id = drv_data->frame_id;
@@ -346,7 +346,7 @@ static void up_work_handler(struct work_struct *work)
 		decoder.cb.on_frame_complete = up_on_frame_complete;
 		decoder.cb.on_frame_incomplete = up_on_frame_incomplete;
 
-		buf_len = drv_data->decode_buf_len;
+		buf_len = drv_data->decoder.workspace_buf_len;
 		consumed = up_decode_bulk(&decoder, dec_buf, buf_len);
 
 		drv_data->building_frame = decoder.building_frame;
@@ -354,13 +354,13 @@ static void up_work_handler(struct work_struct *work)
 		drv_data->found_soi = decoder.found_soi;
 		drv_data->eof_reached = decoder.eof_reached;
 
-		buf_len = drv_data->decode_buf_len;
+		buf_len = drv_data->decoder.workspace_buf_len;
 		if (consumed < buf_len) {
 			remaining = buf_len - consumed;
 			memmove(dec_buf, dec_buf + consumed, remaining);
-			drv_data->decode_buf_len = remaining;
+			drv_data->decoder.workspace_buf_len = remaining;
 		} else {
-			drv_data->decode_buf_len = 0;
+			drv_data->decoder.workspace_buf_len = 0;
 		}
 	}
 }
@@ -608,7 +608,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	drv_data->active_pl_len = 0;
 	drv_data->frame_id = -1;
 	drv_data->building_frame = false;
-	drv_data->decode_buf_len = 0;
+	drv_data->decoder.workspace_buf_len = 0;
 	kfifo_reset(&drv_data->decoder.fifo);
 	spin_unlock_irqrestore(&drv_data->pipeline.ready_lock, flags);
 
@@ -812,7 +812,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	drv_data->sequence = 0;
 	drv_data->building_frame = false;
 	drv_data->active_pl_len = 0;
-	drv_data->decode_buf_len = 0;
+	drv_data->decoder.workspace_buf_len = 0;
 	drv_data->width = UP_DEF_WIDTH;
 	drv_data->height = UP_DEF_HEIGHT;
 
@@ -833,8 +833,8 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 		goto error_free_dev;
 	}
 
-	drv_data->decode_buf = kzalloc(MAX_WORKSPACE_SIZE, GFP_KERNEL);
-	if (!drv_data->decode_buf) {
+	drv_data->decoder.workspace_buf = kzalloc(MAX_WORKSPACE_SIZE, GFP_KERNEL);
+	if (!drv_data->decoder.workspace_buf) {
 		retval = -ENOMEM;
 		goto error_release_iap;
 	}
@@ -993,7 +993,7 @@ error_release_iap:
 	kfifo_free(&drv_data->decoder.fifo);
 	if (drv_data->decoder.wq)
 		destroy_workqueue(drv_data->decoder.wq);
-	kfree(drv_data->decode_buf);
+	kfree(drv_data->decoder.workspace_buf);
 
 error_free_dev:
 	kfree(drv_data);
