@@ -178,7 +178,7 @@ static void up_device_release(struct v4l2_device *v4l2_dev)
 {
 	struct up_drv_data *drv_data;
 
-	drv_data = container_of(v4l2_dev, struct up_drv_data, v4l2_dev);
+	drv_data = container_of(v4l2_dev, struct up_drv_data, v4l2.v4l2_dev);
 
 	kfifo_free(&drv_data->decoder.fifo);
 	kfree(drv_data->decoder.workspace_buf);
@@ -325,7 +325,7 @@ static void up_work_handler(struct work_struct *work)
 	unsigned int len;
 	u8 *buf, *dec_buf;
 
-	drv_data = container_of(work, struct up_drv_data, work);
+	drv_data = container_of(work, struct up_drv_data, pipeline.work);
 
 	dec_buf = drv_data->decoder.workspace_buf;
 	buf = dec_buf + drv_data->decoder.workspace_len;
