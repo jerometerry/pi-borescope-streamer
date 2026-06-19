@@ -240,9 +240,9 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 
 	drv_data->active_pl_len = 0;
 
-	rdy_q = &drv_data->ready_queue;
+	rdy_q = &drv_data->pipeline.ready_queue;
 
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	spin_lock_irqsave(&drv_data->pipeline.ready_queue_lock, flags);
 	if (!list_empty(rdy_q)) {
 		active_buf = list_first_entry(rdy_q, struct up_buffer, list);
 		list_del(&active_buf->list);
@@ -251,7 +251,7 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 	} else {
 		drv_data->active_buf = NULL;
 	}
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+	spin_unlock_irqrestore(&drv_data->pipeline.ready_queue_lock, flags);
 }
 
 static void up_on_frame_complete(void *context)
@@ -520,9 +520,9 @@ static void up_buf_queue(struct vb2_buffer *vb)
 
 	buf = container_of(v4l2_buf, struct up_buffer, vb2_buffer);
 
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	list_add_tail(&buf->list, &drv_data->ready_queue);
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+	spin_lock_irqsave(&drv_data->pipeline.ready_queue_lock, flags);
+	list_add_tail(&buf->list, &drv_data->pipeline.ready_queue);
+	spin_unlock_irqrestore(&drv_data->pipeline.ready_queue_lock, flags);
 }
 
 static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
@@ -603,14 +603,14 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->streaming))
 		return 0;
 
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	spin_lock_irqsave(&drv_data->pipeline.ready_queue_lock, flags);
 	drv_data->active_buf = NULL;
 	drv_data->active_pl_len = 0;
 	drv_data->frame_id = -1;
 	drv_data->building_frame = false;
 	drv_data->decode_buf_len = 0;
 	kfifo_reset(&drv_data->decoder.fifo);
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+	spin_unlock_irqrestore(&drv_data->pipeline.ready_queue_lock, flags);
 
 	retval = up_iap_auth(drv_data);
 	if (retval) {
@@ -667,9 +667,9 @@ error_start:
 	/*
 	 * Drain the queue and return buffers to userspace per V4L2 spec
 	 */
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	while (!list_empty(&drv_data->ready_queue)) {
-		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
+	spin_lock_irqsave(&drv_data->pipeline.ready_queue_lock, flags);
+	while (!list_empty(&drv_data->pipeline.ready_queue)) {
+		buf = list_first_entry(&drv_data->pipeline.ready_queue, struct up_buffer,
 				       list);
 		list_del(&buf->list);
 		/*
@@ -677,7 +677,7 @@ error_start:
 		 */
 		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_QUEUED);
 	}
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+	spin_unlock_irqrestore(&drv_data->pipeline.ready_queue_lock, flags);
 
 	/*
 	 * Clear the HW guard last so a future start_streaming invocation can re-attempt
@@ -730,9 +730,9 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	 * Because all URBs are definitively dead now, no one else will touch
 	 * this list.
 	 */
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	while (!list_empty(&drv_data->ready_queue)) {
-		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
+	spin_lock_irqsave(&drv_data->pipeline.ready_queue_lock, flags);
+	while (!list_empty(&drv_data->pipeline.ready_queue)) {
+		buf = list_first_entry(&drv_data->pipeline.ready_queue, struct up_buffer,
 				       list);
 		list_del(&buf->list);
 		/*
@@ -740,7 +740,7 @@ static void up_stop_streaming(struct vb2_queue *vq)
 		 */
 		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+	spin_unlock_irqrestore(&drv_data->pipeline.ready_queue_lock, flags);
 
 	/*
 	 * Reset the hardware active guard state.
@@ -817,8 +817,8 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	drv_data->height = UP_DEF_HEIGHT;
 
 	mutex_init(&drv_data->v4l2.lock);
-	spin_lock_init(&drv_data->ready_queue_lock);
-	INIT_LIST_HEAD(&drv_data->ready_queue);
+	spin_lock_init(&drv_data->pipeline.ready_queue_lock);
+	INIT_LIST_HEAD(&drv_data->pipeline.ready_queue);
 
 	iap_intf = usb_ifnum_to_if(usb_dev, UP_IAP_INTERFACE);
 	if (!iap_intf) {
