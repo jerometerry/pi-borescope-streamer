@@ -525,6 +525,28 @@ static void up_buf_queue(struct vb2_buffer *vb)
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 }
 
+static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
+	.vidioc_querycap = up_vidioc_querycap,
+	.vidioc_g_fmt_vid_cap = up_vidioc_fmt_vid_cap,
+	.vidioc_s_fmt_vid_cap = up_vidioc_fmt_vid_cap,
+	.vidioc_try_fmt_vid_cap = up_vidioc_fmt_vid_cap,
+	.vidioc_enum_fmt_vid_cap = up_vidioc_enum_fmt_vid_cap,
+	.vidioc_enum_framesizes = up_vidioc_enum_framesizes,
+	.vidioc_enum_frameintervals = up_vidioc_enum_frameintervals,
+	.vidioc_enum_input = up_vidioc_enum_input,
+	.vidioc_g_input = up_vidioc_g_input,
+	.vidioc_s_input = up_vidioc_s_input,
+	.vidioc_g_parm = up_vidioc_g_parm,
+	.vidioc_s_parm = up_vidioc_s_parm,
+	.vidioc_reqbufs = vb2_ioctl_reqbufs,
+	.vidioc_create_bufs = vb2_ioctl_create_bufs,
+	.vidioc_querybuf = vb2_ioctl_querybuf,
+	.vidioc_qbuf = vb2_ioctl_qbuf,
+	.vidioc_dqbuf = vb2_ioctl_dqbuf,
+	.vidioc_streamon = vb2_ioctl_streamon,
+	.vidioc_streamoff = vb2_ioctl_streamoff,
+};
+
 static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	int i, retval, urb_sub;
@@ -691,28 +713,6 @@ static const struct vb2_ops up_vb2_ops = {
 	.stop_streaming = up_stop_streaming,
 	.wait_prepare = vb2_ops_wait_prepare,
 	.wait_finish = vb2_ops_wait_finish,
-};
-
-static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
-	.vidioc_querycap = up_vidioc_querycap,
-	.vidioc_g_fmt_vid_cap = up_vidioc_fmt_vid_cap,
-	.vidioc_s_fmt_vid_cap = up_vidioc_fmt_vid_cap,
-	.vidioc_try_fmt_vid_cap = up_vidioc_fmt_vid_cap,
-	.vidioc_enum_fmt_vid_cap = up_vidioc_enum_fmt_vid_cap,
-	.vidioc_enum_framesizes = up_vidioc_enum_framesizes,
-	.vidioc_enum_frameintervals = up_vidioc_enum_frameintervals,
-	.vidioc_enum_input = up_vidioc_enum_input,
-	.vidioc_g_input = up_vidioc_g_input,
-	.vidioc_s_input = up_vidioc_s_input,
-	.vidioc_g_parm = up_vidioc_g_parm,
-	.vidioc_s_parm = up_vidioc_s_parm,
-	.vidioc_reqbufs = vb2_ioctl_reqbufs,
-	.vidioc_create_bufs = vb2_ioctl_create_bufs,
-	.vidioc_querybuf = vb2_ioctl_querybuf,
-	.vidioc_qbuf = vb2_ioctl_qbuf,
-	.vidioc_dqbuf = vb2_ioctl_dqbuf,
-	.vidioc_streamon = vb2_ioctl_streamon,
-	.vidioc_streamoff = vb2_ioctl_streamoff,
 };
 
 static int up_v4l2_open(struct file *file)
