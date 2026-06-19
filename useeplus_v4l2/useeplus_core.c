@@ -105,7 +105,7 @@ static void up_read_bulk_callback(struct urb *urb)
 	 * Diagnostic logging throttle
 	 */
 	if (drv_data->dbg_urbs_processed % DIAG_LOG_ITERATIONS == 0) {
-		dev_dbg(&drv_data->itf->dev, DIAG_DATA_FORMAT,
+		dev_dbg(&drv_data->usb.itf->dev, DIAG_DATA_FORMAT,
 			drv_data->dbg_urbs_processed, drv_data->dbg_usb_errors,
 			drv_data->dbg_packets_found, drv_data->dbg_frames_found,
 			drv_data->dbg_frames_delivered,
@@ -133,7 +133,7 @@ resubmit:
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval && retval != -ENODEV && retval != -ESHUTDOWN &&
 		    retval != -ENOENT)
-			dev_err(&drv_data->itf->dev,
+			dev_err(&drv_data->usb.itf->dev,
 				"usb_submit_urb failed: %d\n", retval);
 	}
 }
@@ -141,7 +141,7 @@ resubmit:
 static int up_alloc_urbs(struct up_drv_data *drv_data)
 {
 	struct usb_device *usb_dev = drv_data->usb.udev;
-	struct usb_interface *itf = drv_data->itf;
+	struct usb_interface *itf = drv_data->usb.itf;
 	u8 *urb_ptr;
 	int i;
 
@@ -204,7 +204,7 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 
 	pl_len = drv_data->decoder.active_pl_len;
 	if (pl_len + len > MAX_FRAME_SIZE) {
-		dev = &drv_data->itf->dev;
+		dev = &drv_data->usb.itf->dev;
 		dev_err_ratelimited(dev, "useeplus: Overflow Prevention.\n");
 
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
@@ -599,7 +599,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	unsigned long flags;
 
 	drv_data = vb2_get_drv_priv(vq);
-	itf = drv_data->itf;
+	itf = drv_data->usb.itf;
 	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->pipeline.streaming))
 		return 0;
 
@@ -644,7 +644,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 		retval = usb_submit_urb(drv_data->usb.urbs[urb_sub],
 					GFP_KERNEL);
 		if (retval) {
-			dev_err(&drv_data->itf->dev,
+			dev_err(&drv_data->usb.itf->dev,
 				"Failed to submit URBs: %d\n", retval);
 			goto error_start;
 		}
@@ -808,7 +808,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 		return -ENOMEM;
 
 	drv_data->usb.udev = usb_dev;
-	drv_data->itf = itf;
+	drv_data->usb.itf = itf;
 	drv_data->sequence = 0;
 	drv_data->building_frame = false;
 	drv_data->decoder.active_pl_len = 0;
