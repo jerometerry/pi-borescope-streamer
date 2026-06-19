@@ -195,10 +195,10 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 	size_t pl_len;
 	u8 *vaddr;
 
-	if (!drv_data->active_buf)
+	if (!drv_data->decoder.active_buf)
 		return;
 
-	active_buf = drv_data->active_buf;
+	active_buf = drv_data->decoder.active_buf;
 	v4l2_buf = &active_buf->vb2_buffer;
 	vb2_buf = &v4l2_buf->vb2_buf;
 
@@ -209,7 +209,7 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 
-		drv_data->active_buf = NULL;
+		drv_data->decoder.active_buf = NULL;
 		drv_data->active_pl_len = 0;
 		drv_data->dbg_frames_dropped_soi++;
 
@@ -231,11 +231,11 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 	struct list_head *rdy_q;
 	unsigned long flags;
 
-	if (drv_data->active_buf) {
-		active_buf = drv_data->active_buf;
+	if (drv_data->decoder.active_buf) {
+		active_buf = drv_data->decoder.active_buf;
 		vb2_buffer_done(&active_buf->vb2_buffer.vb2_buf,
 				VB2_BUF_STATE_ERROR);
-		drv_data->active_buf = NULL;
+		drv_data->decoder.active_buf = NULL;
 	}
 
 	drv_data->active_pl_len = 0;
@@ -247,9 +247,9 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 		active_buf = list_first_entry(rdy_q, struct up_buffer, list);
 		list_del(&active_buf->list);
 
-		drv_data->active_buf = active_buf;
+		drv_data->decoder.active_buf = active_buf;
 	} else {
-		drv_data->active_buf = NULL;
+		drv_data->decoder.active_buf = NULL;
 	}
 	spin_unlock_irqrestore(&drv_data->pipeline.ready_lock, flags);
 }
@@ -262,10 +262,10 @@ static void up_on_frame_complete(void *context)
 	struct vb2_buffer *vb2_buf;
 	size_t pl_len;
 
-	if (!drv_data->active_buf)
+	if (!drv_data->decoder.active_buf)
 		return;
 
-	active_buf = drv_data->active_buf;
+	active_buf = drv_data->decoder.active_buf;
 	v4l2_buf = &active_buf->vb2_buffer;
 	vb2_buf = &v4l2_buf->vb2_buf;
 
@@ -284,7 +284,7 @@ static void up_on_frame_complete(void *context)
 		drv_data->dbg_frames_delivered++;
 	}
 
-	drv_data->active_buf = NULL;
+	drv_data->decoder.active_buf = NULL;
 	drv_data->active_pl_len = 0;
 }
 
@@ -295,10 +295,10 @@ static void up_on_frame_incomplete(void *context)
 	struct up_buffer *active_buf;
 	struct vb2_buffer *vb2_buf;
 
-	if (!drv_data->active_buf)
+	if (!drv_data->decoder.active_buf)
 		return;
 
-	active_buf = drv_data->active_buf;
+	active_buf = drv_data->decoder.active_buf;
 	v4l2_buf = &active_buf->vb2_buffer;
 	vb2_buf = &v4l2_buf->vb2_buf;
 
@@ -313,7 +313,7 @@ static void up_on_frame_incomplete(void *context)
 	 * Clear the active pointer so the upcoming on_frame_start
 	 * knows it needs to pull a fresh buffer from the ready_queue.
 	 */
-	drv_data->active_buf = NULL;
+	drv_data->decoder.active_buf = NULL;
 	drv_data->active_pl_len = 0;
 }
 
@@ -604,7 +604,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 		return 0;
 
 	spin_lock_irqsave(&drv_data->pipeline.ready_lock, flags);
-	drv_data->active_buf = NULL;
+	drv_data->decoder.active_buf = NULL;
 	drv_data->active_pl_len = 0;
 	drv_data->frame_id = -1;
 	drv_data->building_frame = false;
@@ -718,10 +718,10 @@ static void up_stop_streaming(struct vb2_queue *vq)
 
 	cancel_work_sync(&drv_data->work);
 
-	if (drv_data->active_buf) {
-		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+	if (drv_data->decoder.active_buf) {
+		vb2_buffer_done(&drv_data->decoder.active_buf->vb2_buffer.vb2_buf,
 				VB2_BUF_STATE_ERROR);
-		drv_data->active_buf = NULL;
+		drv_data->decoder.active_buf = NULL;
 		drv_data->active_pl_len = 0;
 	}
 
