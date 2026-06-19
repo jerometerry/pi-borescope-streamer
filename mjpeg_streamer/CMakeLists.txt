@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(LINUX_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_linux_driver")
+set(LINUX_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../linux_driver")
 
 # --- Build Configuration Options ---
 option(ENABLE_CLANG_TIDY "Enable clang-tidy analysis during build" OFF)
@@ -419,8 +419,8 @@ if(CLANG_FORMAT_EXE)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_linux_driver/tests/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_linux_driver/tests/mock_kernel/**/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../linux_driver/tests/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../linux_driver/tests/mock_kernel/**/*.h"
     )
 
     add_custom_target(format
