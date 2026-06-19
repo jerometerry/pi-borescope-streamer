@@ -20,7 +20,7 @@
 
 static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 {
-	struct usb_device *u_dev = drv_data->usb_dev;
+	struct usb_device *u_dev = drv_data->usb.udev;
 	dma_addr_t dma_addr;
 	u8 *urb_buf;
 
@@ -140,7 +140,7 @@ resubmit:
 
 static int up_alloc_urbs(struct up_drv_data *drv_data)
 {
-	struct usb_device *usb_dev = drv_data->usb_dev;
+	struct usb_device *usb_dev = drv_data->usb.udev;
 	struct usb_interface *itf = drv_data->itf;
 	u8 *urb_ptr;
 	int i;
@@ -328,13 +328,13 @@ static void up_work_handler(struct work_struct *work)
 	drv_data = container_of(work, struct up_drv_data, work);
 
 	dec_buf = drv_data->decoder.workspace_buf;
-	buf = dec_buf + drv_data->decoder.workspace_buf_len;
-	buf_len = MAX_WORKSPACE_SIZE - drv_data->decoder.workspace_buf_len;
+	buf = dec_buf + drv_data->decoder.workspace_len;
+	buf_len = MAX_WORKSPACE_SIZE - drv_data->decoder.workspace_len;
 	len = kfifo_out(&drv_data->decoder.fifo, buf, buf_len);
 
-	drv_data->decoder.workspace_buf_len += len;
+	drv_data->decoder.workspace_len += len;
 
-	if (drv_data->decoder.workspace_buf_len > 0) {
+	if (drv_data->decoder.workspace_len > 0) {
 		decoder.context = drv_data;
 		decoder.building_frame = drv_data->building_frame;
 		decoder.frame_id = drv_data->frame_id;
@@ -346,7 +346,7 @@ static void up_work_handler(struct work_struct *work)
 		decoder.cb.on_frame_complete = up_on_frame_complete;
 		decoder.cb.on_frame_incomplete = up_on_frame_incomplete;
 
-		buf_len = drv_data->decoder.workspace_buf_len;
+		buf_len = drv_data->decoder.workspace_len;
 		consumed = up_decode_bulk(&decoder, dec_buf, buf_len);
 
 		drv_data->building_frame = decoder.building_frame;
@@ -354,13 +354,13 @@ static void up_work_handler(struct work_struct *work)
 		drv_data->found_soi = decoder.found_soi;
 		drv_data->eof_reached = decoder.eof_reached;
 
-		buf_len = drv_data->decoder.workspace_buf_len;
+		buf_len = drv_data->decoder.workspace_len;
 		if (consumed < buf_len) {
 			remaining = buf_len - consumed;
 			memmove(dec_buf, dec_buf + consumed, remaining);
-			drv_data->decoder.workspace_buf_len = remaining;
+			drv_data->decoder.workspace_len = remaining;
 		} else {
-			drv_data->decoder.workspace_buf_len = 0;
+			drv_data->decoder.workspace_len = 0;
 		}
 	}
 }
@@ -372,7 +372,7 @@ static int up_vidioc_querycap(struct file *file, void *priv,
 
 	strscpy(cap->driver, CAP_DRIVER, sizeof(cap->driver));
 	strscpy(cap->card, CAP_CARD, sizeof(cap->card));
-	usb_make_path(drv_data->usb_dev, cap->bus_info, sizeof(cap->bus_info));
+	usb_make_path(drv_data->usb.udev, cap->bus_info, sizeof(cap->bus_info));
 
 	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
 			    V4L2_CAP_DEVICE_CAPS;
@@ -554,7 +554,7 @@ static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
 	struct usb_device *u_dev;
 	u8 *buf;
 
-	u_dev = data->usb_dev;
+	u_dev = data->usb.udev;
 	buf = kmemdup(tokens, len, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
@@ -608,7 +608,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	drv_data->active_pl_len = 0;
 	drv_data->frame_id = -1;
 	drv_data->building_frame = false;
-	drv_data->decoder.workspace_buf_len = 0;
+	drv_data->decoder.workspace_len = 0;
 	kfifo_reset(&drv_data->decoder.fifo);
 	spin_unlock_irqrestore(&drv_data->pipeline.ready_lock, flags);
 
@@ -807,12 +807,12 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	if (!drv_data)
 		return -ENOMEM;
 
-	drv_data->usb_dev = usb_dev;
+	drv_data->usb.udev = usb_dev;
 	drv_data->itf = itf;
 	drv_data->sequence = 0;
 	drv_data->building_frame = false;
 	drv_data->active_pl_len = 0;
-	drv_data->decoder.workspace_buf_len = 0;
+	drv_data->decoder.workspace_len = 0;
 	drv_data->width = UP_DEF_WIDTH;
 	drv_data->height = UP_DEF_HEIGHT;
 
@@ -1025,7 +1025,7 @@ static void up_disconnect(struct usb_interface *itf)
 	/*
 	 * Explicitly release the iAP interface claimed in probe
 	 */
-	iap_intf = usb_ifnum_to_if(drv_data->usb_dev, UP_IAP_INTERFACE);
+	iap_intf = usb_ifnum_to_if(drv_data->usb.udev, UP_IAP_INTERFACE);
 	if (iap_intf) {
 		usb_set_intfdata(iap_intf, NULL);
 		usb_driver_release_interface(driver, iap_intf);
