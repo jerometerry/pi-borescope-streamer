@@ -743,7 +743,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	struct usb_interface *iap_intf;
 	struct up_drv_data *drv_data;
 	struct usb_device *usb_dev;
-	struct driver *driver;
+	struct usb_driver *driver;
 	struct vb2_queue *q;
 	u8 *hb_sink, ep;
 
@@ -946,7 +946,7 @@ error_unreg_v4l2:
 	v4l2_device_unregister(&drv_data->v4l2_dev);
 
 error_release_iap:
-	usb_driver_release_interface(&driver, iap_intf);
+	usb_driver_release_interface(driver, iap_intf);
 	kfifo_free(&drv_data->fifo);
 	if (drv_data->wq)
 		destroy_workqueue(drv_data->wq);
@@ -1028,7 +1028,7 @@ static void up_disconnect(struct usb_interface *itf)
 	iap_intf = usb_ifnum_to_if(drv_data->usb_dev, UP_IAP_INTERFACE);
 	if (iap_intf) {
 		usb_set_intfdata(iap_intf, NULL);
-		usb_driver_release_interface(&driver, iap_intf);
+		usb_driver_release_interface(driver, iap_intf);
 	}
 
 	up_free_urbs(drv_data);
