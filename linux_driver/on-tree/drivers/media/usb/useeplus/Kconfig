@@ -7,4 +7,5 @@ config USB_USEEPLUS
 	  Choose Y or M here to support non-UVC USB cameras utilizing
 	  the Useeplus proprietary protocol.
 
-	  To compile this driver as a module, choose M here: the module will be called useeplus
+	  To compile this driver as a module, choose M here: the
+	  module will be called useeplus.
