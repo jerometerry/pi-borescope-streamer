@@ -17,11 +17,13 @@
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <format>
 #include <functional>
 #include <iostream>
 #include <limits>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -38,6 +40,8 @@
 
 namespace {
     constexpr int DEFAULT_PORT = 8080;
+    constexpr std::string_view DEFAULT_DEVICE_PATH = "/dev/video0";
+
     std::atomic<bool> running{true};
     using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
 }
@@ -144,45 +148,30 @@ void signalHandler(int) {
 }
 
 int main(int argc, const char* argv[]) {
-    int port = DEFAULT_PORT;
-    bool isUsingDefaultPort = true;
-
-    if (argc > 1) {
-        try {
-            int parsedPort = std::stoi(argv[1]);
-            if (parsedPort > 0 && parsedPort <= 65535) {
-                port = parsedPort;
-                isUsingDefaultPort = false;
-            } else {
-                std::cerr << "[Warning] Invalid network port range specified (" << argv[1]
-                          << "). Falling back to default port " << DEFAULT_PORT << ".\n";
-            }
-        } catch (const std::exception& exception) {
-            std::cerr << "[Warning] Malformed network port parameter specified (" << argv[1]
-                      << "). Falling back to default port " << DEFAULT_PORT << ".\n";
-        }
-    }
-
-    std::cout << "==================================================================\n";
-    std::cout << "  Pi-Borescope Streamer Started (Native V4L2)\n";
-
-    if (isUsingDefaultPort) {
-        std::cout << "  -> Status: Running on DEFAULT port " << port << "\n";
-        std::cout << "  -> Note:   To override this, specify a custom port value on launch.\n";
-        std::cout << "             Example: " << argv[0] << " 9000\n";
-    } else {
-        std::cout << "  -> Status: Running on CUSTOM port override " << port << "\n";
-    }
-
-    std::cout << "  -> Web Dashboard:          http://localhost:" << port << "/\n";
-    std::cout << "  -> Raw Streaming (VLC):    http://localhost:" << port << "/stream\n";
-    std::cout << "==================================================================\n";
-
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
     std::signal(SIGPIPE, SIG_IGN);
 
     try {
+	int port = DEFAULT_PORT;
+        std::string devicePath = DEFAULT_DEVICE_PATH;
+
+        for (int i = 1; i < argc; ++i) {
+            std::string arg = argv[i];
+
+            if (arg == "--dev" && i + 1 < argc) {
+                devicePath = argv[++i];
+            } else if (arg == "--port" && i + 1 < argc) {
+                unsigned long val = std::stoul(argv[++i]);
+                if (val > 65535) {
+                   throw std::out_of_range(std::format("Invalid port: {}", val));
+                }
+                port = static_cast<int>(val);
+            } else {
+                throw std::invalid_argument(std::format("Unknown argument: {}", arg));
+            }
+        }
+
         VideoFrameBuffer ringBuffer;
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
         V4l2MjpegStream stream(ringBuffer);
@@ -197,7 +186,7 @@ int main(int argc, const char* argv[]) {
             return true;
         };
 
-        V4l2Camera v4l2_camera("/dev/video0", handler);
+        V4l2Camera v4l2_camera(devicePath, handler);
         MjpegServer server(port, running, ringBuffer);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
