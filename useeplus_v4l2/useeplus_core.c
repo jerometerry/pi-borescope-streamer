@@ -163,7 +163,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 
 		usb_fill_bulk_urb(drv_data->urbs[i], usb_dev,
 				  usb_rcvbulkpipe(usb_dev,
-						  drv_data->video_in_ep),
+						  drv_data->usb.video_in_ep),
 				  drv_data->urb_buffers[i], URB_SIZE,
 				  up_read_bulk_callback, drv_data);
 
@@ -573,7 +573,7 @@ static const u8 iap_auth_handshake[] = {
 static int up_iap_auth(struct up_drv_data *drv_data)
 {
 	size_t size = sizeof(iap_auth_handshake);
-	int ep = drv_data->iap_out_ep;
+	int ep = drv_data->usb.iap_out_ep;
 
 	return up_write_msg(drv_data, ep, iap_auth_handshake, size);
 }
@@ -585,7 +585,7 @@ static const u8 start_video_command[] = {
 static int up_start_video(struct up_drv_data *drv_data)
 {
 	size_t size = sizeof(start_video_command);
-	int ep = drv_data->video_out_ep;
+	int ep = drv_data->usb.video_out_ep;
 
 	return up_write_msg(drv_data, ep, start_video_command, size);
 }
@@ -867,9 +867,9 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 
 		if (usb_endpoint_num(ep_desc) == UP_VIDEO_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
-				drv_data->video_in_ep = ep;
+				drv_data->usb.video_in_ep = ep;
 			else
-				drv_data->video_out_ep = ep;
+				drv_data->usb.video_out_ep = ep;
 		}
 	}
 
@@ -879,21 +879,21 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 
 		if (usb_endpoint_num(ep_desc) == UP_IAP_ENDPOINT) {
 			if (usb_endpoint_dir_in(ep_desc))
-				drv_data->iap_in_ep = ep;
+				drv_data->usb.iap_in_ep = ep;
 			else
-				drv_data->iap_out_ep = ep;
+				drv_data->usb.iap_out_ep = ep;
 		}
 	}
 
-	if (!drv_data->video_in_ep || !drv_data->video_out_ep ||
-	    !drv_data->iap_in_ep || !drv_data->iap_out_ep) {
+	if (!drv_data->usb.video_in_ep || !drv_data->usb.video_out_ep ||
+	    !drv_data->usb.iap_in_ep || !drv_data->usb.iap_out_ep) {
 		dev_err(&itf->dev, "Could not map all endpoints\n");
 		retval = -ENODEV;
 		goto error_release_iap;
 	}
 
-	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->video_in_ep);
-	iap_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->iap_in_ep);
+	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->usb.video_in_ep);
+	iap_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->usb.iap_in_ep);
 
 	drv_data->v4l2.v4l2_dev.release = up_device_release;
 	retval = v4l2_device_register(&itf->dev, &drv_data->v4l2.v4l2_dev);
