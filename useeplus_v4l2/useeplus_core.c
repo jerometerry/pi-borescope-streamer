@@ -28,7 +28,7 @@ static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 		return;
 
 	urb_buf = drv_data->urb_buffers[urb_index];
-	dma_addr = drv_data->urb_dma_addrs[urb_index];
+	dma_addr = drv_data->usb.urb_dma_addrs[urb_index];
 	if (urb_buf) {
 		usb_free_coherent(u_dev, URB_SIZE, urb_buf, dma_addr);
 		drv_data->urb_buffers[urb_index] = NULL;
@@ -153,7 +153,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 		}
 
 		urb_ptr = usb_alloc_coherent(usb_dev, URB_SIZE, GFP_KERNEL,
-					     &drv_data->urb_dma_addrs[i]);
+					     &drv_data->usb.urb_dma_addrs[i]);
 		drv_data->urb_buffers[i] = urb_ptr;
 
 		if (!drv_data->urb_buffers[i]) {
@@ -167,7 +167,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 				  drv_data->urb_buffers[i], URB_SIZE,
 				  up_read_bulk_callback, drv_data);
 
-		drv_data->usb.urbs[i]->transfer_dma = drv_data->urb_dma_addrs[i];
+		drv_data->usb.urbs[i]->transfer_dma = drv_data->usb.urb_dma_addrs[i];
 		drv_data->usb.urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	}
 
