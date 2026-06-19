@@ -202,7 +202,7 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 	v4l2_buf = &active_buf->vb2_buffer;
 	vb2_buf = &v4l2_buf->vb2_buf;
 
-	pl_len = drv_data->active_pl_len;
+	pl_len = drv_data->decoder.active_pl_len;
 	if (pl_len + len > MAX_FRAME_SIZE) {
 		dev = &drv_data->itf->dev;
 		dev_err_ratelimited(dev, "useeplus: Overflow Prevention.\n");
@@ -210,7 +210,7 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 
 		drv_data->decoder.active_buf = NULL;
-		drv_data->active_pl_len = 0;
+		drv_data->decoder.active_pl_len = 0;
 		drv_data->dbg_frames_dropped_soi++;
 
 		return;
@@ -220,7 +220,7 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 
 	if (vaddr) {
 		memcpy(vaddr + pl_len, data, len);
-		drv_data->active_pl_len += len;
+		drv_data->decoder.active_pl_len += len;
 	}
 }
 
@@ -238,7 +238,7 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 		drv_data->decoder.active_buf = NULL;
 	}
 
-	drv_data->active_pl_len = 0;
+	drv_data->decoder.active_pl_len = 0;
 
 	rdy_q = &drv_data->pipeline.ready_queue;
 
@@ -269,7 +269,7 @@ static void up_on_frame_complete(void *context)
 	v4l2_buf = &active_buf->vb2_buffer;
 	vb2_buf = &v4l2_buf->vb2_buf;
 
-	pl_len = drv_data->active_pl_len;
+	pl_len = drv_data->decoder.active_pl_len;
 	if (pl_len < 2) {
 		drv_data->dbg_frames_dropped_eoi++;
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
@@ -285,7 +285,7 @@ static void up_on_frame_complete(void *context)
 	}
 
 	drv_data->decoder.active_buf = NULL;
-	drv_data->active_pl_len = 0;
+	drv_data->decoder.active_pl_len = 0;
 }
 
 static void up_on_frame_incomplete(void *context)
@@ -314,7 +314,7 @@ static void up_on_frame_incomplete(void *context)
 	 * knows it needs to pull a fresh buffer from the ready_queue.
 	 */
 	drv_data->decoder.active_buf = NULL;
-	drv_data->active_pl_len = 0;
+	drv_data->decoder.active_pl_len = 0;
 }
 
 static void up_work_handler(struct work_struct *work)
@@ -605,7 +605,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 	spin_lock_irqsave(&drv_data->pipeline.ready_lock, flags);
 	drv_data->decoder.active_buf = NULL;
-	drv_data->active_pl_len = 0;
+	drv_data->decoder.active_pl_len = 0;
 	drv_data->frame_id = -1;
 	drv_data->building_frame = false;
 	drv_data->decoder.workspace_len = 0;
@@ -722,7 +722,7 @@ static void up_stop_streaming(struct vb2_queue *vq)
 		vb2_buffer_done(&drv_data->decoder.active_buf->vb2_buffer.vb2_buf,
 				VB2_BUF_STATE_ERROR);
 		drv_data->decoder.active_buf = NULL;
-		drv_data->active_pl_len = 0;
+		drv_data->decoder.active_pl_len = 0;
 	}
 
 	/*
@@ -811,7 +811,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	drv_data->itf = itf;
 	drv_data->sequence = 0;
 	drv_data->building_frame = false;
-	drv_data->active_pl_len = 0;
+	drv_data->decoder.active_pl_len = 0;
 	drv_data->decoder.workspace_len = 0;
 	drv_data->width = UP_DEF_WIDTH;
 	drv_data->height = UP_DEF_HEIGHT;
