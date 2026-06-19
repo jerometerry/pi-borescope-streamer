@@ -439,6 +439,8 @@ static const struct vb2_ops up_vb2_ops = {
 	.buf_queue = up_buf_queue,
 	.buf_prepare = up_buf_prepare,
 	.queue_setup = up_queue_setup,
+	.wait_prepare = vb2_ops_wait_prepare,
+	.wait_finish = vb2_ops_wait_finish,
 };
 
 static int up_v4l2_release(struct file *file)
