@@ -42,8 +42,8 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 {
 	int i;
 
-	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
+	clear_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming);
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->pipeline.streaming);
 
 	/*
 	 * Ensure every callback is stopped and no new ones can be submitted.
@@ -66,7 +66,7 @@ static void up_read_bulk_callback(struct urb *urb)
 	/*
 	 * Concurrency safety guard
 	 */
-	if (!test_bit(STREAM_CLIENT_READY, &drv_data->streaming))
+	if (!test_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming))
 		return;
 
 	/*
@@ -129,7 +129,7 @@ resubmit:
 	/*
 	 * Safe Pipeline Resubmission check
 	 */
-	if (test_bit(STREAM_CLIENT_READY, &drv_data->streaming)) {
+	if (test_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval && retval != -ENODEV && retval != -ESHUTDOWN &&
 		    retval != -ENOENT)
@@ -600,7 +600,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 
 	drv_data = vb2_get_drv_priv(vq);
 	itf = drv_data->itf;
-	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->streaming))
+	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->pipeline.streaming))
 		return 0;
 
 	spin_lock_irqsave(&drv_data->pipeline.ready_lock, flags);
@@ -629,7 +629,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	 * We do this before submitting URBs so that the read callbacks can
 	 * start processing data before we finish initializing all URBs
 	 */
-	set_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+	set_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming);
 
 	/*
 	 * Ensure the bit is visible to all CPU cores before submitting URBs
@@ -656,7 +656,7 @@ error_start:
 	/*
 	 * Clear the client-ready bit immediately to block incoming URB data paths
 	 */
-	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+	clear_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming);
 
 	/*
 	 * Free any URBs that were successfully submitted before the failure
@@ -682,7 +682,7 @@ error_start:
 	/*
 	 * Clear the HW guard last so a future start_streaming invocation can re-attempt
 	 */
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->pipeline.streaming);
 
 	return retval;
 }
@@ -698,7 +698,7 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	/*
 	 * Signal the callback to STOP processing and STOP resubmitting immediately.
 	 */
-	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+	clear_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming);
 
 	/*
 	 * Ensure all CPU cores see the bit change before we start Freeing URBs.
@@ -745,7 +745,7 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	/*
 	 * Reset the hardware active guard state.
 	 */
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->pipeline.streaming);
 }
 
 static const struct vb2_ops up_vb2_ops = {

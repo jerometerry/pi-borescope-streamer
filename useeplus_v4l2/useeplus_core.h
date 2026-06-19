@@ -76,7 +76,7 @@ struct up_drv_data {
 	} v4l2;
 
 	struct {
-		unsigned long flags;
+		unsigned long streaming;
 		// Spinlock protecting access to ready_queue
 		spinlock_t ready_lock;
 		struct list_head ready_queue;
