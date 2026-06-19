@@ -547,6 +547,30 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 	.vidioc_streamoff = vb2_ioctl_streamoff,
 };
 
+static const u8 iap_auth_handshake[] = {
+	0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10
+};
+
+static int up_iap_auth(struct up_drv_data *drv_data)
+{
+	size_t size = sizeof(iap_auth_handshake);
+	int ep = drv_data->iap_out_ep;
+
+	return up_write_msg(drv_data, ep, iap_auth_handshake, size);
+}
+
+static const u8 start_video_command[] = {
+	0xBB, 0xAA, 0x05, 0x00, 0x00
+};
+
+static int up_start_video(struct up_drv_data *drv_data)
+{
+	size_t size = sizeof(start_video_command);
+	int ep = drv_data->video_out_ep;
+
+	return up_write_msg(drv_data, ep, start_video_command, size);
+}
+
 static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	int i, retval, urb_sub;
@@ -974,30 +998,6 @@ static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
 
 	kfree(buf);
 	return retval;
-}
-
-static const u8 iap_auth_handshake[] = {
-	0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10
-};
-
-static int up_iap_auth(struct up_drv_data *drv_data)
-{
-	size_t size = sizeof(iap_auth_handshake);
-	int ep = drv_data->iap_out_ep;
-
-	return up_write_msg(drv_data, ep, iap_auth_handshake, size);
-}
-
-static const u8 start_video_command[] = {
-	0xBB, 0xAA, 0x05, 0x00, 0x00
-};
-
-static int up_start_video(struct up_drv_data *drv_data)
-{
-	size_t size = sizeof(start_video_command);
-	int ep = drv_data->video_out_ep;
-
-	return up_write_msg(drv_data, ep, start_video_command, size);
 }
 
 static void up_disconnect(struct usb_interface *itf)
