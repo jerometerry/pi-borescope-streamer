@@ -18,7 +18,6 @@
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
 
-static const struct v4l2_file_operations up_v4l2_fops;
 static const struct vb2_ops up_vb2_ops;
 
 static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
@@ -527,6 +526,25 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 	.vidioc_streamoff = vb2_ioctl_streamoff,
 };
 
+static int up_v4l2_open(struct file *file)
+{
+	return v4l2_fh_open(file);
+}
+
+static int up_v4l2_release(struct file *file)
+{
+	return _vb2_fop_release(file, NULL);
+}
+
+static const struct v4l2_file_operations up_v4l2_fops = {
+	.owner = THIS_MODULE,
+	.open = up_v4l2_open,
+	.release = up_v4l2_release,
+	.read = vb2_fop_read,
+	.poll = vb2_fop_poll,
+	.mmap = vb2_fop_mmap,
+	.unlocked_ioctl = video_ioctl2,
+};
 
 static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 {
@@ -1009,16 +1027,6 @@ static int up_resume(struct usb_interface *intf)
 	return 0;
 }
 
-static int up_v4l2_open(struct file *file)
-{
-	return v4l2_fh_open(file);
-}
-
-static int up_v4l2_release(struct file *file)
-{
-	return _vb2_fop_release(file, NULL);
-}
-
 static int up_buf_prepare(struct vb2_buffer *vb)
 {
 	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
@@ -1050,16 +1058,6 @@ static const struct vb2_ops up_vb2_ops = {
 	.stop_streaming = up_stop_streaming,
 	.wait_prepare = vb2_ops_wait_prepare,
 	.wait_finish = vb2_ops_wait_finish,
-};
-
-static const struct v4l2_file_operations up_v4l2_fops = {
-	.owner = THIS_MODULE,
-	.open = up_v4l2_open,
-	.release = up_v4l2_release,
-	.read = vb2_fop_read,
-	.poll = vb2_fop_poll,
-	.mmap = vb2_fop_mmap,
-	.unlocked_ioctl = video_ioctl2,
 };
 
 static const struct usb_device_id up_table[] = {
