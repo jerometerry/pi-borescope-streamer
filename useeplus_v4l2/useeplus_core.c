@@ -816,7 +816,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	drv_data->width = UP_DEF_WIDTH;
 	drv_data->height = UP_DEF_HEIGHT;
 
-	mutex_init(&drv_data->v4l2_lock);
+	mutex_init(&drv_data->v4l2.lock);
 	spin_lock_init(&drv_data->ready_queue_lock);
 	INIT_LIST_HEAD(&drv_data->ready_queue);
 
@@ -912,7 +912,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	q->mem_ops = &vb2_vmalloc_memops;
 	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	q->min_queued_buffers = 2;
-	q->lock = &drv_data->v4l2_lock;
+	q->lock = &drv_data->v4l2.lock;
 	q->dev = &itf->dev;
 	strscpy(q->name, VIDEO_QUEUE_NAME, sizeof(q->name));
 
@@ -924,15 +924,15 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 
 	strscpy(drv_data->video_dev.name, VIDEO_DEVICE_NAME,
 		sizeof(drv_data->video_dev.name));
-	drv_data->video_dev.v4l2_dev = &drv_data->v4l2_dev;
-	drv_data->video_dev.fops = &up_v4l2_fops;
-	drv_data->video_dev.ioctl_ops = &up_v4l2_ioctl_ops;
-	drv_data->video_dev.release = video_device_release_empty;
-	drv_data->video_dev.lock = &drv_data->v4l2_lock;
-	drv_data->video_dev.queue = q;
-	drv_data->video_dev.device_caps = V4L2_CAP_VIDEO_CAPTURE |
+	drv_data->v4l2.video_dev.v4l2_dev = &drv_data->v4l2.v4l2_dev;
+	drv_data->v4l2.video_dev.fops = &up_v4l2_fops;
+	drv_data->v4l2.video_dev.ioctl_ops = &up_v4l2_ioctl_ops;
+	drv_data->v4l2.video_dev.release = video_device_release_empty;
+	drv_data->v4l2.video_dev.lock = &drv_data->v4l2.lock;
+	drv_data->v4l2.video_dev.queue = q;
+	drv_data->v4l2.video_dev.device_caps = V4L2_CAP_VIDEO_CAPTURE |
 					  V4L2_CAP_STREAMING;
-	video_set_drvdata(&drv_data->video_dev, drv_data);
+	video_set_drvdata(&drv_data->v4l2.video_dev, drv_data);
 
 	hb_sink = kmalloc(HB_BUF_SIZE, GFP_KERNEL);
 	if (!hb_sink) {
