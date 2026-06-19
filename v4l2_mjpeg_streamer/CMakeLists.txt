@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(KERNEL_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_v4l2")
+set(LINUX_DRIVER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_linux_driver")
 
 # --- Build Configuration Options ---
 option(ENABLE_CLANG_TIDY "Enable clang-tidy analysis during build" OFF)
@@ -217,39 +217,38 @@ elseif(UNIX AND NOT APPLE)
 endif()
 target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 
-# --- Core Library ---
-add_library(borescope_core STATIC
+add_library(mjpeg_streamer_core STATIC
     src/mjpeg_server.cpp
     src/v4l2_mjpeg_stream.cpp
     src/zero_allocation_response_builder.cpp
     ${GENERATED_HPP}
 )
-add_library(Borescope::Core ALIAS borescope_core)
+add_library(MjpegStreamer::Core ALIAS mjpeg_streamer_core)
 
 if(APPLE)
-    target_sources(borescope_core PRIVATE
+    target_sources(mjpeg_streamer_core PRIVATE
         src/mjpeg_stream_capture.cpp
         src/usb_camera.cpp
         src/usb_context.cpp
         src/usb_device_finder.cpp
         src/usb_driver.cpp
         src/mjpeg_stream.cpp
-        ${KERNEL_DRIVER_DIR}/useeplus_protocol.c
+        ${LINUX_DRIVER_DIR}/useeplus_protocol.c
     )
-    target_link_libraries(borescope_core PUBLIC PkgConfig::LIBUSB)
+    target_link_libraries(mjpeg_streamer_core PUBLIC PkgConfig::LIBUSB)
 endif()
 
-target_include_directories(borescope_core
+target_include_directories(mjpeg_streamer_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    PUBLIC "${KERNEL_DRIVER_DIR}"
+    PUBLIC "${LINUX_DRIVER_DIR}"
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
 
-target_link_libraries(borescope_core PUBLIC uNetworking PRIVATE project_warnings)
+target_link_libraries(mjpeg_streamer_core PUBLIC uNetworking PRIVATE project_warnings)
 
 if(ENABLE_COVERAGE)
-    target_compile_options(borescope_core PUBLIC --coverage)
-    target_link_options(borescope_core PUBLIC --coverage)
+    target_compile_options(mjpeg_streamer_core PUBLIC --coverage)
+    target_link_options(mjpeg_streamer_core PUBLIC --coverage)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -259,22 +258,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         src/v4l2_mjpeg_server_main.cpp
     )
     target_link_libraries(v4l2_mjpeg_server
-        PRIVATE Borescope::Core project_warnings
+        PRIVATE MjpegStreamer::Core project_warnings
     )
 elseif(APPLE)
     message(STATUS "MacOS detected: Building libusb targets.")
 
     add_executable(mjpeg_server src/mjpeg_server_main.cpp)
-    target_link_libraries(mjpeg_server PRIVATE Borescope::Core project_warnings)
+    target_link_libraries(mjpeg_server PRIVATE MjpegStreamer::Core project_warnings)
 
     add_executable(mjpeg_stream_capture src/mjpeg_stream_capture_main.cpp)
-    target_link_libraries(mjpeg_stream_capture PRIVATE Borescope::Core project_warnings)
+    target_link_libraries(mjpeg_stream_capture PRIVATE MjpegStreamer::Core project_warnings)
 
     add_executable(mjpeg_frame_extractor src/mjpeg_frame_extractor_main.cpp)
-    target_link_libraries(mjpeg_frame_extractor PRIVATE Borescope::Core project_warnings)
+    target_link_libraries(mjpeg_frame_extractor PRIVATE MjpegStreamer::Core project_warnings)
 endif()
 
-# --- Documentation (Opt-In) ---
 if(BUILD_DOC)
     find_package(Doxygen)
     if(DOXYGEN_FOUND)
@@ -301,7 +299,6 @@ if(BUILD_DOC)
     endif()
 endif()
 
-# --- Tests (Opt-In) ---
 if(BUILD_TESTING)
     enable_testing()
     FetchContent_Declare(
@@ -324,7 +321,7 @@ if(BUILD_TESTING)
     target_compile_options(gmock PRIVATE -w)
     target_compile_options(gmock_main PRIVATE -w)
 
-    target_link_libraries(borescope_core PRIVATE GTest::gtest)
+    target_link_libraries(mjpeg_streamer_core PRIVATE GTest::gtest)
 
     add_executable(run_project_tests
         tests/test_disruptor.cpp
@@ -338,7 +335,7 @@ if(BUILD_TESTING)
 
     target_link_libraries(run_project_tests
         PRIVATE
-            borescope_core
+            mjpeg_streamer_core
             project_warnings
             gtest_main
             gmock
@@ -347,17 +344,15 @@ if(BUILD_TESTING)
     include(GoogleTest)
     gtest_discover_tests(run_project_tests)
 
-    # --- Linux Driver Tests ---
-
     add_executable(run_linux_driver_tests
-        "${KERNEL_DRIVER_DIR}/tests/test_useeplus_decoder.cpp"
-	"${KERNEL_DRIVER_DIR}/tests/test_useeplus_protocol.cpp"
-	"${KERNEL_DRIVER_DIR}/useeplus_protocol.c"
+        "${LINUX_DRIVER_DIR}/tests/test_useeplus_decoder.cpp"
+	"${LINUX_DRIVER_DIR}/tests/test_useeplus_protocol.cpp"
+	"${LINUX_DRIVER_DIR}/useeplus_protocol.c"
     )
 
     target_include_directories(run_linux_driver_tests PRIVATE
-        "${KERNEL_DRIVER_DIR}/tests/mock_kernel"
-        "${KERNEL_DRIVER_DIR}"
+        "${LINUX_DRIVER_DIR}/tests/mock_kernel"
+        "${LINUX_DRIVER_DIR}"
     )
 
     target_link_libraries(run_linux_driver_tests
@@ -385,7 +380,6 @@ if(BUILD_TESTING)
     gtest_discover_tests(run_linux_driver_tests)
 endif()
 
-# --- Benchmarks (Opt-In) ---
 if(BUILD_BENCHMARKS)
     FetchContent_Declare(
       googlebenchmark
@@ -404,17 +398,17 @@ if(BUILD_BENCHMARKS)
 
     add_executable(disruptor.bench benchmark/disruptor_benchmark.cpp)
     target_link_libraries(disruptor.bench
-        PRIVATE Borescope::Core benchmark::benchmark_main Threads::Threads project_warnings
+        PRIVATE MjpegStreamer::Core benchmark::benchmark_main Threads::Threads project_warnings
     )
 
     add_executable(disruptor_concurrency.bench benchmark/disruptor_concurrency_benchmark.cpp)
     target_link_libraries(disruptor_concurrency.bench
-        PRIVATE Borescope::Core benchmark::benchmark_main Threads::Threads project_warnings
+        PRIVATE MjpegStreamer::Core benchmark::benchmark_main Threads::Threads project_warnings
     )
 
     add_executable(mjpeg_pipeline.bench benchmark/mjpeg_pipeline_benchmark.cpp)
     target_link_libraries(mjpeg_pipeline.bench
-        PRIVATE Borescope::Core benchmark::benchmark_main Threads::Threads project_warnings
+        PRIVATE MjpegStreamer::Core benchmark::benchmark_main Threads::Threads project_warnings
     )
 endif()
 
@@ -425,8 +419,8 @@ if(CLANG_FORMAT_EXE)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
         "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_v4l2/tests/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_v4l2/tests/mock_kernel/**/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_linux_driver/tests/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../useeplus_linux_driver/tests/mock_kernel/**/*.h"
     )
 
     add_custom_target(format
