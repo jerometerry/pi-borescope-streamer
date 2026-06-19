@@ -112,3 +112,28 @@ sudo cp drivers/media/usb/useeplus/useeplus.ko /lib/modules/$(uname -r)/kernel/d
 # have the kernel reload updated modules
 sudo depmod -a
 ```
+
+### Docker
+
+For testing compiling the Linux Kernel on MacOS, you can run an Ubuntu docker container. I've
+included and example Dockerfile in the on-tree folder. You can use that to create a docker volume
+to hold the sources, then build and connect a docker container from the Dockerfile to perform
+kernel builds. Here's a script showing the steps.
+
+```bash
+# create a new volume
+docker volume create kernel-workspace
+
+# build the docker image, run the container, and attach to the kernel-workspace volume
+docker run --rm -it -v kernel-workspace:/kernel-src local-kernel-builder bash
+
+git clone https://github.com/jerometerry/linux.git
+cd linux
+
+# switch to the useeplus driver branch
+git checkout -b useeplus_v4l2 origin/useeplus_v4l2
+
+# create the default .config file
+make defconfig
+make -j$(nproc)
+```
