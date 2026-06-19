@@ -277,7 +277,7 @@ static void up_on_frame_complete(void *context)
 		vb2_set_plane_payload(vb2_buf, 0, pl_len);
 
 		vb2_buf->timestamp = ktime_get_ns();
-		v4l2_buf->pipeline.sequence = drv_data->pipeline.sequence++;
+		v4l2_buf->sequence = drv_data->pipeline.sequence++;
 
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_DONE);
 
