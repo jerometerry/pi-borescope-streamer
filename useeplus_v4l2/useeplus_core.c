@@ -24,7 +24,7 @@ static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 	dma_addr_t dma_addr;
 	u8 *urb_buf;
 
-	if (!drv_data->urbs[urb_index])
+	if (!drv_data->usb.urbs[urb_index])
 		return;
 
 	urb_buf = drv_data->urb_buffers[urb_index];
@@ -34,8 +34,8 @@ static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 		drv_data->urb_buffers[urb_index] = NULL;
 	}
 
-	usb_free_urb(drv_data->urbs[urb_index]);
-	drv_data->urbs[urb_index] = NULL;
+	usb_free_urb(drv_data->usb.urbs[urb_index]);
+	drv_data->usb.urbs[urb_index] = NULL;
 }
 
 static void up_free_urbs(struct up_drv_data *drv_data)
@@ -49,7 +49,7 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 	 * Ensure every callback is stopped and no new ones can be submitted.
 	 */
 	for (i = 0; i < NUM_URBS; i++)
-		usb_kill_urb(drv_data->urbs[i]);
+		usb_kill_urb(drv_data->usb.urbs[i]);
 
 	/*
 	 * Release URB resources
@@ -123,7 +123,7 @@ static void up_read_bulk_callback(struct urb *urb)
 			 "kfifo overflow, dropping URB payload\n");
 	}
 
-	queue_work(drv_data->decoder.wq, &drv_data->work);
+	queue_work(drv_data->decoder.wq, &drv_data->decoder.work);
 
 resubmit:
 	/*
@@ -146,8 +146,8 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 	int i;
 
 	for (i = 0; i < NUM_URBS; i++) {
-		drv_data->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!drv_data->urbs[i]) {
+		drv_data->usb.urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
+		if (!drv_data->usb.urbs[i]) {
 			dev_err(&itf->dev, "usb_alloc_urb failed\n");
 			return -ENOMEM;
 		}
@@ -161,14 +161,14 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 			return -ENOMEM;
 		}
 
-		usb_fill_bulk_urb(drv_data->urbs[i], usb_dev,
+		usb_fill_bulk_urb(drv_data->usb.urbs[i], usb_dev,
 				  usb_rcvbulkpipe(usb_dev,
 						  drv_data->usb.video_in_ep),
 				  drv_data->urb_buffers[i], URB_SIZE,
 				  up_read_bulk_callback, drv_data);
 
-		drv_data->urbs[i]->transfer_dma = drv_data->urb_dma_addrs[i];
-		drv_data->urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+		drv_data->usb.urbs[i]->transfer_dma = drv_data->urb_dma_addrs[i];
+		drv_data->usb.urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	}
 
 	return 0;
@@ -641,7 +641,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	 * Submit the URBs
 	 */
 	for (urb_sub = 0; urb_sub < NUM_URBS; urb_sub++) {
-		retval = usb_submit_urb(drv_data->urbs[urb_sub],
+		retval = usb_submit_urb(drv_data->usb.urbs[urb_sub],
 					GFP_KERNEL);
 		if (retval) {
 			dev_err(&drv_data->itf->dev,
@@ -662,7 +662,7 @@ error_start:
 	 * Free any URBs that were successfully submitted before the failure
 	 */
 	for (i = 0; i < urb_sub; i++)
-		usb_kill_urb(drv_data->urbs[i]);
+		usb_kill_urb(drv_data->usb.urbs[i]);
 
 	/*
 	 * Drain the queue and return buffers to userspace per V4L2 spec
@@ -712,11 +712,11 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	 * resubmitting.
 	 */
 	for (i = 0; i < NUM_URBS; i++) {
-		if (drv_data->urbs[i])
-			usb_kill_urb(drv_data->urbs[i]);
+		if (drv_data->usb.urbs[i])
+			usb_kill_urb(drv_data->usb.urbs[i]);
 	}
 
-	cancel_work_sync(&drv_data->work);
+	cancel_work_sync(&drv_data->decoder.work);
 
 	if (drv_data->decoder.active_buf) {
 		vb2_buffer_done(&drv_data->decoder.active_buf->vb2_buffer.vb2_buf,
@@ -839,7 +839,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 		goto error_release_iap;
 	}
 
-	INIT_WORK(&drv_data->work, up_work_handler);
+	INIT_WORK(&drv_data->decoder.work, up_work_handler);
 
 	drv_data->decoder.wq = alloc_ordered_workqueue("useeplus_wq", WQ_MEM_RECLAIM);
 	if (!drv_data->decoder.wq) {
@@ -1033,7 +1033,7 @@ static void up_disconnect(struct usb_interface *itf)
 
 	up_free_urbs(drv_data);
 
-	cancel_work_sync(&drv_data->work);
+	cancel_work_sync(&drv_data->decoder.work);
 	if (drv_data->decoder.wq) {
 		destroy_workqueue(drv_data->decoder.wq);
 		drv_data->decoder.wq = NULL;
