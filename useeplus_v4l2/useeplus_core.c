@@ -277,7 +277,7 @@ static void up_on_frame_complete(void *context)
 		vb2_set_plane_payload(vb2_buf, 0, pl_len);
 
 		vb2_buf->timestamp = ktime_get_ns();
-		v4l2_buf->sequence = drv_data->sequence++;
+		v4l2_buf->pipeline.sequence = drv_data->pipeline.sequence++;
 
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_DONE);
 
@@ -437,8 +437,8 @@ static int up_vidioc_enum_frameintervals(struct file *file, void *priv,
 	if (fival->pixel_format != V4L2_PIX_FMT_MJPEG)
 		return -EINVAL;
 
-	if (fival->v4l2.width != drv_data->v4l2.width ||
-	    fival->v4l2.height != drv_data->v4l2.height)
+	if (fival->width != drv_data->v4l2.width ||
+	    fival->height != drv_data->v4l2.height)
 		return -EINVAL;
 
 	fival->type = V4L2_FRMIVAL_TYPE_DISCRETE;
@@ -809,7 +809,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 
 	drv_data->usb.udev = usb_dev;
 	drv_data->usb.itf = itf;
-	drv_data->sequence = 0;
+	drv_data->pipeline.sequence = 0;
 	drv_data->decoder.building_frame = false;
 	drv_data->decoder.active_pl_len = 0;
 	drv_data->decoder.workspace_len = 0;
