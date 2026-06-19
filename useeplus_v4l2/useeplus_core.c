@@ -118,11 +118,11 @@ static int up_enum_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-static int up_try_fmt_vid_cap(struct file *file, void *priv,
-				 struct v4l2_format *f)
+/*
+ * The camera only supports 640x480 MJPEG.
+ */
+static void up_enforce_format(struct up_drv_data *drv_data, struct v4l2_format *f)
 {
-	struct up_drv_data *drv_data = video_drvdata(file);
-
 	f->fmt.pix.width = drv_data->v4l2.width;
 	f->fmt.pix.height = drv_data->v4l2.height;
 	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
@@ -130,6 +130,13 @@ static int up_try_fmt_vid_cap(struct file *file, void *priv,
 	f->fmt.pix.bytesperline = 0;
 	f->fmt.pix.sizeimage = MAX_FRAME_SIZE;
 	f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+}
+
+static int up_try_fmt_vid_cap(struct file *file, void *priv,
+				 struct v4l2_format *f)
+{
+	struct up_drv_data *drv_data = video_drvdata(file);
+	up_enforce_format(drv_data, f);
 
 	return 0;
 }
@@ -138,14 +145,7 @@ static int up_s_fmt_vid_cap(struct file *file, void *priv,
 				 struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
-
-	f->fmt.pix.width = drv_data->v4l2.width;
-	f->fmt.pix.height = drv_data->v4l2.height;
-	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
-	f->fmt.pix.field = V4L2_FIELD_NONE;
-	f->fmt.pix.bytesperline = 0;
-	f->fmt.pix.sizeimage = MAX_FRAME_SIZE;
-	f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+	up_enforce_format(drv_data, f);
 
 	return 0;
 }
@@ -154,14 +154,7 @@ static int up_g_fmt_vid_cap(struct file *file, void *priv,
 				 struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
-
-	f->fmt.pix.width = drv_data->v4l2.width;
-	f->fmt.pix.height = drv_data->v4l2.height;
-	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
-	f->fmt.pix.field = V4L2_FIELD_NONE;
-	f->fmt.pix.bytesperline = 0;
-	f->fmt.pix.sizeimage = MAX_FRAME_SIZE;
-	f->fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
+	up_enforce_format(drv_data, f);
 
 	return 0;
 }

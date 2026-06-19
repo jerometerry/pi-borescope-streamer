@@ -4,7 +4,6 @@
 
 #include <linux/types.h>
 #include <asm/byteorder.h>
-#include <endian.h>
 
 /*
  * Useeplus USB Packet Structure (Applies to ALL packets)
@@ -135,7 +134,8 @@ struct up_pl_hdr {
 struct up_decoder_callbacks {
 	void (*on_frame_start)(void *context, u8 frame_id, u8 dev_num);
 	void (*on_video_payload)(void *context, u8 *data, size_t len);
-	void (*on_frame_end)(void *context);
+	void (*on_frame_complete)(void *context);
+	void (*on_frame_incomplete)(void *context);
 };
 
 struct up_decode_context {
@@ -218,6 +218,16 @@ static inline bool up_is_valid_pkt_hdr(struct up_pkt_hdr *pkt)
 	u8 dev_id = pkt->le_device_id;
 
 	return up_check_pkt_hdr(del, dev_id);
+}
+
+static inline bool up_is_jpg_soi(u8 *pl, size_t i)
+{
+	return (pl[i] == JPEG_DEL && pl[i + 1] == JPEG_SOI);
+}
+
+static inline bool up_is_jpg_eoi(u8 *pl, size_t i)
+{
+	return (pl[i] == JPEG_DEL && pl[i + 1] == JPEG_EOI);
 }
 
 static inline bool up_has_gravity_sensor(u8 flags)

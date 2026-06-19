@@ -168,6 +168,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 					}
 				}
 			}
+
 			if (!found)
 				goto advance;
 		}
