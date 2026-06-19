@@ -547,6 +547,25 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 	.vidioc_streamoff = vb2_ioctl_streamoff,
 };
 
+static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
+			size_t len)
+{
+	int retval, sent_bytes, out_pipe;
+	struct usb_device *u_dev;
+	u8 *buf;
+
+	u_dev = data->usb_dev;
+	buf = kmemdup(tokens, len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	out_pipe = usb_sndbulkpipe(u_dev, ep_addr);
+	retval = usb_bulk_msg(u_dev, out_pipe, buf, len, &sent_bytes, USB_TO);
+
+	kfree(buf);
+	return retval;
+}
+
 static const u8 iap_auth_handshake[] = {
 	0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10
 };
@@ -978,25 +997,6 @@ error_release_iap:
 
 error_free_dev:
 	kfree(drv_data);
-	return retval;
-}
-
-static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
-			size_t len)
-{
-	int retval, sent_bytes, out_pipe;
-	struct usb_device *u_dev;
-	u8 *buf;
-
-	u_dev = data->usb_dev;
-	buf = kmemdup(tokens, len, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	out_pipe = usb_sndbulkpipe(u_dev, ep_addr);
-	retval = usb_bulk_msg(u_dev, out_pipe, buf, len, &sent_bytes, USB_TO);
-
-	kfree(buf);
 	return retval;
 }
 
