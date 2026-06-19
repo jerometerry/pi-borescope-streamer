@@ -115,15 +115,15 @@ static void up_read_bulk_callback(struct urb *urb)
 			drv_data->dbg_ghost_headers);
 	}
 
-	if (kfifo_avail(&drv_data->fifo) >= urb->actual_length) {
-		kfifo_in(&drv_data->fifo, urb->transfer_buffer,
+	if (kfifo_avail(&drv_data->decoder.fifo) >= urb->actual_length) {
+		kfifo_in(&drv_data->decoder.fifo, urb->transfer_buffer,
 			 urb->actual_length);
 	} else {
 		dev_warn(&urb->dev->dev,
 			 "kfifo overflow, dropping URB payload\n");
 	}
 
-	queue_work(drv_data->wq, &drv_data->work);
+	queue_work(drv_data->decoder.wq, &drv_data->work);
 
 resubmit:
 	/*
@@ -180,7 +180,7 @@ static void up_device_release(struct v4l2_device *v4l2_dev)
 
 	drv_data = container_of(v4l2_dev, struct up_drv_data, v4l2_dev);
 
-	kfifo_free(&drv_data->fifo);
+	kfifo_free(&drv_data->decoder.fifo);
 	kfree(drv_data->decode_buf);
 	kfree(drv_data);
 }
@@ -330,7 +330,7 @@ static void up_work_handler(struct work_struct *work)
 	dec_buf = drv_data->decode_buf;
 	buf = dec_buf + drv_data->decode_buf_len;
 	buf_len = MAX_WORKSPACE_SIZE - drv_data->decode_buf_len;
-	len = kfifo_out(&drv_data->fifo, buf, buf_len);
+	len = kfifo_out(&drv_data->decoder.fifo, buf, buf_len);
 
 	drv_data->decode_buf_len += len;
 
@@ -609,7 +609,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	drv_data->frame_id = -1;
 	drv_data->building_frame = false;
 	drv_data->decode_buf_len = 0;
-	kfifo_reset(&drv_data->fifo);
+	kfifo_reset(&drv_data->decoder.fifo);
 	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
 
 	retval = up_iap_auth(drv_data);
@@ -841,14 +841,14 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 
 	INIT_WORK(&drv_data->work, up_work_handler);
 
-	drv_data->wq = alloc_ordered_workqueue("useeplus_wq", WQ_MEM_RECLAIM);
-	if (!drv_data->wq) {
+	drv_data->decoder.wq = alloc_ordered_workqueue("useeplus_wq", WQ_MEM_RECLAIM);
+	if (!drv_data->decoder.wq) {
 		dev_err(&itf->dev, "Could not allocate workqueue\n");
 		retval = -ENOMEM;
 		goto error_release_iap;
 	}
 
-	if (kfifo_alloc(&drv_data->fifo, FIFO_Q_SIZE, GFP_KERNEL)) {
+	if (kfifo_alloc(&drv_data->decoder.fifo, FIFO_Q_SIZE, GFP_KERNEL)) {
 		dev_err(&itf->dev, "Could not allocate FIFO queue\n");
 		retval = -ENOMEM;
 		goto error_release_iap;
@@ -903,7 +903,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 		goto error_release_iap;
 	}
 
-	q = &drv_data->video_queue;
+	q = &drv_data->v4l2.queue;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_READ;
 	q->drv_priv = drv_data;
@@ -990,9 +990,9 @@ error_unreg_v4l2:
 
 error_release_iap:
 	usb_driver_release_interface(driver, iap_intf);
-	kfifo_free(&drv_data->fifo);
-	if (drv_data->wq)
-		destroy_workqueue(drv_data->wq);
+	kfifo_free(&drv_data->decoder.fifo);
+	if (drv_data->decoder.wq)
+		destroy_workqueue(drv_data->decoder.wq);
 	kfree(drv_data->decode_buf);
 
 error_free_dev:
@@ -1034,9 +1034,9 @@ static void up_disconnect(struct usb_interface *itf)
 	up_free_urbs(drv_data);
 
 	cancel_work_sync(&drv_data->work);
-	if (drv_data->wq) {
-		destroy_workqueue(drv_data->wq);
-		drv_data->wq = NULL;
+	if (drv_data->decoder.wq) {
+		destroy_workqueue(drv_data->decoder.wq);
+		drv_data->decoder.wq = NULL;
 	}
 
 	if (video_is_registered(&drv_data->v4l2.video_dev))
