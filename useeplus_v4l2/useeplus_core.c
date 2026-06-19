@@ -386,8 +386,8 @@ static int up_vidioc_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
 
-	f->fmt.pix.width = drv_data->width;
-	f->fmt.pix.height = drv_data->height;
+	f->fmt.pix.width = drv_data->v4l2.width;
+	f->fmt.pix.height = drv_data->v4l2.height;
 	f->fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
 	f->fmt.pix.field = V4L2_FIELD_NONE;
 	f->fmt.pix.bytesperline = 0;
@@ -420,8 +420,8 @@ static int up_vidioc_enum_framesizes(struct file *file, void *priv,
 		return -EINVAL;
 
 	fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	fsize->discrete.width = drv_data->width;
-	fsize->discrete.height = drv_data->height;
+	fsize->discrete.width = drv_data->v4l2.width;
+	fsize->discrete.height = drv_data->v4l2.height;
 
 	return 0;
 }
@@ -437,8 +437,8 @@ static int up_vidioc_enum_frameintervals(struct file *file, void *priv,
 	if (fival->pixel_format != V4L2_PIX_FMT_MJPEG)
 		return -EINVAL;
 
-	if (fival->width != drv_data->width ||
-	    fival->height != drv_data->height)
+	if (fival->v4l2.width != drv_data->v4l2.width ||
+	    fival->v4l2.height != drv_data->v4l2.height)
 		return -EINVAL;
 
 	fival->type = V4L2_FRMIVAL_TYPE_DISCRETE;
@@ -813,8 +813,8 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	drv_data->decoder.building_frame = false;
 	drv_data->decoder.active_pl_len = 0;
 	drv_data->decoder.workspace_len = 0;
-	drv_data->width = UP_DEF_WIDTH;
-	drv_data->height = UP_DEF_HEIGHT;
+	drv_data->v4l2.width = UP_DEF_WIDTH;
+	drv_data->v4l2.height = UP_DEF_HEIGHT;
 
 	mutex_init(&drv_data->v4l2.lock);
 	spin_lock_init(&drv_data->pipeline.ready_lock);
