@@ -82,7 +82,7 @@ static void up_read_bulk_callback(struct urb *urb)
 				urb->status);
 			return;
 		case -EPROTO:
-			drv_data->dbg_usb_errors++;
+			drv_data->dbg.usb_errors++;
 			goto resubmit;
 		case -EILSEQ:
 		case -ECOMM:
@@ -100,19 +100,19 @@ static void up_read_bulk_callback(struct urb *urb)
 		}
 	}
 
-	drv_data->dbg_urbs_processed++;
+	drv_data->dbg.urbs_processed++;
 	/*
 	 * Diagnostic logging throttle
 	 */
-	if (drv_data->dbg_urbs_processed % DIAG_LOG_ITERATIONS == 0) {
+	if (drv_data->dbg.urbs_processed % DIAG_LOG_ITERATIONS == 0) {
 		dev_dbg(&drv_data->usb.itf->dev, DIAG_DATA_FORMAT,
-			drv_data->dbg_urbs_processed, drv_data->dbg_usb_errors,
-			drv_data->dbg_packets_found, drv_data->dbg_frames_found,
-			drv_data->dbg_frames_delivered,
-			drv_data->dbg_frames_dropped_soi,
-			drv_data->dbg_frames_dropped_eoi,
-			drv_data->dbg_frames_dropped_queue,
-			drv_data->dbg_ghost_headers);
+			drv_data->dbg.urbs_processed, drv_data->dbg.usb_errors,
+			drv_data->dbg.packets_found, drv_data->dbg.frames_found,
+			drv_data->dbg.frames_delivered,
+			drv_data->dbg.frames_dropped_soi,
+			drv_data->dbg.frames_dropped_eoi,
+			drv_data->dbg.frames_dropped_queue,
+			drv_data->dbg.ghost_headers);
 	}
 
 	if (kfifo_avail(&drv_data->decoder.fifo) >= urb->actual_length) {
@@ -211,7 +211,7 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 
 		drv_data->decoder.active_buf = NULL;
 		drv_data->decoder.active_pl_len = 0;
-		drv_data->dbg_frames_dropped_soi++;
+		drv_data->dbg.frames_dropped_soi++;
 
 		return;
 	}
@@ -271,7 +271,7 @@ static void up_on_frame_complete(void *context)
 
 	pl_len = drv_data->decoder.active_pl_len;
 	if (pl_len < 2) {
-		drv_data->dbg_frames_dropped_eoi++;
+		drv_data->dbg.frames_dropped_eoi++;
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 	} else {
 		vb2_set_plane_payload(vb2_buf, 0, pl_len);
@@ -281,7 +281,7 @@ static void up_on_frame_complete(void *context)
 
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_DONE);
 
-		drv_data->dbg_frames_delivered++;
+		drv_data->dbg.frames_delivered++;
 	}
 
 	drv_data->decoder.active_buf = NULL;
