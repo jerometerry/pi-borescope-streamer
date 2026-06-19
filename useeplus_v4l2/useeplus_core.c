@@ -336,10 +336,10 @@ static void up_work_handler(struct work_struct *work)
 
 	if (drv_data->decoder.workspace_len > 0) {
 		decoder.context = drv_data;
-		decoder.building_frame = drv_data->building_frame;
-		decoder.frame_id = drv_data->frame_id;
-		decoder.found_soi = drv_data->found_soi;
-		decoder.eof_reached = drv_data->eof_reached;
+		decoder.building_frame = drv_data->decoder.building_frame;
+		decoder.frame_id = drv_data->decoder.frame_id;
+		decoder.found_soi = drv_data->decoder.found_soi;
+		decoder.eof_reached = drv_data->decoder.eof_reached;
 
 		decoder.cb.on_frame_start = up_on_frame_start;
 		decoder.cb.on_video_payload = up_on_video_payload;
@@ -349,10 +349,10 @@ static void up_work_handler(struct work_struct *work)
 		buf_len = drv_data->decoder.workspace_len;
 		consumed = up_decode_bulk(&decoder, dec_buf, buf_len);
 
-		drv_data->building_frame = decoder.building_frame;
-		drv_data->frame_id = decoder.frame_id;
-		drv_data->found_soi = decoder.found_soi;
-		drv_data->eof_reached = decoder.eof_reached;
+		drv_data->decoder.building_frame = decoder.building_frame;
+		drv_data->decoder.frame_id = decoder.frame_id;
+		drv_data->decoder.found_soi = decoder.found_soi;
+		drv_data->decoder.eof_reached = decoder.eof_reached;
 
 		buf_len = drv_data->decoder.workspace_len;
 		if (consumed < buf_len) {
@@ -606,8 +606,8 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	spin_lock_irqsave(&drv_data->pipeline.ready_lock, flags);
 	drv_data->decoder.active_buf = NULL;
 	drv_data->decoder.active_pl_len = 0;
-	drv_data->frame_id = -1;
-	drv_data->building_frame = false;
+	drv_data->decoder.frame_id = -1;
+	drv_data->decoder.building_frame = false;
 	drv_data->decoder.workspace_len = 0;
 	kfifo_reset(&drv_data->decoder.fifo);
 	spin_unlock_irqrestore(&drv_data->pipeline.ready_lock, flags);
@@ -810,7 +810,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	drv_data->usb.udev = usb_dev;
 	drv_data->usb.itf = itf;
 	drv_data->sequence = 0;
-	drv_data->building_frame = false;
+	drv_data->decoder.building_frame = false;
 	drv_data->decoder.active_pl_len = 0;
 	drv_data->decoder.workspace_len = 0;
 	drv_data->width = UP_DEF_WIDTH;
