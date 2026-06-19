@@ -504,6 +504,197 @@ static int up_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 	return 0;
 }
 
+static int up_buf_prepare(struct vb2_buffer *vb)
+{
+	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
+		return -EINVAL;
+
+	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
+	return 0;
+}
+
+static void up_buf_queue(struct vb2_buffer *vb)
+{
+	struct up_drv_data *drv_data = vb2_get_drv_priv(vb->vb2_queue);
+	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
+	struct up_buffer *buf;
+	unsigned long flags;
+
+	buf = container_of(v4l2_buf, struct up_buffer, vb2_buffer);
+
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	list_add_tail(&buf->list, &drv_data->ready_queue);
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+}
+
+static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
+{
+	int i, retval, urb_sub;
+	struct up_drv_data *drv_data;
+	struct usb_interface *itf;
+	struct up_buffer *buf;
+	unsigned long flags;
+
+	drv_data = vb2_get_drv_priv(vq);
+	itf = drv_data->itf;
+	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->streaming))
+		return 0;
+
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	drv_data->active_buf = NULL;
+	drv_data->active_pl_len = 0;
+	drv_data->frame_id = -1;
+	drv_data->building_frame = false;
+	drv_data->decode_buf_len = 0;
+	kfifo_reset(&drv_data->fifo);
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
+	retval = up_iap_auth(drv_data);
+	if (retval) {
+		dev_err(&itf->dev, "up_iap_auth failed: %d\n", retval);
+		goto error_start;
+	}
+
+	retval = up_start_video(drv_data);
+	if (retval) {
+		dev_err(&itf->dev, "up_start_video failed: %d\n", retval);
+		goto error_start;
+	}
+
+	/*
+	 * Allow URB callback paths to start passing payloads to buffers
+	 * We do this before submitting URBs so that the read callbacks can
+	 * start processing data before we finish initializing all URBs
+	 */
+	set_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+
+	/*
+	 * Ensure the bit is visible to all CPU cores before submitting URBs
+	 * Required after Non-Value-Returning set_bit operation.
+	 */
+	smp_mb__after_atomic();
+
+	/*
+	 * Submit the URBs
+	 */
+	for (urb_sub = 0; urb_sub < NUM_URBS; urb_sub++) {
+		retval = usb_submit_urb(drv_data->urbs[urb_sub],
+					GFP_KERNEL);
+		if (retval) {
+			dev_err(&drv_data->itf->dev,
+				"Failed to submit URBs: %d\n", retval);
+			goto error_start;
+		}
+	}
+
+	return 0;
+
+error_start:
+	/*
+	 * Clear the client-ready bit immediately to block incoming URB data paths
+	 */
+	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+
+	/*
+	 * Free any URBs that were successfully submitted before the failure
+	 */
+	for (i = 0; i < urb_sub; i++)
+		usb_kill_urb(drv_data->urbs[i]);
+
+	/*
+	 * Drain the queue and return buffers to userspace per V4L2 spec
+	 */
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	while (!list_empty(&drv_data->ready_queue)) {
+		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
+				       list);
+		list_del(&buf->list);
+		/*
+		 * Buffers correctly marked as queued for V4L2 cleanup on start error
+		 */
+		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_QUEUED);
+	}
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
+	/*
+	 * Clear the HW guard last so a future start_streaming invocation can re-attempt
+	 */
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
+
+	return retval;
+}
+
+static void up_stop_streaming(struct vb2_queue *vq)
+{
+	struct up_drv_data *drv_data;
+	struct up_buffer *buf;
+	unsigned long flags;
+	int i;
+
+	drv_data = vb2_get_drv_priv(vq);
+	/*
+	 * Signal the callback to STOP processing and STOP resubmitting immediately.
+	 */
+	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
+
+	/*
+	 * Ensure all CPU cores see the bit change before we start Freeing URBs.
+	 * clear_bit doesn't imply a memory barrier, so we explicitly add one.
+	 */
+	smp_mb__after_atomic();
+
+	/*
+	 * usb_kill_urb blocks until any active callback finishes executing.
+	 * Since STREAM_CLIENT_READY is now 0, the callback will exit without
+	 * resubmitting.
+	 */
+	for (i = 0; i < NUM_URBS; i++) {
+		if (drv_data->urbs[i])
+			usb_kill_urb(drv_data->urbs[i]);
+	}
+
+	cancel_work_sync(&drv_data->work);
+
+	if (drv_data->active_buf) {
+		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
+				VB2_BUF_STATE_ERROR);
+		drv_data->active_buf = NULL;
+		drv_data->active_pl_len = 0;
+	}
+
+	/*
+	 * Safely drain any buffers that were left over in the queue.
+	 * Because all URBs are definitively dead now, no one else will touch
+	 * this list.
+	 */
+	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
+	while (!list_empty(&drv_data->ready_queue)) {
+		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
+				       list);
+		list_del(&buf->list);
+		/*
+		 * Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR
+		 */
+		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
+	}
+	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
+
+	/*
+	 * Reset the hardware active guard state.
+	 */
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
+}
+
+static const struct vb2_ops up_vb2_ops = {
+	.queue_setup = up_queue_setup,
+	.buf_prepare = up_buf_prepare,
+	.buf_queue = up_buf_queue,
+	.start_streaming = up_start_streaming,
+	.stop_streaming = up_stop_streaming,
+	.wait_prepare = vb2_ops_wait_prepare,
+	.wait_finish = vb2_ops_wait_finish,
+};
+
 static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 	.vidioc_querycap = up_vidioc_querycap,
 	.vidioc_g_fmt_vid_cap = up_vidioc_fmt_vid_cap,
@@ -811,164 +1002,6 @@ static int up_start_video(struct up_drv_data *drv_data)
 	return up_write_msg(drv_data, ep, start_video_command, size);
 }
 
-static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
-{
-	int i, retval, urb_sub;
-	struct up_drv_data *drv_data;
-	struct usb_interface *itf;
-	struct up_buffer *buf;
-	unsigned long flags;
-
-	drv_data = vb2_get_drv_priv(vq);
-	itf = drv_data->itf;
-	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->streaming))
-		return 0;
-
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	drv_data->active_buf = NULL;
-	drv_data->active_pl_len = 0;
-	drv_data->frame_id = -1;
-	drv_data->building_frame = false;
-	drv_data->decode_buf_len = 0;
-	kfifo_reset(&drv_data->fifo);
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-
-	retval = up_iap_auth(drv_data);
-	if (retval) {
-		dev_err(&itf->dev, "up_iap_auth failed: %d\n", retval);
-		goto error_start;
-	}
-
-	retval = up_start_video(drv_data);
-	if (retval) {
-		dev_err(&itf->dev, "up_start_video failed: %d\n", retval);
-		goto error_start;
-	}
-
-	/*
-	 * Allow URB callback paths to start passing payloads to buffers
-	 * We do this before submitting URBs so that the read callbacks can
-	 * start processing data before we finish initializing all URBs
-	 */
-	set_bit(STREAM_CLIENT_READY, &drv_data->streaming);
-
-	/*
-	 * Ensure the bit is visible to all CPU cores before submitting URBs
-	 * Required after Non-Value-Returning set_bit operation.
-	 */
-	smp_mb__after_atomic();
-
-	/*
-	 * Submit the URBs
-	 */
-	for (urb_sub = 0; urb_sub < NUM_URBS; urb_sub++) {
-		retval = usb_submit_urb(drv_data->urbs[urb_sub],
-					GFP_KERNEL);
-		if (retval) {
-			dev_err(&drv_data->itf->dev,
-				"Failed to submit URBs: %d\n", retval);
-			goto error_start;
-		}
-	}
-
-	return 0;
-
-error_start:
-	/*
-	 * Clear the client-ready bit immediately to block incoming URB data paths
-	 */
-	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
-
-	/*
-	 * Free any URBs that were successfully submitted before the failure
-	 */
-	for (i = 0; i < urb_sub; i++)
-		usb_kill_urb(drv_data->urbs[i]);
-
-	/*
-	 * Drain the queue and return buffers to userspace per V4L2 spec
-	 */
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	while (!list_empty(&drv_data->ready_queue)) {
-		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
-				       list);
-		list_del(&buf->list);
-		/*
-		 * Buffers correctly marked as queued for V4L2 cleanup on start error
-		 */
-		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_QUEUED);
-	}
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-
-	/*
-	 * Clear the HW guard last so a future start_streaming invocation can re-attempt
-	 */
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
-
-	return retval;
-}
-
-static void up_stop_streaming(struct vb2_queue *vq)
-{
-	struct up_drv_data *drv_data;
-	struct up_buffer *buf;
-	unsigned long flags;
-	int i;
-
-	drv_data = vb2_get_drv_priv(vq);
-	/*
-	 * Signal the callback to STOP processing and STOP resubmitting immediately.
-	 */
-	clear_bit(STREAM_CLIENT_READY, &drv_data->streaming);
-
-	/*
-	 * Ensure all CPU cores see the bit change before we start Freeing URBs.
-	 * clear_bit doesn't imply a memory barrier, so we explicitly add one.
-	 */
-	smp_mb__after_atomic();
-
-	/*
-	 * usb_kill_urb blocks until any active callback finishes executing.
-	 * Since STREAM_CLIENT_READY is now 0, the callback will exit without
-	 * resubmitting.
-	 */
-	for (i = 0; i < NUM_URBS; i++) {
-		if (drv_data->urbs[i])
-			usb_kill_urb(drv_data->urbs[i]);
-	}
-
-	cancel_work_sync(&drv_data->work);
-
-	if (drv_data->active_buf) {
-		vb2_buffer_done(&drv_data->active_buf->vb2_buffer.vb2_buf,
-				VB2_BUF_STATE_ERROR);
-		drv_data->active_buf = NULL;
-		drv_data->active_pl_len = 0;
-	}
-
-	/*
-	 * Safely drain any buffers that were left over in the queue.
-	 * Because all URBs are definitively dead now, no one else will touch
-	 * this list.
-	 */
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	while (!list_empty(&drv_data->ready_queue)) {
-		buf = list_first_entry(&drv_data->ready_queue, struct up_buffer,
-				       list);
-		list_del(&buf->list);
-		/*
-		 * Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR
-		 */
-		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
-	}
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-
-	/*
-	 * Reset the hardware active guard state.
-	 */
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->streaming);
-}
-
 static void up_disconnect(struct usb_interface *itf)
 {
 	struct usb_interface *iap_intf;
@@ -1026,39 +1059,6 @@ static int up_resume(struct usb_interface *intf)
 {
 	return 0;
 }
-
-static int up_buf_prepare(struct vb2_buffer *vb)
-{
-	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
-		return -EINVAL;
-
-	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
-	return 0;
-}
-
-static void up_buf_queue(struct vb2_buffer *vb)
-{
-	struct up_drv_data *drv_data = vb2_get_drv_priv(vb->vb2_queue);
-	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
-	struct up_buffer *buf;
-	unsigned long flags;
-
-	buf = container_of(v4l2_buf, struct up_buffer, vb2_buffer);
-
-	spin_lock_irqsave(&drv_data->ready_queue_lock, flags);
-	list_add_tail(&buf->list, &drv_data->ready_queue);
-	spin_unlock_irqrestore(&drv_data->ready_queue_lock, flags);
-}
-
-static const struct vb2_ops up_vb2_ops = {
-	.queue_setup = up_queue_setup,
-	.buf_prepare = up_buf_prepare,
-	.buf_queue = up_buf_queue,
-	.start_streaming = up_start_streaming,
-	.stop_streaming = up_stop_streaming,
-	.wait_prepare = vb2_ops_wait_prepare,
-	.wait_finish = vb2_ops_wait_finish,
-};
 
 static const struct usb_device_id up_table[] = {
 	{ USB_DEVICE(0x0329, 0x2022) },
