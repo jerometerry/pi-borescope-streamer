@@ -27,11 +27,11 @@ static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 	if (!drv_data->usb.urbs[urb_index])
 		return;
 
-	urb_buf = drv_data->urb_buffers[urb_index];
+	urb_buf = drv_data->usb.urb_buffers[urb_index];
 	dma_addr = drv_data->usb.urb_dma_addrs[urb_index];
 	if (urb_buf) {
 		usb_free_coherent(u_dev, URB_SIZE, urb_buf, dma_addr);
-		drv_data->urb_buffers[urb_index] = NULL;
+		drv_data->usb.urb_buffers[urb_index] = NULL;
 	}
 
 	usb_free_urb(drv_data->usb.urbs[urb_index]);
@@ -154,9 +154,9 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 
 		urb_ptr = usb_alloc_coherent(usb_dev, URB_SIZE, GFP_KERNEL,
 					     &drv_data->usb.urb_dma_addrs[i]);
-		drv_data->urb_buffers[i] = urb_ptr;
+		drv_data->usb.urb_buffers[i] = urb_ptr;
 
-		if (!drv_data->urb_buffers[i]) {
+		if (!drv_data->usb.urb_buffers[i]) {
 			dev_err(&itf->dev, "usb_alloc_coherent failed\n");
 			return -ENOMEM;
 		}
@@ -164,7 +164,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 		usb_fill_bulk_urb(drv_data->usb.urbs[i], usb_dev,
 				  usb_rcvbulkpipe(usb_dev,
 						  drv_data->usb.video_in_ep),
-				  drv_data->urb_buffers[i], URB_SIZE,
+				  drv_data->usb.urb_buffers[i], URB_SIZE,
 				  up_read_bulk_callback, drv_data);
 
 		drv_data->usb.urbs[i]->transfer_dma = drv_data->usb.urb_dma_addrs[i];
