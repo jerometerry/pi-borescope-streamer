@@ -6,7 +6,7 @@ extern "C" {
 
 TEST(ProtocolTest, ValidMjpegPayloadWithDefaultInitializer)
 {
-	struct up_pl_hdr payload_header = {};
+	struct up_video_frm_frag_hdr payload_header = {};
 	bool valid;
 
 	valid = up_valid_mjpeg_pl(&payload_header);
@@ -16,10 +16,10 @@ TEST(ProtocolTest, ValidMjpegPayloadWithDefaultInitializer)
 
 TEST(ProtocolTest, ValidMjpegPayloadWithInvalidCameraNumber)
 {
-	struct up_pl_hdr payload_header = {};
+	struct up_video_frm_frag_hdr payload_header = {};
 	bool valid;
 
-	payload_header.le_device_number = 99;
+	payload_header.device_number = 99;
 	valid = up_valid_mjpeg_pl(&payload_header);
 
 	EXPECT_FALSE(valid);
@@ -27,7 +27,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithInvalidCameraNumber)
 
 TEST(ProtocolTest, ValidMjpegPayloadWithHasGravitySensorSet)
 {
-	struct up_pl_hdr payload_header = {};
+	struct up_video_frm_frag_hdr payload_header = {};
 	bool valid;
 
 	up_set_has_gravity_sensor(&payload_header, true);
@@ -38,7 +38,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithHasGravitySensorSet)
 
 TEST(ProtocolTest, ValidMjpegPayloadWithButtonPressedSet)
 {
-	struct up_pl_hdr payload_header = {};
+	struct up_video_frm_frag_hdr payload_header = {};
 	bool valid;
 
 	up_set_button_pressed(&payload_header, true);
@@ -49,7 +49,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithButtonPressedSet)
 
 TEST(ProtocolTest, ValidMjpegPayloadWithOtherFlagsSet)
 {
-	struct up_pl_hdr payload_header = {};
+	struct up_video_frm_frag_hdr payload_header = {};
 	bool valid;
 
 	up_set_other_flags(&payload_header, 3);
@@ -80,7 +80,7 @@ TEST(ProtocolTest, ChecksPacketHeaderCombination)
 
 TEST(ProtocolTest, GetsPacketDelimeterAndLength)
 {
-	struct up_pkt_hdr pkt = {};
+	struct up_usb_frm_hdr pkt = {};
 	pkt.le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt.le_length = UP_LE16_TO_CPU(500);
 
@@ -90,21 +90,21 @@ TEST(ProtocolTest, GetsPacketDelimeterAndLength)
 
 TEST(ProtocolTest, ValidatesFullPacketHeaderStruct)
 {
-	struct up_pkt_hdr pkt = {};
+	struct up_usb_frm_hdr pkt = {};
 	pkt.le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	pkt.le_device_id = VIDEO_CAMERA_ID;
+	pkt.device_id = VIDEO_CAMERA_ID;
 
 	EXPECT_TRUE(up_is_valid_pkt_hdr(&pkt));
 
-	pkt.le_device_id = 0xFF;
+	pkt.device_id = 0xFF;
 	EXPECT_FALSE(up_is_valid_pkt_hdr(&pkt));
 }
 
 TEST(ProtocolTest, GetsHeaderPointersFromBuffer)
 {
 	u8 buffer[100] = { 0 };
-	struct up_pkt_hdr *pkt = up_get_pkt_hdr(buffer, 10);
-	struct up_pl_hdr *pl = up_get_pl_hdr(buffer, 20);
+	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer, 10);
+	struct up_video_frm_frag_hdr *pl = up_get_pl_hdr(buffer, 20);
 
 	EXPECT_EQ((u8 *)pkt, buffer + 10);
 	EXPECT_EQ((u8 *)pl, buffer + 20);
@@ -112,47 +112,47 @@ TEST(ProtocolTest, GetsHeaderPointersFromBuffer)
 
 TEST(ProtocolTest, GravitySensorFlags)
 {
-	struct up_pl_hdr pl = {};
-	EXPECT_FALSE(up_has_gravity_sensor(pl.le_flags));
+	struct up_video_frm_frag_hdr pl = {};
+	EXPECT_FALSE(up_has_gravity_sensor(pl.flags));
 
 	up_set_has_gravity_sensor(&pl, true);
-	EXPECT_TRUE(up_has_gravity_sensor(pl.le_flags));
-	EXPECT_EQ(pl.le_flags, 0x01);
+	EXPECT_TRUE(up_has_gravity_sensor(pl.flags));
+	EXPECT_EQ(pl.flags, 0x01);
 
 	up_set_has_gravity_sensor(&pl, false);
-	EXPECT_FALSE(up_has_gravity_sensor(pl.le_flags));
-	EXPECT_EQ(pl.le_flags, 0x00);
+	EXPECT_FALSE(up_has_gravity_sensor(pl.flags));
+	EXPECT_EQ(pl.flags, 0x00);
 }
 
 TEST(ProtocolTest, ButtonPressedFlags)
 {
-	struct up_pl_hdr pl = {};
-	EXPECT_FALSE(up_is_button_pressed(pl.le_flags));
+	struct up_video_frm_frag_hdr pl = {};
+	EXPECT_FALSE(up_is_button_pressed(pl.flags));
 
 	up_set_button_pressed(&pl, true);
-	EXPECT_TRUE(up_is_button_pressed(pl.le_flags));
-	EXPECT_EQ(pl.le_flags, 0x02);
+	EXPECT_TRUE(up_is_button_pressed(pl.flags));
+	EXPECT_EQ(pl.flags, 0x02);
 
 	up_set_button_pressed(&pl, false);
-	EXPECT_FALSE(up_is_button_pressed(pl.le_flags));
-	EXPECT_EQ(pl.le_flags, 0x00);
+	EXPECT_FALSE(up_is_button_pressed(pl.flags));
+	EXPECT_EQ(pl.flags, 0x00);
 }
 
 TEST(ProtocolTest, OtherFlags)
 {
-	struct up_pl_hdr pl = {};
-	EXPECT_FALSE(up_has_other_flags(pl.le_flags));
-	EXPECT_EQ(up_get_other_flags(pl.le_flags), 0);
+	struct up_video_frm_frag_hdr pl = {};
+	EXPECT_FALSE(up_has_other_flags(pl.flags));
+	EXPECT_EQ(up_get_other_flags(pl.flags), 0);
 
 	up_set_other_flags(&pl, 0x2A);
-	EXPECT_TRUE(up_has_other_flags(pl.le_flags));
-	EXPECT_EQ(up_get_other_flags(pl.le_flags), 0x2A);
+	EXPECT_TRUE(up_has_other_flags(pl.flags));
+	EXPECT_EQ(up_get_other_flags(pl.flags), 0x2A);
 
 	up_set_has_gravity_sensor(&pl, true);
 	up_set_button_pressed(&pl, true);
 	up_set_other_flags(&pl, 0x05);
 
-	EXPECT_TRUE(up_has_gravity_sensor(pl.le_flags));
-	EXPECT_TRUE(up_is_button_pressed(pl.le_flags));
-	EXPECT_EQ(up_get_other_flags(pl.le_flags), 0x05);
+	EXPECT_TRUE(up_has_gravity_sensor(pl.flags));
+	EXPECT_TRUE(up_is_button_pressed(pl.flags));
+	EXPECT_EQ(up_get_other_flags(pl.flags), 0x05);
 }

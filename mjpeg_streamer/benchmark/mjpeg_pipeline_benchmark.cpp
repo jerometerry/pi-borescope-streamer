@@ -12,7 +12,7 @@
 #include <thread>
 #include <vector>
 #include "constants.hpp"
-#include "video_frame.hpp"
+#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
 #include "mjpeg_stream.hpp"
 #include "zero_allocation_response_builder.hpp"
@@ -23,7 +23,7 @@ namespace {
 
 static std::vector<uint8_t> readBinaryFile(const std::string& fileName) {
     std::ifstream file(fileName, std::ios::binary | std::ios::ate);
-    
+
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open file: camera_stream.mjpeg");
     }
@@ -34,7 +34,7 @@ static std::vector<uint8_t> readBinaryFile(const std::string& fileName) {
     file.seekg(0, std::ios::beg);
 
     if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
-        throw std::runtime_error("Error reading data from stream.");   
+        throw std::runtime_error("Error reading data from stream.");
     }
 
     return buffer;
@@ -56,7 +56,7 @@ static std::vector<std::span<const uint8_t>> splitPages(const std::vector<uint8_
 static void BM_Pipeline_Throughput(benchmark::State& state) {
     static auto data = readBinaryFile(fileName_);
     static auto pages = splitPages(data);
-    
+
     std::atomic<bool> producerRunning{true};
 
     VideoFrameBuffer ringBuffer;
@@ -69,7 +69,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
             int64_t available = ringBuffer.waitFor(nextRead);
 
             while (nextRead <= available) {
-                VideoFrame& slot = ringBuffer.getBySequence(nextRead);
+                VideoFrameFragment& slot = ringBuffer.getBySequence(nextRead);
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);
@@ -87,24 +87,24 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
     size_t pageIndex = 0;
     for (auto _ : state) {
         const auto& page = pages[pageIndex % pages.size()];
-        stream.send(page);  
+        stream.send(page);
         pageIndex++;
     }
 
     producerRunning.store(false, std::memory_order_release);
 
     int64_t seq = ringBuffer.claim();
-    ringBuffer.getBySequence(seq).clear(); 
+    ringBuffer.getBySequence(seq).clear();
     ringBuffer.publish(seq);
 
     state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * data.size() / pages.size()); 
+    state.SetBytesProcessed(state.iterations() * data.size() / pages.size());
 }
 
 static void BM_Pipeline_DiskBound(benchmark::State& state) {
     std::ifstream file(fileName_, std::ios::binary);
     if (!file.is_open()) state.SkipWithError("Could not open file.");
-    
+
     std::atomic<bool> producerRunning{true};
 
     VideoFrameBuffer ringBuffer;
@@ -116,7 +116,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
             int64_t available = ringBuffer.waitFor(nextRead);
 
             while (nextRead <= available) {
-                VideoFrame& slot = ringBuffer.getBySequence(nextRead);
+                VideoFrameFragment& slot = ringBuffer.getBySequence(nextRead);
 
                 if (slot.contentSize() > 0) {
                     ZeroAllocationResponseBuilder::build(slot);
@@ -131,7 +131,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
 
     MjpegStream stream(ringBuffer);
     std::vector<uint8_t> chunk(4096);
-    
+
     for (auto _ : state) {
         file.read(reinterpret_cast<char*>(chunk.data()), chunk.size());
         std::streamsize bytes_read = file.gcount();

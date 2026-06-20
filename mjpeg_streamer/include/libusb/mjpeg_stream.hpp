@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "useeplus_protocol.h"
-#include "video_frame.hpp"
+#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
 
 /**

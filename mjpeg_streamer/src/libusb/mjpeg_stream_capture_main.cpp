@@ -25,7 +25,7 @@
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
-#include "video_frame.hpp"
+#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
 
 namespace {
@@ -154,7 +154,7 @@ int main() {
                 int64_t available = ringBuffer.waitFor(nextRead);
 
                 while (nextRead <= available) {
-                    VideoFrame& slot = ringBuffer.getBySequence(nextRead);
+                    VideoFrameFragment& slot = ringBuffer.getBySequence(nextRead);
 
                     if (slot.activeSize == 0) {
                         keepRunning = false;
@@ -187,7 +187,7 @@ int main() {
 
                 if (seq_opt.has_value()) {
                     int64_t seq = *seq_opt;
-                    VideoFrame& slot = ringBuffer.getBySequence(seq);
+                    VideoFrameFragment& slot = ringBuffer.getBySequence(seq);
                     slot.insertContent(payload);
                     ringBuffer.publish(seq);
 

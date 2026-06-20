@@ -1,3 +1,5 @@
+.PHONY: all clean format check-format install-deps test
+
 CXX := zig c++
 CC  := zig cc
 
@@ -78,14 +80,46 @@ else ifeq ($(PLATFORM),MACOS)
                $(BUILD_DIR)/mjpeg_frame_extractor
 endif
 
-# Sentinel tracking file location for built dependencies
-DEPS_SENTINEL := $(BUILD_DIR)/.deps_installed
+TEST_DIR := tests
+GTEST_INC := -Ibuild/googletest/googletest/include \
+	-Ibuild/googletest/googlemock/include
 
-.PHONY: all clean format check-format install-deps
+GTEST_LIBS := build/googletest/build/lib/libgtest.a \
+              build/googletest/build/lib/libgtest_main.a \
+              build/googletest/build/lib/libgmock.a
+
+PROJECT_TEST_SRCS := $(TEST_DIR)/test_disruptor.cpp \
+                     $(TEST_DIR)/test_mjpeg_server.cpp \
+                     $(TEST_DIR)/test_mjpeg_stream.cpp \
+                     $(TEST_DIR)/test_usb_device_finder.cpp \
+                     $(TEST_DIR)/test_zero_allocation_response_builder.cpp
+
+DRIVER_TEST_SRCS := $(LINUX_DRIVER_DIR)/tests/test_useeplus_decoder.cpp \
+                    $(LINUX_DRIVER_DIR)/tests/test_useeplus_protocol.cpp \
+                    $(LINUX_DRIVER_DIR)/useeplus_protocol.c
+
+PROJECT_TEST_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(PROJECT_TEST_SRCS)))
+DRIVER_TEST_OBJS  := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(DRIVER_TEST_SRCS)))
+
+TEST_TARGETS := $(BUILD_DIR)/run_project_tests $(BUILD_DIR)/run_linux_driver_tests
+
+$(PROJECT_TEST_OBJS) $(DRIVER_TEST_OBJS): INCLUDES += \
+	-Ibuild/googletest/googletest/include \
+	-Ibuild/googletest/googlemock/include
+
+$(DRIVER_TEST_OBJS): INCLUDES += \
+	-I$(LINUX_DRIVER_DIR)/tests/mock_kernel \
+	-I$(LINUX_DRIVER_DIR)
+
+DEPS_SENTINEL := $(BUILD_DIR)/.deps_installed
 
 all: install-deps $(TARGETS)
 
 install-deps: $(DEPS_SENTINEL)
+
+test: install-deps $(TEST_TARGETS)
+	@$(BUILD_DIR)/run_project_tests
+	@$(BUILD_DIR)/run_linux_driver_tests
 
 $(DEPS_SENTINEL): install-deps.sh
 	@echo "Checking project dependency trees..."
@@ -121,6 +155,12 @@ $(BUILD_DIR)/mjpeg_stream_capture: $(BUILD_DIR)/src/libusb/mjpeg_stream_capture_
 
 $(BUILD_DIR)/mjpeg_frame_extractor: $(BUILD_DIR)/src/libusb/mjpeg_frame_extractor_main.o $(CORE_LIB)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+
+$(BUILD_DIR)/run_project_tests: $(PROJECT_TEST_OBJS) $(CORE_LIB)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(GTEST_LIBS) $(LDFLAGS)
+
+$(BUILD_DIR)/run_linux_driver_tests: $(DRIVER_TEST_OBJS)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(GTEST_LIBS) $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILD_DIR) $(GEN_DIR)

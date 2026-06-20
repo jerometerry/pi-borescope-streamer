@@ -5,11 +5,11 @@
 #include <string>
 #include <vector>
 
-#include "video_frame.hpp"
+#include "video_frame_fragment.hpp"
 #include "zero_allocation_response_builder.hpp"
 
 TEST(ZeroAllocationResponseBuilderTest, Build) {
-    VideoFrame frame;
+    VideoFrameFragment frame;
     std::vector<uint8_t> payload = {0xDE, 0xAD, 0xBE, 0xEF};
     frame.insertContent(payload);
     auto response = ZeroAllocationResponseBuilder::build(frame);

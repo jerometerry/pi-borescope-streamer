@@ -44,13 +44,13 @@ TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame)
 				      .eof_reached = false };
 
 	std::vector<u8> buffer(1024, 0x00);
-	struct up_pkt_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	pkt->le_device_id = VIDEO_CAMERA_ID;
-	pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 6);
+	pkt->device_id = VIDEO_CAMERA_ID;
+	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 6);
 
-	struct up_pl_hdr *pl = up_get_pl_hdr(buffer.data(), UP_PKT_HDR_SIZE);
-	pl->le_frame_id = 1;
+	struct up_video_frm_frag_hdr *pl = up_get_pl_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
+	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
 	payload_data[0] = 0x99;
@@ -92,14 +92,14 @@ TEST(DecoderTest, SkipsGhostHeadersAndFindsValidPayload)
 
 	size_t valid_start = 10;
 
-	struct up_pkt_hdr *pkt = up_get_pkt_hdr(buffer.data(), valid_start);
+	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), valid_start);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	pkt->le_device_id = VIDEO_CAMERA_ID;
-	pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 4);
+	pkt->device_id = VIDEO_CAMERA_ID;
+	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
-	struct up_pl_hdr *pl =
-		up_get_pl_hdr(buffer.data(), valid_start + UP_PKT_HDR_SIZE);
-	pl->le_frame_id = 2;
+	struct up_video_frm_frag_hdr *pl =
+		up_get_pl_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
+	pl->frame_id = 2;
 
 	u8 *payload_data = (u8 *)(pl + 1);
 	payload_data[0] = JPEG_DEL;
@@ -131,9 +131,9 @@ TEST(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 				      .eof_reached = false };
 
 	std::vector<u8> buffer(1024, 0x00);
-	struct up_pkt_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	pkt->le_device_id = VIDEO_CAMERA_ID;
+	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(100);
 
 	size_t consumed = up_decode_bulk(&decoder, buffer.data(), 50);
@@ -158,13 +158,13 @@ TEST(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 				      .eof_reached = false };
 
 	std::vector<u8> buffer(1024, 0x00);
-	struct up_pkt_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	pkt->le_device_id = VIDEO_CAMERA_ID;
-	pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 4);
+	pkt->device_id = VIDEO_CAMERA_ID;
+	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
-	struct up_pl_hdr *pl = up_get_pl_hdr(buffer.data(), UP_PKT_HDR_SIZE);
-	pl->le_frame_id = 1;
+	struct up_video_frm_frag_hdr *pl = up_get_pl_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
+	pl->frame_id = 1;
 	up_set_has_gravity_sensor(pl, true);
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -174,10 +174,10 @@ TEST(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 	payload_data[3] = JPEG_EOI;
 
 	size_t consumed =
-		up_decode_bulk(&decoder, buffer.data(), TOTAL_USB_HDR_SIZE + 4);
+		up_decode_bulk(&decoder, buffer.data(), VIDEO_DATA_OFFSET + 4);
 
 	EXPECT_EQ(consumed, 16);
-	EXPECT_EQ(consumed, TOTAL_USB_HDR_SIZE + 4);
+	EXPECT_EQ(consumed, VIDEO_DATA_OFFSET + 4);
 	EXPECT_EQ(mock_context.payload_data.size(), 0);
 }
 
@@ -197,13 +197,13 @@ TEST(DecoderTest, DropsChunkIfSoiNotFound)
 				      .eof_reached = false };
 
 	std::vector<u8> buffer(1024, 0x00);
-	struct up_pkt_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	pkt->le_device_id = VIDEO_CAMERA_ID;
-	pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 4);
+	pkt->device_id = VIDEO_CAMERA_ID;
+	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
-	struct up_pl_hdr *pl = up_get_pl_hdr(buffer.data(), UP_PKT_HDR_SIZE);
-	pl->le_frame_id = 1;
+	struct up_video_frm_frag_hdr *pl = up_get_pl_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
+	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
 	payload_data[0] = 0xAA;
@@ -212,10 +212,10 @@ TEST(DecoderTest, DropsChunkIfSoiNotFound)
 	payload_data[3] = 0xDD;
 
 	size_t consumed =
-		up_decode_bulk(&decoder, buffer.data(), TOTAL_USB_HDR_SIZE + 4);
+		up_decode_bulk(&decoder, buffer.data(), VIDEO_DATA_OFFSET + 4);
 
 	EXPECT_EQ(consumed, 16);
-	EXPECT_EQ(consumed, TOTAL_USB_HDR_SIZE + 4);
+	EXPECT_EQ(consumed, VIDEO_DATA_OFFSET + 4);
 	EXPECT_EQ(mock_context.frames_started, 1);
 	EXPECT_EQ(mock_context.payload_data.size(), 0);
 }
@@ -242,14 +242,14 @@ TEST(DecoderTest, HuntsForSignatureOnInvalidPacket)
 	buffer[2] = 0xCC;
 
 	size_t valid_start = 3;
-	struct up_pkt_hdr *pkt = up_get_pkt_hdr(buffer.data(), valid_start);
+	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), valid_start);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	pkt->le_device_id = VIDEO_CAMERA_ID;
-	pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 4);
+	pkt->device_id = VIDEO_CAMERA_ID;
+	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
-	struct up_pl_hdr *pl =
-		up_get_pl_hdr(buffer.data(), valid_start + UP_PKT_HDR_SIZE);
-	pl->le_frame_id = 1;
+	struct up_video_frm_frag_hdr *pl =
+		up_get_pl_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
+	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
 	payload_data[0] = JPEG_DEL;
@@ -282,21 +282,21 @@ TEST(DecoderTest, RejectsMassiveLengthAndHunts)
 
 	std::vector<u8> buffer(1024, 0x00);
 
-	struct up_pkt_hdr *bad_pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *bad_pkt = up_get_pkt_hdr(buffer.data(), 0);
 	bad_pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	bad_pkt->le_device_id = VIDEO_CAMERA_ID;
+	bad_pkt->device_id = VIDEO_CAMERA_ID;
 	bad_pkt->le_length = UP_LE16_TO_CPU(UP_MAX_WIRE_LEN + 100);
 
 	size_t valid_start = 200;
-	struct up_pkt_hdr *good_pkt =
+	struct up_usb_frm_hdr *good_pkt =
 		up_get_pkt_hdr(buffer.data(), valid_start);
 	good_pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	good_pkt->le_device_id = VIDEO_CAMERA_ID;
-	good_pkt->le_length = UP_LE16_TO_CPU(UP_PL_HDR_SIZE + 4);
+	good_pkt->device_id = VIDEO_CAMERA_ID;
+	good_pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
-	struct up_pl_hdr *pl =
-		up_get_pl_hdr(buffer.data(), valid_start + UP_PKT_HDR_SIZE);
-	pl->le_frame_id = 1;
+	struct up_video_frm_frag_hdr *pl =
+		up_get_pl_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
+	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
 	payload_data[0] = JPEG_DEL;

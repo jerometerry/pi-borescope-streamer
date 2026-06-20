@@ -212,6 +212,6 @@ enum class ParseResult : std::uint8_t { Success, HelpRequested, Error };
 
 enum class UsbTransferStatus : std::uint8_t { Completed, Disconnected, Error };
 
-inline constexpr size_t USB_PACKET_HEADER_SIZE = UP_PKT_HDR_SIZE;
-inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = UP_PL_HDR_SIZE;
-inline constexpr size_t TOTAL_USB_HEADER_SIZE = TOTAL_USB_HDR_SIZE;
+inline constexpr size_t USB_PACKET_HEADER_SIZE = UP_USB_FRM_HDR_SIZE;
+inline constexpr size_t USB_PAYLOAD_HEADER_SIZE = UP_VIDEO_FRM_FRAG_HDR_SIZE;
+inline constexpr size_t TOTAL_USB_HEADER_SIZE = VIDEO_DATA_OFFSET;

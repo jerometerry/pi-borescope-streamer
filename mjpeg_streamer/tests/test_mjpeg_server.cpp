@@ -18,7 +18,7 @@
 
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
-#include "video_frame.hpp"
+#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
 
 namespace {
@@ -57,7 +57,7 @@ class MjpegServerTest : public ::testing::Test {
 
     void injectMockVideoFrame(const std::vector<uint8_t>& data) {
         int64_t seq = disruptor_.claim();
-        VideoFrame& slot = disruptor_.getBySequence(seq);
+        VideoFrameFragment& slot = disruptor_.getBySequence(seq);
 
         slot.clear();
         slot.insertContent(data);

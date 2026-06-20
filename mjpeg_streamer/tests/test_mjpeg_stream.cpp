@@ -11,7 +11,7 @@
 #include "constants.hpp"
 #include "endian_conversion.hpp"
 #include "mjpeg_stream.hpp"
-#include "video_frame.hpp"
+#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
 
 class MjpegStreamTest : public ::testing::Test {
@@ -26,12 +26,12 @@ class MjpegStreamTest : public ::testing::Test {
     }
 
    protected:
-    static up_pkt_hdr* getPacketHeader(std::span<uint8_t> buffer) {
-        return reinterpret_cast<up_pkt_hdr*>(buffer.data());
+    static up_usb_frm_hdr* getPacketHeader(std::span<uint8_t> buffer) {
+        return reinterpret_cast<up_usb_frm_hdr*>(buffer.data());
     }
 
-    static up_pl_hdr* getPayloadHeader(std::span<uint8_t> buffer) {
-        return reinterpret_cast<up_pl_hdr*>(buffer.data() + USB_PACKET_HEADER_SIZE);
+    static up_video_frm_frag_hdr* getPayloadHeader(std::span<uint8_t> buffer) {
+        return reinterpret_cast<up_video_frm_frag_hdr*>(buffer.data() + USB_PACKET_HEADER_SIZE);
     }
 
     MjpegStream& GetStream() {
@@ -42,7 +42,7 @@ class MjpegStreamTest : public ::testing::Test {
         int64_t available = disruptor_.getHighestPublished();
 
         while (next_read_seq_ <= available) {
-            VideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
+            VideoFrameFragment& slot = disruptor_.getBySequence(next_read_seq_);
 
             if (slot.contentSize() > 0) {
                 auto slice = slot.getContentSlice();
@@ -63,7 +63,7 @@ class MjpegStreamTest : public ::testing::Test {
     void verifyNoValidFramesPublished() {
         int64_t available = disruptor_.getHighestPublished();
         while (next_read_seq_ <= available) {
-            VideoFrame& slot = disruptor_.getBySequence(next_read_seq_);
+            VideoFrameFragment& slot = disruptor_.getBySequence(next_read_seq_);
             EXPECT_EQ(slot.contentSize(), 0)
                 << "Found unexpected valid frame at sequence " << next_read_seq_;
 
@@ -106,13 +106,13 @@ TEST_F(MjpegStreamTest, TestUsbPayloadHeaderGettersAndSetters) {
     auto* packetHeader = getPacketHeader(packet);
 
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader->le_length = EndianConversion::hostToWire(939);
 
     auto* payloadHeader = getPayloadHeader(packet);
 
-    payloadHeader->le_frame_id = 9;
-    payloadHeader->le_device_number = 8;
+    payloadHeader->frame_id = 9;
+    payloadHeader->device_number = 8;
     payloadHeader->le_gravity_sensor = 7;
     up_set_has_gravity_sensor(payloadHeader, true);
     up_set_button_pressed(payloadHeader, true);
@@ -123,12 +123,16 @@ TEST_F(MjpegStreamTest, TestUsbPayloadHeaderGettersAndSetters) {
     packet[USB_PACKET_HEADER_SIZE + packetHeader->le_length - 2] = UsbProtocol::BOUNDARY_MARKER;
     packet[USB_PACKET_HEADER_SIZE + packetHeader->le_length - 1] = UsbProtocol::END_MARKER;
 
-    EXPECT_EQ(payloadHeader->le_frame_id, 9);
-    EXPECT_EQ(payloadHeader->le_device_number, 8);
-    EXPECT_EQ(payloadHeader->le_gravity_sensor, 7);
-    EXPECT_EQ(up_has_gravity_sensor(payloadHeader->le_flags), true);
-    EXPECT_EQ(up_is_button_pressed(payloadHeader->le_flags), true);
-    EXPECT_EQ(up_get_other_flags(payloadHeader->le_flags), 3);
+    // Force a copy to an aligned temporary using unary `+` or a cast
+    // to prevent GoogleTest from binding a reference to the unaligned packed member.
+    EXPECT_EQ(+payloadHeader->frame_id, 9);
+    EXPECT_EQ(+payloadHeader->device_number, 8);
+    EXPECT_EQ(+payloadHeader->le_gravity_sensor, 7);
+
+    // Function calls returning by-value are naturally safe, as the temporary is aligned
+    EXPECT_EQ(up_has_gravity_sensor(payloadHeader->flags), true);
+    EXPECT_EQ(up_is_button_pressed(payloadHeader->flags), true);
+    EXPECT_EQ(up_get_other_flags(payloadHeader->flags), 3);
 }
 
 TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
@@ -137,14 +141,14 @@ TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     auto* packetHeader = getPacketHeader(packet);
 
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader->le_length = EndianConversion::hostToWire(939);
 
     auto* payloadHeader = getPayloadHeader(packet);
 
-    payloadHeader->le_frame_id = 2;
-    payloadHeader->le_device_number = 0;
-    payloadHeader->le_flags = 0;
+    payloadHeader->frame_id = 2;
+    payloadHeader->device_number = 0;
+    payloadHeader->flags = 0;
     payloadHeader->le_gravity_sensor = 0;
 
     packet[TOTAL_USB_HEADER_SIZE] = UsbProtocol::BOUNDARY_MARKER;
@@ -156,7 +160,7 @@ TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
 
     auto* triggerPayloadHeader = getPayloadHeader(triggerPacket);
 
-    triggerPayloadHeader->le_frame_id = 3;
+    triggerPayloadHeader->frame_id = 3;
 
     GetStream().send(packet);
     GetStream().send(triggerPacket);
@@ -177,14 +181,14 @@ TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
     auto* packetHeader = getPacketHeader(packet);
 
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader->le_length = EndianConversion::hostToWire(1024 - USB_PACKET_HEADER_SIZE);
 
     auto* payloadHeader = getPayloadHeader(packet);
 
-    payloadHeader->le_frame_id = 1;
-    payloadHeader->le_device_number = 0;
-    payloadHeader->le_flags = 0;
+    payloadHeader->frame_id = 1;
+    payloadHeader->device_number = 0;
+    payloadHeader->flags = 0;
     payloadHeader->le_gravity_sensor = 0;
 
     packet[TOTAL_USB_HEADER_SIZE] = UsbProtocol::BOUNDARY_MARKER;
@@ -197,7 +201,7 @@ TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
 
     auto* triggerPayloadHeader = getPayloadHeader(triggerPacket);
 
-    triggerPayloadHeader->le_frame_id = 2;
+    triggerPayloadHeader->frame_id = 2;
 
     GetStream().send(packet);
     GetStream().send(shortPacket);
@@ -216,18 +220,18 @@ TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
         std::vector<uint8_t> packet(
             USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE + payload.size(), 0x00);
 
-        up_pkt_hdr* packetHeader = getPacketHeader(packet);
+        up_usb_frm_hdr* packetHeader = getPacketHeader(packet);
 
         packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-        packetHeader->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+        packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
         packetHeader->le_length =
             EndianConversion::hostToWire(USB_PAYLOAD_HEADER_SIZE + payload.size());
 
         auto* payloadHeader = getPayloadHeader(packet);
 
-        payloadHeader->le_frame_id = frameId;
-        payloadHeader->le_device_number = 0;
-        payloadHeader->le_flags = 0;
+        payloadHeader->frame_id = frameId;
+        payloadHeader->device_number = 0;
+        payloadHeader->flags = 0;
         payloadHeader->le_gravity_sensor = 0;
 
         std::copy(payload.begin(), payload.end(),
@@ -283,13 +287,13 @@ TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     auto* packetHeader1 = getPacketHeader(packet1);
 
     packetHeader1->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader1->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader1->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader1->le_length = EndianConversion::hostToWire(50);
 
     auto* payloadHeader1 = getPayloadHeader(packet1);
 
-    payloadHeader1->le_frame_id = 1;
-    payloadHeader1->le_device_number = 0;
+    payloadHeader1->frame_id = 1;
+    payloadHeader1->device_number = 0;
     payloadHeader1->le_gravity_sensor = 0;
     ;
 
@@ -307,13 +311,13 @@ TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     auto* packetHeader2 = getPacketHeader(packet2);
 
     packetHeader2->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader2->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader2->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader2->le_length = EndianConversion::hostToWire(50);
 
     auto* payloadHeader2 = getPayloadHeader(packet2);
 
-    payloadHeader2->le_frame_id = 2;
-    payloadHeader2->le_device_number = 0;
+    payloadHeader2->frame_id = 2;
+    payloadHeader2->device_number = 0;
     payloadHeader2->le_gravity_sensor = 0;
 
     std::fill(packet2.begin() + TOTAL_USB_HEADER_SIZE, packet2.begin() + packetHeader2->le_length,
@@ -333,7 +337,7 @@ TEST_F(MjpegStreamTest, IgnoresInvalidCameraId) {
     std::vector<uint8_t> packet(20, 0x00);
     auto* packetHeader = getPacketHeader(packet);
     packetHeader->le_delimiter = UsbProtocol::USB_FRAME_HEADER;
-    packetHeader->le_device_id = 99;
+    packetHeader->device_id = 99;
     packetHeader->le_length = EndianConversion::hostToWire(15);
 
     GetStream().send(packet);
@@ -344,7 +348,7 @@ TEST_F(MjpegStreamTest, IgnoresPayloadExceedingBufferSize) {
     std::vector<uint8_t> packet(10, 0x00);
     auto* packetHeader = getPacketHeader(packet);
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader->le_length = EndianConversion::hostToWire(50);
 
     GetStream().send(packet);
@@ -355,7 +359,7 @@ TEST_F(MjpegStreamTest, IgnoresTruncatedMetadata) {
     std::vector<uint8_t> packet(10, 0x00);
     auto* packetHeader = getPacketHeader(packet);
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader->le_length = EndianConversion::hostToWire(5);
 
     GetStream().send(packet);
@@ -368,14 +372,14 @@ TEST_F(MjpegStreamTest, IgnoresUnsupportedCameraConfiguration) {
     auto* packetHeader = getPacketHeader(packet);
 
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader->le_length = EndianConversion::hostToWire(15);
 
     auto* payloadHeader = getPayloadHeader(packet);
 
-    payloadHeader->le_frame_id = 1;
-    payloadHeader->le_device_number = 5;
-    payloadHeader->le_flags = 0;
+    payloadHeader->frame_id = 1;
+    payloadHeader->device_number = 5;
+    payloadHeader->flags = 0;
     payloadHeader->le_gravity_sensor = 0;
 
     GetStream().send(packet);
@@ -386,13 +390,13 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     auto* packetHeader1 = getPacketHeader(packet1);
 
     packetHeader1->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader1->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader1->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader1->le_length = EndianConversion::hostToWire(15);
 
     auto* payloadHeader1 = getPayloadHeader(packet1);
 
-    payloadHeader1->le_frame_id = 1;
-    payloadHeader1->le_device_number = 0;
+    payloadHeader1->frame_id = 1;
+    payloadHeader1->device_number = 0;
     payloadHeader1->le_gravity_sensor = 0;
 
     GetStream().send(packet1);
@@ -402,13 +406,13 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     auto* packetHeader2 = getPacketHeader(packet2);
 
     packetHeader2->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader2->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader2->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader2->le_length = EndianConversion::hostToWire(15);
 
     auto* payloadHeader2 = getPayloadHeader(packet2);
 
-    payloadHeader2->le_frame_id = 1;
-    payloadHeader2->le_device_number = 1;
+    payloadHeader2->frame_id = 1;
+    payloadHeader2->device_number = 1;
     payloadHeader2->le_gravity_sensor = 0;
 
     GetStream().send(packet2);
@@ -428,7 +432,7 @@ TEST_F(MjpegStreamTest, PreventsIntegerUnderflowOnUndersizedHardwareLength) {
 
     auto* packetHeader = getPacketHeader(malformedPacket);
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
-    packetHeader->le_device_id = UsbProtocol::VIDEO_CAMERA_ID;
+    packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
 
     packetHeader->le_length = EndianConversion::hostToWire(2);
 

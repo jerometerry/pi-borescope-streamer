@@ -6,9 +6,9 @@
 #include <string_view>
 #include <vector>
 
-#include "video_frame.hpp"
+#include "video_frame_fragment.hpp"
 
-std::string_view ZeroAllocationResponseBuilder::build(VideoFrame& frame) {
+std::string_view ZeroAllocationResponseBuilder::build(VideoFrameFragment& frame) {
     size_t size = frame.contentSize();
 
     char lb[32];
@@ -21,12 +21,12 @@ std::string_view ZeroAllocationResponseBuilder::build(VideoFrame& frame) {
 
     size_t totalHeaderSize = prefix.size() + lengthStringSize + newLinesSize;
 
-    if (totalHeaderSize > VideoFrame::PADDING_SIZE) {
+    if (totalHeaderSize > VideoFrameFragment::PADDING_SIZE) {
         throw std::length_error("HTTP Header exceeded reserved padding space");
     }
 
     char* start = reinterpret_cast<char*>(frame.storage.data());
-    char* payloadPtr = start + VideoFrame::PADDING_SIZE;
+    char* payloadPtr = start + VideoFrameFragment::PADDING_SIZE;
     char* cursor = payloadPtr;
 
     cursor -= newLinesSize;

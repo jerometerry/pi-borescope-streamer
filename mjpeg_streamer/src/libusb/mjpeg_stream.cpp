@@ -12,7 +12,7 @@ extern "C" {
 
 #include "constants.hpp"
 #include "endian_conversion.hpp"
-#include "video_frame.hpp"
+#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
 
 MjpegStream::MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {
@@ -66,7 +66,7 @@ void MjpegStream::onFrameStartCallback(
     self->lastFrameId_ = frameId;
 
     self->currentClaimSequence_ = self->disruptor_->claim();
-    VideoFrame& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
+    VideoFrameFragment& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
     slot.clear();
 
     self->frameActive_ = true;
@@ -75,7 +75,7 @@ void MjpegStream::onFrameStartCallback(
 void MjpegStream::onVideoPayloadCallback(void* context, uint8_t* data, size_t len) {
     auto* self = static_cast<MjpegStream*>(context);
     if (self->frameActive_) {
-        VideoFrame& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
+        VideoFrameFragment& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
         slot.insertContent(std::span<const uint8_t>(data, len));
     }
 }
@@ -93,7 +93,7 @@ void MjpegStream::onFrameIncompleteCallback(void* context) {
     auto* self = static_cast<MjpegStream*>(context);
 
     if (self->frameActive_) {
-        VideoFrame& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
+        VideoFrameFragment& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
         slot.clear();
         self->disruptor_->publish(self->currentClaimSequence_);
         self->frameActive_ = false;

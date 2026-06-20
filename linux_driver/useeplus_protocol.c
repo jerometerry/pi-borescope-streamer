@@ -5,17 +5,17 @@
 
 static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t index, size_t *hdr_off)
 {
-	struct up_pkt_hdr *o_pkt;
+	struct up_usb_frm_hdr *o_pkt;
 	size_t o, limit;
 
-	if (index + UP_PKT_HDR_SIZE > len)
+	if (index + UP_USB_FRM_HDR_SIZE > len)
 		return false;
 
-	limit = len - index - UP_PKT_HDR_SIZE;
+	limit = len - index - UP_USB_FRM_HDR_SIZE;
 	if (limit > MAX_GHOST_HDR_OFF)
 		limit = MAX_GHOST_HDR_OFF;
 
-	for (o = UP_PKT_HDR_SIZE; o <= limit; o++) {
+	for (o = UP_USB_FRM_HDR_SIZE; o <= limit; o++) {
 		o_pkt = up_get_pkt_hdr(buf, index + o);
 
 		if (up_is_valid_pkt_hdr(o_pkt)) {
@@ -31,14 +31,14 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 				       struct up_decode_state *state)
 {
 	size_t hdr_off, pl_off, index;
-	struct up_pkt_hdr *pkt_hdr;
-	struct up_pl_hdr *pl_hdr;
+	struct up_usb_frm_hdr *pkt_hdr;
+	struct up_video_frm_frag_hdr *pl_hdr;
 	u16 pl_len;
 
 	hdr_off = 0;
 	index = *index_ptr;
 
-	if (index + UP_PKT_HDR_SIZE > len)
+	if (index + UP_USB_FRM_HDR_SIZE > len)
 		return UP_DECODE_NEED_DATA;
 
 	pkt_hdr = up_get_pkt_hdr(buf, index);
@@ -74,22 +74,22 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *index_ptr,
 		return UP_DECODE_INVALID_PKT;
 	}
 
-	state->pkt_size = UP_PKT_HDR_SIZE + pl_len;
+	state->pkt_size = UP_USB_FRM_HDR_SIZE + pl_len;
 
 	if ((index + state->pkt_size) > len)
 		return UP_DECODE_NEED_DATA;
 
-	if (pl_len < UP_PL_HDR_SIZE) {
+	if (pl_len < UP_VIDEO_FRM_FRAG_HDR_SIZE) {
 		*index_ptr += state->pkt_size;
 		return UP_DECODE_SKIP;
 	}
 
-	pl_off = index + UP_PKT_HDR_SIZE;
+	pl_off = index + UP_USB_FRM_HDR_SIZE;
 	pl_hdr = up_get_pl_hdr(buf, pl_off);
 
-	state->frame_id = pl_hdr->le_frame_id;
-	state->dev_num = pl_hdr->le_device_number;
-	state->flags = pl_hdr->le_flags;
+	state->frame_id = pl_hdr->frame_id;
+	state->dev_num = pl_hdr->device_number;
+	state->flags = pl_hdr->flags;
 
 	return UP_DECODE_OK;
 }
@@ -98,7 +98,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 {
 	size_t i, pl_start, pl_size, emit_size, limit, index;
 	struct up_decode_state state;
-	struct up_pl_hdr *pl_hdr;
+	struct up_video_frm_frag_hdr *pl_hdr;
 	u8 *pl_src;
 	bool found;
 
@@ -108,7 +108,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	if (len == 0 || !buf)
 		return 0;
 
-	while ((len - index) >= TOTAL_USB_HDR_SIZE) {
+	while ((len - index) >= VIDEO_DATA_OFFSET) {
 		switch (up_decode(buf, len, &index, &state)) {
 		case UP_DECODE_NEED_DATA:
 			return index;
@@ -143,13 +143,13 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		if (dec->eof_reached)
 			goto advance;
 
-		pl_hdr = up_get_pl_hdr(buf, index + UP_PKT_HDR_SIZE);
+		pl_hdr = up_get_pl_hdr(buf, index + UP_USB_FRM_HDR_SIZE);
 
 		if (!up_valid_mjpeg_pl(pl_hdr))
 			goto advance;
 
-		pl_start = index + TOTAL_USB_HDR_SIZE;
-		pl_size = state.pkt_size - TOTAL_USB_HDR_SIZE;
+		pl_start = index + VIDEO_DATA_OFFSET;
+		pl_size = state.pkt_size - VIDEO_DATA_OFFSET;
 		pl_src = buf + pl_start;
 
 		if (!dec->found_soi) {

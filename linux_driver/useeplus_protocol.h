@@ -166,25 +166,6 @@ extern "C" {
 #endif
 
 #ifdef __cplusplus
-constexpr int UP_MAX_WIRE_LEN = 1024;
-constexpr int JPEG_SOI_MAX_POS = 256;
-constexpr int MAX_GHOST_HDR_OFF = 160;
-
-// Ensure your header values match what constants.hpp expects:
-constexpr size_t UP_PKT_HDR_SIZE = 8;  // Update this to your protocol's actual size
-constexpr size_t UP_PL_HDR_SIZE = 4;   // Update this to your protocol's actual size
-constexpr size_t TOTAL_USB_HDR_SIZE = UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE;
-#else
-#define UP_MAX_WIRE_LEN 1024
-#define JPEG_SOI_MAX_POS 256
-#define MAX_GHOST_HDR_OFF 160
-
-#define UP_PKT_HDR_SIZE 8
-#define UP_PL_HDR_SIZE 4
-#define TOTAL_USB_HDR_SIZE (UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE)
-#endif
-
-#ifdef __cplusplus
 enum up_usb_topology : std::uint8_t {
 #else
 enum up_usb_topology {
@@ -234,18 +215,36 @@ size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len);
 }
 #endif
 
-struct up_pkt_hdr {
+struct up_usb_frm_hdr {
 	u16 le_delimiter;
-	u8 le_device_id;
+	u8 device_id;
 	u16 le_length;
 } __packed;
 
-struct up_pl_hdr {
-	u8 le_frame_id;
-	u8 le_device_number;
-	u8 le_flags;
+struct up_video_frm_frag_hdr {
+	u8 frame_id;
+	u8 device_number;
+	u8 flags;
 	u32 le_gravity_sensor;
 } __packed;
+
+#ifdef __cplusplus
+constexpr int UP_MAX_WIRE_LEN = 1024;
+constexpr int JPEG_SOI_MAX_POS = 256;
+constexpr int MAX_GHOST_HDR_OFF = 160;
+
+constexpr size_t UP_USB_FRM_HDR_SIZE = sizeof(struct up_usb_frm_hdr);
+constexpr size_t UP_VIDEO_FRM_FRAG_HDR_SIZE = sizeof(struct up_video_frm_frag_hdr);
+constexpr size_t VIDEO_DATA_OFFSET = UP_USB_FRM_HDR_SIZE + UP_VIDEO_FRM_FRAG_HDR_SIZE;
+#else
+#define UP_MAX_WIRE_LEN 1024
+#define JPEG_SOI_MAX_POS 256
+#define MAX_GHOST_HDR_OFF 160
+
+#define UP_USB_FRM_HDR_SIZE (sizeof(struct up_usb_frm_hdr))
+#define UP_VIDEO_FRM_FRAG_HDR_SIZE (sizeof(struct up_video_frm_frag_hdr))
+#define VIDEO_DATA_OFFSET (UP_USB_FRM_HDR_SIZE + UP_VIDEO_FRM_FRAG_HDR_SIZE)
+#endif
 
 struct up_decode_context {
 	size_t index;
@@ -277,12 +276,12 @@ static inline bool up_is_valid_pkt_del(u16 delimiter)
 	return (delimiter == UP_PKT_DEL);
 }
 
-static inline u16 up_get_pkt_del(struct up_pkt_hdr *pkt)
+static inline u16 up_get_pkt_del(struct up_usb_frm_hdr *pkt)
 {
 	return UP_LE16_TO_CPU(pkt->le_delimiter);
 }
 
-static inline u16 up_get_pl_len(struct up_pkt_hdr *pkt)
+static inline u16 up_get_pl_len(struct up_usb_frm_hdr *pkt)
 {
 	return UP_LE16_TO_CPU(pkt->le_length);
 }
@@ -292,20 +291,20 @@ static inline bool up_check_pkt_hdr(u16 del, u8 dev_id)
 	return (up_is_valid_pkt_del(del) && up_is_valid_dev_id(dev_id));
 }
 
-static inline struct up_pkt_hdr *up_get_pkt_hdr(u8 *buffer, size_t index)
+static inline struct up_usb_frm_hdr *up_get_pkt_hdr(u8 *buffer, size_t index)
 {
-	return (struct up_pkt_hdr *)(buffer + index);
+	return (struct up_usb_frm_hdr *)(buffer + index);
 }
 
-static inline struct up_pl_hdr *up_get_pl_hdr(u8 *buffer, size_t index)
+static inline struct up_video_frm_frag_hdr *up_get_pl_hdr(u8 *buffer, size_t index)
 {
-	return (struct up_pl_hdr *)(buffer + index);
+	return (struct up_video_frm_frag_hdr *)(buffer + index);
 }
 
-static inline bool up_is_valid_pkt_hdr(struct up_pkt_hdr *pkt)
+static inline bool up_is_valid_pkt_hdr(struct up_usb_frm_hdr *pkt)
 {
 	u16 del = up_get_pkt_del(pkt);
-	u8 dev_id = pkt->le_device_id;
+	u8 dev_id = pkt->device_id;
 
 	return up_check_pkt_hdr(del, dev_id);
 }
@@ -340,48 +339,48 @@ static inline bool up_has_other_flags(u8 flags)
 	return up_get_other_flags(flags) != 0;
 }
 
-static inline void up_set_has_gravity_sensor(struct up_pl_hdr *pl, bool has_gs)
+static inline void up_set_has_gravity_sensor(struct up_video_frm_frag_hdr *pl, bool has_gs)
 {
-	uint8_t val = pl->le_flags;
+	uint8_t val = pl->flags;
 
 	if (has_gs)
 		val |= 0x01;
 	else
 		val &= ~0x01;
 
-	pl->le_flags = val;
+	pl->flags = val;
 }
 
-static inline void up_set_button_pressed(struct up_pl_hdr *pl, bool pressed)
+static inline void up_set_button_pressed(struct up_video_frm_frag_hdr *pl, bool pressed)
 {
-	uint8_t val = pl->le_flags;
+	uint8_t val = pl->flags;
 
 	if (pressed)
 		val |= 0x02;
 	else
 		val &= ~0x02;
 
-	pl->le_flags = val;
+	pl->flags = val;
 }
 
-static inline void up_set_other_flags(struct up_pl_hdr *pl, uint8_t other)
+static inline void up_set_other_flags(struct up_video_frm_frag_hdr *pl, uint8_t other)
 {
-	uint8_t val = pl->le_flags;
+	uint8_t val = pl->flags;
 
 	val &= 0x03;
 	val |= ((other & 0x3F) << 2);
-	pl->le_flags = val;
+	pl->flags = val;
 }
 
-static inline bool up_valid_mjpeg_pl(struct up_pl_hdr *pl)
+static inline bool up_valid_mjpeg_pl(struct up_video_frm_frag_hdr *pl)
 {
 	if (!pl)
 		return false;
-	if (pl->le_device_number > MAX_DEV_NUM)
+	if (pl->device_number > MAX_DEV_NUM)
 		return false;
-	if (up_has_gravity_sensor(pl->le_flags))
+	if (up_has_gravity_sensor(pl->flags))
 		return false;
-	if (up_has_other_flags(pl->le_flags))
+	if (up_has_other_flags(pl->flags))
 		return false;
 	return true;
 }
