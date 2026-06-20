@@ -34,10 +34,6 @@ class MjpegStreamTest : public ::testing::Test {
         return reinterpret_cast<up_video_frm_frag_hdr*>(buffer.data() + USB_PACKET_HEADER_SIZE);
     }
 
-    MjpegStream& GetStream() {
-        return stream_;
-    }
-
     void send(std::vector<uint8_t> packet) {
         std::span<const uint8_t> data{packet};
 	stream_.send(data);
@@ -278,10 +274,10 @@ TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
 TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
     std::vector<uint8_t> const shortPacket = {UsbProtocol::USB_FRAME_HEADER_A,
                                               UsbProtocol::USB_FRAME_HEADER_B};
-    GetStream().send(shortPacket);
+    send(shortPacket);
 
     std::vector<uint8_t> const emptyPacket(100, 0x00);
-    GetStream().send(emptyPacket);
+    send(emptyPacket);
 
     verifyNoValidFramesPublished();
 }
@@ -426,10 +422,13 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
 TEST_F(MjpegStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
     VideoFrameBuffer ringBuffer;
     ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-    MjpegStream silentDecoder(ringBuffer);
-    std::vector<uint8_t> packet(100, 0x00);
 
-    ASSERT_NO_THROW(silentDecoder.send(packet));
+    MjpegStream silentDecoder(ringBuffer);
+
+    std::vector<uint8_t> packet(100, 0x00);
+    std::span<const uint8_t> data{packet};
+
+    ASSERT_NO_THROW(silentDecoder.send(data));
 }
 
 TEST_F(MjpegStreamTest, PreventsIntegerUnderflowOnUndersizedHardwareLength) {
@@ -441,5 +440,5 @@ TEST_F(MjpegStreamTest, PreventsIntegerUnderflowOnUndersizedHardwareLength) {
 
     packetHeader->le_length = EndianConversion::hostToWire(2);
 
-    ASSERT_NO_THROW({ GetStream().send(malformedPacket); });
+    ASSERT_NO_THROW({ send(malformedPacket); });
 }

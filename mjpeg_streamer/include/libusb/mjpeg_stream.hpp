@@ -5,7 +5,10 @@
 #include <span>
 #include <vector>
 
+extern "C" {
 #include "useeplus_protocol.h"
+}
+
 #include "video_frame_buffer.hpp"
 #include "video_frame_fragment.hpp"
 

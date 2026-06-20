@@ -45,10 +45,10 @@ LDFLAGS += -Wl,--start-group \
 	$(BUILD_DIR)/libmjpeg_streamer_core.a \
 	-Wl,--end-group -lz -lssl -lcrypto -lpthread
 
-ifeq ($(PLATFORM),MACOS)
-    INCLUDES += $(shell pkg-config --cflags libusb-1.0)
-    LDFLAGS  += $(shell pkg-config --libs libusb-1.0)
+INCLUDES += $(shell pkg-config --cflags libusb-1.0)
+LDFLAGS  += $(shell pkg-config --libs libusb-1.0)
 
+ifeq ($(PLATFORM),MACOS)
     INCLUDES += $(shell pkg-config --cflags openssl 2>/dev/null || echo "-I/opt/homebrew/opt/openssl@3/include")
     LDFLAGS  += $(shell pkg-config --libs-only-L openssl 2>/dev/null || echo "-L/opt/homebrew/opt/openssl@3/lib")
 endif
@@ -57,27 +57,25 @@ HTML_FILE     := $(SRC_DIR)/index.html
 GENERATED_HPP := $(GEN_DIR)/index_html.hpp
 
 CORE_SRCS := $(SRC_DIR)/mjpeg_server.cpp \
-             $(SRC_DIR)/zero_allocation_response_builder.cpp
-
-ifeq ($(PLATFORM),MACOS)
-    CORE_SRCS += $(SRC_DIR)/libusb/mjpeg_stream_capture.cpp \
-                 $(SRC_DIR)/libusb/usb_camera.cpp \
-                 $(SRC_DIR)/libusb/usb_context.cpp \
-                 $(SRC_DIR)/libusb/usb_device_finder.cpp \
-                 $(SRC_DIR)/libusb/usb_driver.cpp \
-                 $(SRC_DIR)/libusb/mjpeg_stream.cpp \
-                 $(LINUX_DRIVER_DIR)/useeplus_protocol.c
-endif
+             $(SRC_DIR)/zero_allocation_response_builder.cpp \
+             $(SRC_DIR)/libusb/mjpeg_stream_capture.cpp \
+             $(SRC_DIR)/libusb/usb_camera.cpp \
+             $(SRC_DIR)/libusb/usb_context.cpp \
+             $(SRC_DIR)/libusb/usb_device_finder.cpp \
+             $(SRC_DIR)/libusb/usb_driver.cpp \
+             $(SRC_DIR)/libusb/mjpeg_stream.cpp \
+             $(SRC_DIR)/v4l2/v4l2_mjpeg_stream.cpp \
+             $(LINUX_DRIVER_DIR)/useeplus_protocol.c
 
 CORE_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(CORE_SRCS)))
 CORE_LIB  := $(BUILD_DIR)/libmjpeg_streamer_core.a
 
+TARGETS := $(BUILD_DIR)/mjpeg_server \
+           $(BUILD_DIR)/mjpeg_stream_capture \
+           $(BUILD_DIR)/mjpeg_frame_extractor
+
 ifeq ($(PLATFORM),LINUX)
-    TARGETS := $(BUILD_DIR)/v4l2_mjpeg_server
-else ifeq ($(PLATFORM),MACOS)
-    TARGETS := $(BUILD_DIR)/mjpeg_server \
-               $(BUILD_DIR)/mjpeg_stream_capture \
-               $(BUILD_DIR)/mjpeg_frame_extractor
+    TARGETS += $(BUILD_DIR)/v4l2_mjpeg_server
 endif
 
 TEST_DIR := tests
@@ -143,7 +141,7 @@ $(CORE_LIB): $(CORE_OBJS)
 	@echo "Archiving $@"
 	@ar rcs $@ $^
 
-$(BUILD_DIR)/v4l2_mjpeg_server: $(BUILD_DIR)/src/v4l2/v4l2_mjpeg_stream.o $(BUILD_DIR)/src/v4l2/v4l2_mjpeg_server_main.o $(CORE_LIB)
+$(BUILD_DIR)/v4l2_mjpeg_server: $(BUILD_DIR)/src/v4l2/v4l2_mjpeg_server_main.o $(CORE_LIB)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BUILD_DIR)/mjpeg_server: $(BUILD_DIR)/src/libusb/mjpeg_server_main.o $(CORE_LIB)
