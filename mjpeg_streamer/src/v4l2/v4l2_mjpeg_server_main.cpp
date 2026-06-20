@@ -61,6 +61,7 @@ public:
             throw std::runtime_error("Cannot open " + device_path);
         }
 
+	// NOLINTBEGIN(cppcoreguidelines-pro-type-union-access)
         struct v4l2_format fmt = {};
         fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
@@ -92,6 +93,7 @@ public:
 
             ioctl(fd_, VIDIOC_QBUF, &buf);
         }
+	// NOLINTEND(cppcoreguidelines-pro-type-union-access)
 
         int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         if (ioctl(fd_, VIDIOC_STREAMON, &type) < 0) {
