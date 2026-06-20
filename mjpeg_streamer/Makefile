@@ -105,7 +105,6 @@ $(PROJECT_TEST_OBJS) $(DRIVER_TEST_OBJS): INCLUDES += \
 	-Ibuild/googletest/googlemock/include
 
 $(DRIVER_TEST_OBJS): INCLUDES += \
-	-I$(LINUX_DRIVER_DIR)/tests/mock_kernel \
 	-I$(LINUX_DRIVER_DIR)
 
 DEPS_SENTINEL := $(BUILD_DIR)/.deps_installed
