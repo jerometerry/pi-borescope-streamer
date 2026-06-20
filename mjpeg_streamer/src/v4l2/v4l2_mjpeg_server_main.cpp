@@ -54,7 +54,8 @@ class V4l2Camera {
     FrameHandler frame_handler_;
 
 public:
-    V4l2Camera(const std::string& device_path, FrameHandler frame_handler) : frame_handler_(frame_handler) {
+    V4l2Camera(const std::string& device_path, FrameHandler frame_handler) :
+        frame_handler_(std::move(frame_handler)) {
         fd_ = open(device_path.c_str(), O_RDWR | O_NONBLOCK, 0);
         if (fd_ < 0) {
             throw std::runtime_error("Cannot open " + device_path);
