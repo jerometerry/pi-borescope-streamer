@@ -1,40 +1,63 @@
-/* SPDX-License-Identifier: GPL-2.0+ OR MIT */
-#ifndef _USEEPLUS_PROTOCOL_H_
-#define _USEEPLUS_PROTOCOL_H_
+#ifndef USEEPLUS_PROTOCOL_H
+#define USEEPLUS_PROTOCOL_H
+
+// NOLINTBEGIN(bugprone-reserved-identifier,cppcoreguidelines-use-enum-class,modernize-use-using,cppcoreguidelines-macro-usage)
 
 #ifdef __KERNEL__
+/* --- 1. LINUX KERNEL TREE BUILD --- */
 #include <linux/types.h>
 #include <asm/byteorder.h>
 
 #define UP_LE16_TO_CPU(x) le16_to_cpu(x)
 #define UP_LE32_TO_CPU(x) le32_to_cpu(x)
+
 #else
+/* --- USER-SPACE BUILDS (Linux Off-Tree & macOS) --- */
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+using u8  = uint8_t;
+using u16 = uint16_t;
+using u32 = uint32_t;
+#else
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
+#endif
 
 #ifndef __packed
 #define __packed __attribute__((packed))
 #endif
 
 #if defined(__APPLE__)
+/* --- 2. MACOS BUILD (Clang) --- */
 #include <libkern/OSByteOrder.h>
+#ifdef __cplusplus
+inline uint16_t UP_LE16_TO_CPU(uint16_t x) { return OSSwapLittleToHostInt16(x); }
+inline uint32_t UP_LE32_TO_CPU(uint32_t x) { return OSSwapLittleToHostInt32(x); }
+#else
 #define UP_LE16_TO_CPU(x) OSSwapLittleToHostInt16(x)
 #define UP_LE32_TO_CPU(x) OSSwapLittleToHostInt32(x)
+#endif
+
 #else
+/* --- 3. LINUX USER-SPACE BUILD (GCC / Clang) --- */
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
 #include <endian.h>
+#ifdef __cplusplus
+inline uint16_t UP_LE16_TO_CPU(uint16_t x) { return le16toh(x); }
+inline uint32_t UP_LE32_TO_CPU(uint32_t x) { return le32toh(x); }
+#else
 #define UP_LE16_TO_CPU(x) le16toh(x)
 #define UP_LE32_TO_CPU(x) le32toh(x)
 #endif
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#endif /* __KERNEL__ */
 
 /*
  * Useeplus USB Packet Structure (Applies to ALL packets)
@@ -120,15 +143,52 @@ extern "C" {
  * until it exhausts the data arriving from the FIFO work queue.
  */
 
+struct up_decoder_callbacks {
+	void (*on_frame_start)(void *context, u8 frame_id, u8 dev_num);
+	void (*on_video_payload)(void *context, u8 *data, size_t len);
+	void (*on_frame_complete)(void *context);
+	void (*on_frame_incomplete)(void *context);
+};
+
+struct up_decoder {
+	struct up_decoder_callbacks cb;
+	void *context;
+
+	int frame_id;
+	bool building_frame;
+	bool found_soi;
+	bool eof_reached;
+};
+
+/* Safe C++ binding wrapper */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef __cplusplus
+constexpr int UP_MAX_WIRE_LEN = 1024;
+constexpr int JPEG_SOI_MAX_POS = 256;
+constexpr int MAX_GHOST_HDR_OFF = 160;
+
+// Ensure your header values match what constants.hpp expects:
+constexpr size_t UP_PKT_HDR_SIZE = 8;  // Update this to your protocol's actual size
+constexpr size_t UP_PL_HDR_SIZE = 4;   // Update this to your protocol's actual size
+constexpr size_t TOTAL_USB_HDR_SIZE = UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE;
+#else
 #define UP_MAX_WIRE_LEN 1024
 #define JPEG_SOI_MAX_POS 256
 #define MAX_GHOST_HDR_OFF 160
 
-#define UP_PKT_HDR_SIZE (sizeof(struct up_pkt_hdr))
-#define UP_PL_HDR_SIZE (sizeof(struct up_pl_hdr))
+#define UP_PKT_HDR_SIZE 8
+#define UP_PL_HDR_SIZE 4
 #define TOTAL_USB_HDR_SIZE (UP_PKT_HDR_SIZE + UP_PL_HDR_SIZE)
+#endif
 
+#ifdef __cplusplus
+enum up_usb_topology : std::uint8_t {
+#else
 enum up_usb_topology {
+#endif
 	UP_IAP_INTERFACE = 0,
 	UP_VIDEO_INTERFACE = 1,
 	UP_ALT_VIDEO_ENABLE = 1,
@@ -136,18 +196,43 @@ enum up_usb_topology {
 	UP_IAP_ENDPOINT = 0x02,
 };
 
+#ifdef __cplusplus
+enum up_hw_signatures : std::uint16_t {
+#else
 enum up_hw_signatures {
+#endif
 	UP_PKT_DEL = 0xBBAA,
 	VIDEO_CAMERA_ID = 0x0B,
 	GRAVITY_SENSOR_ID = 0x07,
 	MAX_DEV_NUM = 1,
 };
 
+#ifdef __cplusplus
+enum up_jpeg_marker : std::uint8_t {
+#else
 enum up_jpeg_marker {
+#endif
 	JPEG_DEL = 0xFF,
 	JPEG_SOI = 0xD8,
 	JPEG_EOI = 0xD9,
 };
+
+#ifdef __cplusplus
+enum up_decode_status : std::uint8_t {
+#else
+enum up_decode_status {
+#endif
+	UP_DECODE_OK,
+	UP_DECODE_INVALID_PKT,
+	UP_DECODE_SKIP,
+	UP_DECODE_NEED_DATA,
+};
+
+size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len);
+
+#ifdef __cplusplus
+}
+#endif
 
 struct up_pkt_hdr {
 	u16 le_delimiter;
@@ -162,13 +247,6 @@ struct up_pl_hdr {
 	u32 le_gravity_sensor;
 } __packed;
 
-struct up_decoder_callbacks {
-	void (*on_frame_start)(void *context, u8 frame_id, u8 dev_num);
-	void (*on_video_payload)(void *context, u8 *data, size_t len);
-	void (*on_frame_complete)(void *context);
-	void (*on_frame_incomplete)(void *context);
-};
-
 struct up_decode_context {
 	size_t index;
 	unsigned long flags;
@@ -182,31 +260,12 @@ struct up_decode_context {
 	size_t decode_buf_len;
 };
 
-enum up_decode_status {
-	UP_DECODE_OK,
-	UP_DECODE_INVALID_PKT,
-	UP_DECODE_SKIP,
-	UP_DECODE_NEED_DATA
-};
-
 struct up_decode_state {
 	size_t pkt_size;
 	u8 frame_id;
 	u8 dev_num;
 	u8 flags;
 };
-
-struct up_decoder {
-	struct up_decoder_callbacks cb;
-	void *context;
-
-	int frame_id;
-	bool building_frame;
-	bool found_soi;
-	bool eof_reached;
-};
-
-size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len);
 
 static inline bool up_is_valid_dev_id(u8 dev_id)
 {
@@ -327,8 +386,6 @@ static inline bool up_valid_mjpeg_pl(struct up_pl_hdr *pl)
 	return true;
 }
 
-#ifdef __cplusplus
-}
-#endif
+// NOLINTEND(bugprone-reserved-identifier,cppcoreguidelines-use-enum-class,modernize-use-using,cppcoreguidelines-macro-usage)
 
-#endif /* _USEEPLUS_PROTOCOL_H_ */
+#endif /* USEEPLUS_PROTOCOL_H */
