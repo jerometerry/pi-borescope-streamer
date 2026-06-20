@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0+ OR MIT
 
 #include "useeplus_protocol.h"
-#include "useeplus_protocol.h"
 
 static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t buf_off, size_t *u_hdr_off)
 {
 	struct up_usb_frm_hdr *u_hdr;
-	size_t o, limit;
+	size_t o, ghost_lim;
 
-	if (UP_USB_FRM_HDR_SIZE + buf_off > len)
+	if (UP_USB_FRM_HDR_LEN + buf_off > len)
 		return false;
 
-	limit = len - buf_off - UP_USB_FRM_HDR_SIZE;
-	if (limit > MAX_GHOST_HDR_OFF)
-		limit = MAX_GHOST_HDR_OFF;
+	ghost_lim = len - buf_off - UP_USB_FRM_HDR_LEN;
+	if (ghost_lim > MAX_GHOST_HDR_OFF)
+		ghost_lim = MAX_GHOST_HDR_OFF;
 
-	for (o = UP_USB_FRM_HDR_SIZE; o <= limit; o++) {
+	for (o = UP_USB_FRM_HDR_LEN; o <= ghost_lim; o++) {
 		u_hdr = up_get_usb_frm_hdr(buf, buf_off + o);
 
 		if (up_is_valid_usb_frm_hdr(u_hdr)) {
@@ -33,12 +32,12 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 	size_t buf_off, u_hdr_off, v_hdr_off;
 	struct up_usb_frm_hdr *u_hdr;
 	struct up_video_frm_frag_hdr *v_hdr;
-	u16 vff_len;
+	u16 u_frm_pl_len;
 
 	u_hdr_off = 0;
 	buf_off = *cur_pos;
 
-	if (UP_USB_FRM_HDR_SIZE + buf_off > len)
+	if (UP_USB_FRM_HDR_LEN + buf_off > len)
 		return UP_DECODE_NEED_DATA;
 
 	u_hdr = up_get_usb_frm_hdr(buf, buf_off);
@@ -58,7 +57,7 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 		 * previous one. Treat the short packet as a ghost, and skip it.
 		 */
 		*cur_pos += u_hdr_off;
-		return UP_DECODE_SKIP;
+		return UP_IS_GHOST_HDR;
 	}
 
 	/*
@@ -68,23 +67,23 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 	 * 1024 is quick sanity check against that we aren't looking at uninitialized
 	 * data.
 	 */
-	vff_len = up_get_video_frm_frag_len(u_hdr);
-	if (vff_len > UP_MAX_VIDEO_FRM_FRAG_LEN) {
+	u_frm_pl_len = up_get_usb_frm_pl_len(u_hdr);
+	if (u_frm_pl_len > UP_MAX_VIDEO_FRM_FRAG_LEN) {
 		(*cur_pos)++;
 		return UP_INVALID_USB_FRM_HDR;
 	}
 
-	state->usb_frm_size = UP_USB_FRM_HDR_SIZE + vff_len;
+	state->usb_frm_len = UP_USB_FRM_HDR_LEN + u_frm_pl_len;
 
-	if ((state->usb_frm_size + buf_off) > len)
+	if ((state->usb_frm_len + buf_off) > len)
 		return UP_DECODE_NEED_DATA;
 
-	if (vff_len < UP_VIDEO_FRM_FRAG_HDR_SIZE) {
-		*cur_pos += state->usb_frm_size;
+	if (u_frm_pl_len < UP_VIDEO_FRM_FRAG_HDR_LEN) {
+		*cur_pos += state->usb_frm_len;
 		return UP_DECODE_SKIP;
 	}
 
-	v_hdr_off = UP_USB_FRM_HDR_SIZE + buf_off;
+	v_hdr_off = UP_USB_FRM_HDR_LEN + buf_off;
 	v_hdr = up_get_video_frm_frag_hdr(buf, v_hdr_off);
 
 	state->frame_id = v_hdr->frame_id;
@@ -96,7 +95,7 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 
 size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 {
-	size_t i, video_data_start, video_data_len, img_size, limit, cur_pos;
+	size_t i, video_data_start, video_data_len, img_size, soi_lim, cur_pos;
 	struct up_decode_state state;
 	struct up_video_frm_frag_hdr *v_hdr;
 	u8 *video_data_ptr;
@@ -147,23 +146,23 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		if (dec->eof_reached)
 			goto advance;
 
-		v_hdr = up_get_video_frm_frag_hdr(buf, UP_USB_FRM_HDR_SIZE + cur_pos);
+		v_hdr = up_get_video_frm_frag_hdr(buf, UP_USB_FRM_HDR_LEN + cur_pos);
 
 		if (!up_is_valid_video_frm_frag_hdr(v_hdr))
 			goto advance;
 
 		video_data_start = VIDEO_DATA_OFFSET + cur_pos;
-		video_data_len = state.usb_frm_size - VIDEO_DATA_OFFSET;
+		video_data_len = state.usb_frm_len - VIDEO_DATA_OFFSET;
 		video_data_ptr = buf + video_data_start;
 
 		if (!dec->found_soi) {
 			found = false;
-			limit = video_data_len;
-			if (limit > JPEG_SOI_MAX_POS)
-				limit = JPEG_SOI_MAX_POS;
+			soi_lim = video_data_len;
+			if (soi_lim > JPEG_SOI_MAX_POS)
+				soi_lim = JPEG_SOI_MAX_POS;
 
 			if (video_data_len >= 2) {
-				for (i = 0; i < limit - 1; i++) {
+				for (i = 0; i < soi_lim - 1; i++) {
 					if (up_is_jpg_soi(video_data_ptr, i)) {
 						video_data_ptr += i;
 						video_data_len -= i;
@@ -196,7 +195,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			dec->cb.on_video_frame_complete(dec->context);
 
 advance:
-		cur_pos += state.usb_frm_size;
+		cur_pos += state.usb_frm_len;
 	}
 
 	return cur_pos;

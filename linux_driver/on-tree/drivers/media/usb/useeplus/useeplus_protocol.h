@@ -104,9 +104,9 @@
 #define JPEG_SOI_MAX_POS 256
 #define MAX_GHOST_HDR_OFF 160
 
-#define UP_USB_FRM_HDR_SIZE (sizeof(struct up_usb_frm_hdr))
-#define UP_VIDEO_FRM_FRAG_HDR_SIZE (sizeof(struct up_video_frm_frag_hdr))
-#define VIDEO_DATA_OFFSET (UP_USB_FRM_HDR_SIZE + UP_VIDEO_FRM_FRAG_HDR_SIZE)
+#define UP_USB_FRM_HDR_LEN (sizeof(struct up_usb_frm_hdr))
+#define UP_VIDEO_FRM_FRAG_HDR_LEN (sizeof(struct up_video_frm_frag_hdr))
+#define VIDEO_DATA_OFFSET (UP_USB_FRM_HDR_LEN + UP_VIDEO_FRM_FRAG_HDR_LEN)
 
 enum up_usb_topology {
 	UP_IAP_INTERFACE = 0,
@@ -166,12 +166,13 @@ enum up_decode_status {
 	UP_DECODE_OK,
 	UP_INVALID_USB_FRM_HDR,
 	UP_INVALID_VIDEO_FRM_FRAG_HDR,
+	UP_IS_GHOST_HDR,
 	UP_DECODE_SKIP,
 	UP_DECODE_NEED_DATA
 };
 
 struct up_decode_state {
-	size_t usb_frm_size;
+	size_t usb_frm_len;
 	u8 frame_id;
 	u8 dev_num;
 	u8 flags;
@@ -204,7 +205,7 @@ static inline u16 up_get_usb_frm_del(struct up_usb_frm_hdr *hdr)
 	return le16_to_cpu(hdr->le_delimiter);
 }
 
-static inline u16 up_get_video_frm_frag_len(struct up_usb_frm_hdr *hdr)
+static inline u16 up_get_usb_frm_pl_len(struct up_usb_frm_hdr *hdr)
 {
 	return le16_to_cpu(hdr->le_length);
 }
@@ -232,14 +233,14 @@ static inline bool up_is_valid_usb_frm_hdr(struct up_usb_frm_hdr *hdr)
 	return up_check_usb_frm_hdr(del, dev_id);
 }
 
-static inline bool up_is_jpg_soi(u8 *hdr, size_t i)
+static inline bool up_is_jpg_soi(u8 *ptr, size_t i)
 {
-	return (hdr[i] == JPEG_DEL && hdr[i + 1] == JPEG_SOI);
+	return (ptr[i] == JPEG_DEL && ptr[i + 1] == JPEG_SOI);
 }
 
-static inline bool up_is_jpg_eoi(u8 *hdr, size_t i)
+static inline bool up_is_jpg_eoi(u8 *ptr, size_t i)
 {
-	return (hdr[i] == JPEG_DEL && hdr[i + 1] == JPEG_EOI);
+	return (ptr[i] == JPEG_DEL && ptr[i + 1] == JPEG_EOI);
 }
 
 static inline bool up_has_gravity_sensor(u8 flags)

@@ -245,17 +245,17 @@ constexpr int UP_MAX_VIDEO_FRM_FRAG_LEN = 1024;
 constexpr int JPEG_SOI_MAX_POS = 256;
 constexpr int MAX_GHOST_HDR_OFF = 160;
 
-constexpr size_t UP_USB_FRM_HDR_SIZE = sizeof(struct up_usb_frm_hdr);
-constexpr size_t UP_VIDEO_FRM_FRAG_HDR_SIZE = sizeof(struct up_video_frm_frag_hdr);
-constexpr size_t VIDEO_DATA_OFFSET = UP_USB_FRM_HDR_SIZE + UP_VIDEO_FRM_FRAG_HDR_SIZE;
+constexpr size_t UP_USB_FRM_HDR_LEN = sizeof(struct up_usb_frm_hdr);
+constexpr size_t UP_VIDEO_FRM_FRAG_HDR_LEN = sizeof(struct up_video_frm_frag_hdr);
+constexpr size_t VIDEO_DATA_OFFSET = UP_USB_FRM_HDR_LEN + UP_VIDEO_FRM_FRAG_HDR_LEN;
 #else
 #define UP_MAX_VIDEO_FRM_FRAG_LEN 1024
 #define JPEG_SOI_MAX_POS 256
 #define MAX_GHOST_HDR_OFF 160
 
-#define UP_USB_FRM_HDR_SIZE (sizeof(struct up_usb_frm_hdr))
-#define UP_VIDEO_FRM_FRAG_HDR_SIZE (sizeof(struct up_video_frm_frag_hdr))
-#define VIDEO_DATA_OFFSET (UP_USB_FRM_HDR_SIZE + UP_VIDEO_FRM_FRAG_HDR_SIZE)
+#define UP_USB_FRM_HDR_LEN (sizeof(struct up_usb_frm_hdr))
+#define UP_VIDEO_FRM_FRAG_HDR_LEN (sizeof(struct up_video_frm_frag_hdr))
+#define VIDEO_DATA_OFFSET (UP_USB_FRM_HDR_LEN + UP_VIDEO_FRM_FRAG_HDR_LEN)
 #endif
 
 struct up_decode_context {
@@ -272,7 +272,7 @@ struct up_decode_context {
 };
 
 struct up_decode_state {
-	size_t usb_frm_size;
+	size_t usb_frm_len;
 	u8 frame_id;
 	u8 dev_num;
 	u8 flags;
@@ -295,7 +295,7 @@ static inline u16 up_get_usb_frm_del(struct up_usb_frm_hdr *hdr)
 	return UP_LE16_TO_CPU(hdr->le_delimiter);
 }
 
-static inline u16 up_get_video_frm_frag_len(struct up_usb_frm_hdr *hdr)
+static inline u16 up_get_usb_frm_pl_len(struct up_usb_frm_hdr *hdr)
 {
 	return UP_LE16_TO_CPU(hdr->le_length);
 }

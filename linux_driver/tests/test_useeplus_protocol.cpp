@@ -85,7 +85,7 @@ TEST(ProtocolTest, GetsPacketDelimeterAndLength)
 	pkt.le_length = UP_LE16_TO_CPU(500);
 
 	EXPECT_EQ(up_get_usb_frm_del(&pkt), UP_PKT_DEL);
-	EXPECT_EQ(up_get_video_frm_frag_len(&pkt), 500);
+	EXPECT_EQ(up_get_usb_frm_pl_len(&pkt), 500);
 }
 
 TEST(ProtocolTest, ValidatesFullPacketHeaderStruct)
