@@ -11,8 +11,8 @@
 #include "constants.hpp"
 #include "endian_conversion.hpp"
 #include "mjpeg_stream.hpp"
-#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
+#include "video_frame_fragment.hpp"
 
 class MjpegStreamTest : public ::testing::Test {
    private:

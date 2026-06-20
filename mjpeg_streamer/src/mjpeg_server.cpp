@@ -18,8 +18,8 @@
 
 #include "constants.hpp"
 #include "index_html.hpp"
-#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
+#include "video_frame_fragment.hpp"
 #include "zero_allocation_response_builder.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running,
@@ -60,7 +60,8 @@ void MjpegServer::onTimer(us_timer_t* t) {
     bool processedAny = false;
 
     while (server->nextReadSequence_ <= available) {
-        VideoFrameFragment& currentFrame = server->disruptor_->getBySequence(server->nextReadSequence_);
+        VideoFrameFragment& currentFrame =
+            server->disruptor_->getBySequence(server->nextReadSequence_);
 
         const uint32_t currentFrameId = static_cast<uint32_t>(server->nextReadSequence_);
 

@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <span>
 
-#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
+#include "video_frame_fragment.hpp"
 
 V4l2MjpegStream::V4l2MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {}
 

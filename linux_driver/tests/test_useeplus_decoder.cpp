@@ -49,7 +49,8 @@ TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame)
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_LEN + 6);
 
-	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
+	struct up_video_frm_frag_hdr *pl =
+		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
 	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -92,13 +93,14 @@ TEST(DecoderTest, SkipsGhostHeadersAndFindsValidPayload)
 
 	size_t valid_start = 10;
 
-	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer.data(), valid_start);
+	struct up_usb_frm_hdr *pkt =
+		up_get_usb_frm_hdr(buffer.data(), valid_start);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
-	struct up_video_frm_frag_hdr *pl =
-		up_get_video_frm_frag_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
+	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(
+		buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
 	pl->frame_id = 2;
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -163,7 +165,8 @@ TEST(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
-	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
+	struct up_video_frm_frag_hdr *pl =
+		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
 	pl->frame_id = 1;
 	up_set_has_gravity_sensor(pl, true);
 
@@ -202,7 +205,8 @@ TEST(DecoderTest, DropsChunkIfSoiNotFound)
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
-	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
+	struct up_video_frm_frag_hdr *pl =
+		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
 	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -242,13 +246,14 @@ TEST(DecoderTest, HuntsForSignatureOnInvalidPacket)
 	buffer[2] = 0xCC;
 
 	size_t valid_start = 3;
-	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer.data(), valid_start);
+	struct up_usb_frm_hdr *pkt =
+		up_get_usb_frm_hdr(buffer.data(), valid_start);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
-	struct up_video_frm_frag_hdr *pl =
-		up_get_video_frm_frag_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
+	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(
+		buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
 	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -294,8 +299,8 @@ TEST(DecoderTest, RejectsMassiveLengthAndHunts)
 	good_pkt->device_id = VIDEO_CAMERA_ID;
 	good_pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
-	struct up_video_frm_frag_hdr *pl =
-		up_get_video_frm_frag_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
+	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(
+		buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
 	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);

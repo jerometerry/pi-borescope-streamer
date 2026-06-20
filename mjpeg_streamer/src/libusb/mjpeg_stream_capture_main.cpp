@@ -25,8 +25,8 @@
 #include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
-#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
+#include "video_frame_fragment.hpp"
 
 namespace {
 static std::atomic<bool> running{true};

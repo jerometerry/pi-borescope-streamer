@@ -18,8 +18,8 @@
 
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
-#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
+#include "video_frame_fragment.hpp"
 
 namespace {
 constexpr int TEST_PORT = 18080;

@@ -6,8 +6,8 @@
 #include <vector>
 
 #include "useeplus_protocol.h"
-#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
+#include "video_frame_fragment.hpp"
 
 /**
  * @brief The translator that extracts and reassembles clean MJPEG video pictures from the hardware

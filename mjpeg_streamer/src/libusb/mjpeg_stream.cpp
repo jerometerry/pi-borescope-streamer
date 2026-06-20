@@ -12,8 +12,8 @@ extern "C" {
 
 #include "constants.hpp"
 #include "endian_conversion.hpp"
-#include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
+#include "video_frame_fragment.hpp"
 
 MjpegStream::MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {
     inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);

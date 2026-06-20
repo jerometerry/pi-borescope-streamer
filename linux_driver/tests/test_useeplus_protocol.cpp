@@ -104,7 +104,8 @@ TEST(ProtocolTest, GetsHeaderPointersFromBuffer)
 {
 	u8 buffer[100] = { 0 };
 	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer, 10);
-	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(buffer, 20);
+	struct up_video_frm_frag_hdr *pl =
+		up_get_video_frm_frag_hdr(buffer, 20);
 
 	EXPECT_EQ((u8 *)pkt, buffer + 10);
 	EXPECT_EQ((u8 *)pl, buffer + 20);
