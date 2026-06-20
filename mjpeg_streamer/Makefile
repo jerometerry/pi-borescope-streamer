@@ -38,7 +38,8 @@ INCLUDES := -I$(INC_DIR) \
             -Ithird_party/uWebSockets/src \
             -Ithird_party/uSockets/src
 
-LDFLAGS += third_party/uSockets/uSockets.a -lz -lssl -lcrypto -lpthread
+LDFLAGS += -Wl,--start-group third_party/uSockets/uSockets.a build/libmjpeg_streamer_core.a \
+	-Wl,--end-group -lz -lssl -lcrypto -lpthread
 
 ifeq ($(PLATFORM),MACOS)
     INCLUDES += $(shell pkg-config --cflags libusb-1.0)
