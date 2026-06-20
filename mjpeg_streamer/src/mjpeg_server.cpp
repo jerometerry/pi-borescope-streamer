@@ -1,10 +1,11 @@
 #include "mjpeg_server.hpp"
 
-#include <App.h>
-#include <HttpResponse.h>
-#include <Loop.h>
+// Wrap the uWebSockets headers so their internal uSockets references look for C symbols
 extern "C" {
-    #include "libusockets.h"
+    #include <libusockets.h>
+    #include <Loop.h>
+    #include <HttpResponse.h>
+    #include <App.h>
 }
 
 #include <algorithm>
