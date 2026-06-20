@@ -1,5 +1,5 @@
-CXX ?= zig c++
-CC  ?= zig cc
+CXX := zig c++
+CC  := zig cc
 
 ifneq (,$(shell command -v ccache 2>/dev/null))
     CXX := ccache $(CXX)
