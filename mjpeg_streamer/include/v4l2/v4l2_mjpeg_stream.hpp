@@ -1,11 +1,6 @@
 #pragma once
-#include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <span>
-#include <vector>
-
-#include "video_frame.hpp"
 #include "video_frame_buffer.hpp"
 
 class V4l2MjpegStream {

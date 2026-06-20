@@ -10,29 +10,26 @@
  * a different port number when you launch the program from the terminal.
  */
 
+#include <fcntl.h>
+#include <linux/videodev2.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <unistd.h>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
-#include <format>
 #include <functional>
 #include <iostream>
-#include <limits>
 #include <span>
+#include <stdexcept>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <vector>
-
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <linux/videodev2.h>
-
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
 #include "v4l2_mjpeg_stream.hpp"
