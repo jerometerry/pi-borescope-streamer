@@ -38,13 +38,18 @@ class MjpegStreamTest : public ::testing::Test {
         return stream_;
     }
 
+    void send(std::vector<uint8_t> packet) {
+        std::span<const uint8_t> data{packet};
+	stream_.send(data);
+    }
+
     bool verifyNextPublishedFramed(std::vector<uint8_t>& out_frame_data) {
         int64_t available = disruptor_.getHighestPublished();
 
         while (next_read_seq_ <= available) {
             VideoFrameFragment& slot = disruptor_.getBySequence(next_read_seq_);
 
-            if (slot.contentSize() > 0) {
+            if (slot.contentSize() > static_cast<const unsigned long>(0)) {
                 auto slice = slot.getContentSlice();
                 out_frame_data.assign(slice.begin(), slice.end());
                 next_read_seq_++;
@@ -64,7 +69,7 @@ class MjpegStreamTest : public ::testing::Test {
         int64_t available = disruptor_.getHighestPublished();
         while (next_read_seq_ <= available) {
             VideoFrameFragment& slot = disruptor_.getBySequence(next_read_seq_);
-            EXPECT_EQ(slot.contentSize(), 0)
+            EXPECT_EQ(slot.contentSize(), static_cast<const unsigned long>(0))
                 << "Found unexpected valid frame at sequence " << next_read_seq_;
 
             next_read_seq_++;
@@ -162,8 +167,8 @@ TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
 
     triggerPayloadHeader->frame_id = 3;
 
-    GetStream().send(packet);
-    GetStream().send(triggerPacket);
+    send(packet);
+    send(triggerPacket);
 
     std::vector<uint8_t> actualOutputFrame;
     ASSERT_TRUE(verifyNextPublishedFramed(actualOutputFrame))
@@ -203,9 +208,9 @@ TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
 
     triggerPayloadHeader->frame_id = 2;
 
-    GetStream().send(packet);
-    GetStream().send(shortPacket);
-    GetStream().send(triggerPacket);
+    send(packet);
+    send(shortPacket);
+    send(triggerPacket);
 
     std::vector<uint8_t> actualOutputFrame;
     ASSERT_TRUE(verifyNextPublishedFramed(actualOutputFrame))
@@ -259,9 +264,9 @@ TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
         buildPacket(2, {UsbProtocol::BOUNDARY_MARKER, UsbProtocol::START_MARKER,
                         UsbProtocol::USB_FRAME_HEADER_A, UsbProtocol::USB_FRAME_HEADER_B});
 
-    GetStream().send(packet1buffer);
-    GetStream().send(packet2);
-    GetStream().send(packet3);
+    send(packet1buffer);
+    send(packet2);
+    send(packet3);
 
     std::vector<uint8_t> actualOutputFrame;
     ASSERT_TRUE(verifyNextPublishedFramed(actualOutputFrame))
@@ -323,8 +328,8 @@ TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     std::fill(packet2.begin() + TOTAL_USB_HEADER_SIZE, packet2.begin() + packetHeader2->le_length,
               UsbProtocol::USB_FRAME_HEADER_A);
 
-    GetStream().send(packet1);
-    GetStream().send(packet2);
+    send(packet1);
+    send(packet2);
 
     std::vector<uint8_t> actualOutputFrame;
     ASSERT_TRUE(verifyNextPublishedFramed(actualOutputFrame))
@@ -340,7 +345,7 @@ TEST_F(MjpegStreamTest, IgnoresInvalidCameraId) {
     packetHeader->device_id = 99;
     packetHeader->le_length = EndianConversion::hostToWire(15);
 
-    GetStream().send(packet);
+    send(packet);
     verifyNoValidFramesPublished();
 }
 
@@ -351,7 +356,7 @@ TEST_F(MjpegStreamTest, IgnoresPayloadExceedingBufferSize) {
     packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader->le_length = EndianConversion::hostToWire(50);
 
-    GetStream().send(packet);
+    send(packet);
     verifyNoValidFramesPublished();
 }
 
@@ -362,7 +367,7 @@ TEST_F(MjpegStreamTest, IgnoresTruncatedMetadata) {
     packetHeader->device_id = UsbProtocol::VIDEO_CAMERA_ID;
     packetHeader->le_length = EndianConversion::hostToWire(5);
 
-    GetStream().send(packet);
+    send(packet);
     verifyNoValidFramesPublished();
 }
 
@@ -382,7 +387,7 @@ TEST_F(MjpegStreamTest, IgnoresUnsupportedCameraConfiguration) {
     payloadHeader->flags = 0;
     payloadHeader->le_gravity_sensor = 0;
 
-    GetStream().send(packet);
+    send(packet);
 }
 
 TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
@@ -399,7 +404,7 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     payloadHeader1->device_number = 0;
     payloadHeader1->le_gravity_sensor = 0;
 
-    GetStream().send(packet1);
+    send(packet1);
 
     std::vector<uint8_t> packet2(20, 0x00);
 
@@ -415,7 +420,7 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     payloadHeader2->device_number = 1;
     payloadHeader2->le_gravity_sensor = 0;
 
-    GetStream().send(packet2);
+    send(packet2);
 }
 
 TEST_F(MjpegStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
