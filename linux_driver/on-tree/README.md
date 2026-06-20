@@ -103,14 +103,10 @@ sudo make modules_install
 ```bash
 # run this in the linux tree root folder
 
-# compile all the modules
-make modules -j6
+make M=drivers/media/usb/useeplus modules
 
-# install just the useeplus driver module
-sudo cp drivers/media/usb/useeplus/useeplus.ko /lib/modules/$(uname -r)/kernel/drivers/media/usb/useeplus/
+sudo make M=drivers/media/usb/useeplus modules_install
 
-# have the kernel reload updated modules
-sudo depmod -a
 ```
 
 ### Docker
