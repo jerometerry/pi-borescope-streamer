@@ -599,7 +599,7 @@ static void up_on_frame_incomplete(void *context)
 	vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 
 	/*
-	 * Clear the active pointer so the upcoming on_frame_start
+	 * Clear the active pointer so the upcoming on_video_frame_start
 	 * knows it needs to pull a fresh buffer from the ready_queue.
 	 */
 	drv_data->decoder.active_buf = NULL;
@@ -612,7 +612,7 @@ static void up_on_frame_complete(void *context)
 	struct vb2_v4l2_buffer *v4l2_buf;
 	struct up_buffer *active_buf;
 	struct vb2_buffer *vb2_buf;
-	size_t pl_len;
+	size_t vff_len;
 
 	if (!drv_data->decoder.active_buf)
 		return;
@@ -621,12 +621,12 @@ static void up_on_frame_complete(void *context)
 	v4l2_buf = &active_buf->vb2_buffer;
 	vb2_buf = &v4l2_buf->vb2_buf;
 
-	pl_len = drv_data->decoder.active_pl_len;
-	if (pl_len < 2) {
+	vff_len = drv_data->decoder.active_pl_len;
+	if (vff_len < 2) {
 		drv_data->dbg.frames_dropped_eoi++;
 		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 	} else {
-		vb2_set_plane_payload(vb2_buf, 0, pl_len);
+		vb2_set_plane_payload(vb2_buf, 0, vff_len);
 
 		vb2_buf->timestamp = ktime_get_ns();
 		v4l2_buf->sequence = drv_data->pipeline.sequence++;
@@ -677,7 +677,7 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 	struct up_buffer *active_buf;
 	struct vb2_buffer *vb2_buf;
 	struct device *dev;
-	size_t pl_len;
+	size_t vff_len;
 	u8 *vaddr;
 
 	if (!drv_data->decoder.active_buf)
@@ -687,8 +687,8 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 	v4l2_buf = &active_buf->vb2_buffer;
 	vb2_buf = &v4l2_buf->vb2_buf;
 
-	pl_len = drv_data->decoder.active_pl_len;
-	if (pl_len + len > MAX_FRAME_SIZE) {
+	vff_len = drv_data->decoder.active_pl_len;
+	if (vff_len + len > MAX_FRAME_SIZE) {
 		dev = &drv_data->usb.itf->dev;
 		dev_err_ratelimited(dev, "useeplus: Overflow Prevention.\n");
 
@@ -704,7 +704,7 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 	vaddr = vb2_plane_vaddr(vb2_buf, 0);
 
 	if (vaddr) {
-		memcpy(vaddr + pl_len, data, len);
+		memcpy(vaddr + vff_len, data, len);
 		drv_data->decoder.active_pl_len += len;
 	}
 }
@@ -733,10 +733,10 @@ static void up_work_handler(struct work_struct *work)
 		decoder.found_soi = drv_data->decoder.found_soi;
 		decoder.eof_reached = drv_data->decoder.eof_reached;
 
-		decoder.cb.on_frame_start = up_on_frame_start;
-		decoder.cb.on_video_payload = up_on_video_payload;
-		decoder.cb.on_frame_complete = up_on_frame_complete;
-		decoder.cb.on_frame_incomplete = up_on_frame_incomplete;
+		decoder.cb.on_video_frame_start = up_on_frame_start;
+		decoder.cb.on_video_frame_fragment = up_on_video_payload;
+		decoder.cb.on_video_frame_complete = up_on_frame_complete;
+		decoder.cb.on_video_frame_incomplete = up_on_frame_incomplete;
 
 		buf_len = drv_data->decoder.workspace_len;
 		consumed = up_decode_bulk(&decoder, dec_buf, buf_len);

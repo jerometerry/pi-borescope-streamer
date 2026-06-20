@@ -19,10 +19,10 @@ MjpegStream::MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {
     inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
 
     decoder_.context = this;
-    decoder_.cb.on_frame_start = MjpegStream::onFrameStartCallback;
-    decoder_.cb.on_video_payload = MjpegStream::onVideoPayloadCallback;
-    decoder_.cb.on_frame_complete = MjpegStream::onFrameCompleteCallback;
-    decoder_.cb.on_frame_incomplete = MjpegStream::onFrameIncompleteCallback;
+    decoder_.cb.on_video_frame_start = MjpegStream::onFrameStartCallback;
+    decoder_.cb.on_video_frame_fragment = MjpegStream::onVideoPayloadCallback;
+    decoder_.cb.on_video_frame_complete = MjpegStream::onFrameCompleteCallback;
+    decoder_.cb.on_video_frame_incomplete = MjpegStream::onFrameIncompleteCallback;
 }
 
 void MjpegStream::send(std::span<const uint8_t> data) {

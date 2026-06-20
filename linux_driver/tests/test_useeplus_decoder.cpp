@@ -32,9 +32,9 @@ TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame)
 	MockContext mock_context{};
 
 	struct up_decoder_callbacks cb = {
-		.on_frame_start = mock_on_frame_start,
-		.on_video_payload = mock_on_video_payload,
-		.on_frame_complete = mock_on_frame_end
+		.on_video_frame_start = mock_on_frame_start,
+		.on_video_frame_fragment = mock_on_video_payload,
+		.on_video_frame_complete = mock_on_frame_end
 	};
 	struct up_decoder decoder = { .cb = cb,
 				      .context = &mock_context,
@@ -44,12 +44,12 @@ TEST(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame)
 				      .eof_reached = false };
 
 	std::vector<u8> buffer(1024, 0x00);
-	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer.data(), 0);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 6);
 
-	struct up_video_frm_frag_hdr *pl = up_get_pl_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
+	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
 	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -74,9 +74,9 @@ TEST(DecoderTest, SkipsGhostHeadersAndFindsValidPayload)
 {
 	MockContext mock_context{};
 	struct up_decoder_callbacks cb = {
-		.on_frame_start = mock_on_frame_start,
-		.on_video_payload = mock_on_video_payload,
-		.on_frame_complete = mock_on_frame_end
+		.on_video_frame_start = mock_on_frame_start,
+		.on_video_frame_fragment = mock_on_video_payload,
+		.on_video_frame_complete = mock_on_frame_end
 	};
 	struct up_decoder decoder = { .cb = cb,
 				      .context = &mock_context,
@@ -92,13 +92,13 @@ TEST(DecoderTest, SkipsGhostHeadersAndFindsValidPayload)
 
 	size_t valid_start = 10;
 
-	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), valid_start);
+	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer.data(), valid_start);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
 	struct up_video_frm_frag_hdr *pl =
-		up_get_pl_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
+		up_get_video_frm_frag_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
 	pl->frame_id = 2;
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -119,9 +119,9 @@ TEST(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 {
 	MockContext mock_context{};
 	struct up_decoder_callbacks cb = {
-		.on_frame_start = mock_on_frame_start,
-		.on_video_payload = mock_on_video_payload,
-		.on_frame_complete = mock_on_frame_end
+		.on_video_frame_start = mock_on_frame_start,
+		.on_video_frame_fragment = mock_on_video_payload,
+		.on_video_frame_complete = mock_on_frame_end
 	};
 	struct up_decoder decoder = { .cb = cb,
 				      .context = &mock_context,
@@ -131,7 +131,7 @@ TEST(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 				      .eof_reached = false };
 
 	std::vector<u8> buffer(1024, 0x00);
-	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer.data(), 0);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(100);
@@ -146,9 +146,9 @@ TEST(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 {
 	MockContext mock_context{};
 	struct up_decoder_callbacks cb = {
-		.on_frame_start = mock_on_frame_start,
-		.on_video_payload = mock_on_video_payload,
-		.on_frame_complete = mock_on_frame_end
+		.on_video_frame_start = mock_on_frame_start,
+		.on_video_frame_fragment = mock_on_video_payload,
+		.on_video_frame_complete = mock_on_frame_end
 	};
 	struct up_decoder decoder = { .cb = cb,
 				      .context = &mock_context,
@@ -158,12 +158,12 @@ TEST(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 				      .eof_reached = false };
 
 	std::vector<u8> buffer(1024, 0x00);
-	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer.data(), 0);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
-	struct up_video_frm_frag_hdr *pl = up_get_pl_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
+	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
 	pl->frame_id = 1;
 	up_set_has_gravity_sensor(pl, true);
 
@@ -185,9 +185,9 @@ TEST(DecoderTest, DropsChunkIfSoiNotFound)
 {
 	MockContext mock_context{};
 	struct up_decoder_callbacks cb = {
-		.on_frame_start = mock_on_frame_start,
-		.on_video_payload = mock_on_video_payload,
-		.on_frame_complete = mock_on_frame_end
+		.on_video_frame_start = mock_on_frame_start,
+		.on_video_frame_fragment = mock_on_video_payload,
+		.on_video_frame_complete = mock_on_frame_end
 	};
 	struct up_decoder decoder = { .cb = cb,
 				      .context = &mock_context,
@@ -197,12 +197,12 @@ TEST(DecoderTest, DropsChunkIfSoiNotFound)
 				      .eof_reached = false };
 
 	std::vector<u8> buffer(1024, 0x00);
-	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer.data(), 0);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
-	struct up_video_frm_frag_hdr *pl = up_get_pl_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
+	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_SIZE);
 	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -224,9 +224,9 @@ TEST(DecoderTest, HuntsForSignatureOnInvalidPacket)
 {
 	MockContext mock_context{};
 	struct up_decoder_callbacks cb = {
-		.on_frame_start = mock_on_frame_start,
-		.on_video_payload = mock_on_video_payload,
-		.on_frame_complete = mock_on_frame_end
+		.on_video_frame_start = mock_on_frame_start,
+		.on_video_frame_fragment = mock_on_video_payload,
+		.on_video_frame_complete = mock_on_frame_end
 	};
 	struct up_decoder decoder = { .cb = cb,
 				      .context = &mock_context,
@@ -242,13 +242,13 @@ TEST(DecoderTest, HuntsForSignatureOnInvalidPacket)
 	buffer[2] = 0xCC;
 
 	size_t valid_start = 3;
-	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer.data(), valid_start);
+	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer.data(), valid_start);
 	pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt->device_id = VIDEO_CAMERA_ID;
 	pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
 	struct up_video_frm_frag_hdr *pl =
-		up_get_pl_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
+		up_get_video_frm_frag_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
 	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);
@@ -269,9 +269,9 @@ TEST(DecoderTest, RejectsMassiveLengthAndHunts)
 {
 	MockContext mock_context{};
 	struct up_decoder_callbacks cb = {
-		.on_frame_start = mock_on_frame_start,
-		.on_video_payload = mock_on_video_payload,
-		.on_frame_complete = mock_on_frame_end
+		.on_video_frame_start = mock_on_frame_start,
+		.on_video_frame_fragment = mock_on_video_payload,
+		.on_video_frame_complete = mock_on_frame_end
 	};
 	struct up_decoder decoder = { .cb = cb,
 				      .context = &mock_context,
@@ -282,20 +282,20 @@ TEST(DecoderTest, RejectsMassiveLengthAndHunts)
 
 	std::vector<u8> buffer(1024, 0x00);
 
-	struct up_usb_frm_hdr *bad_pkt = up_get_pkt_hdr(buffer.data(), 0);
+	struct up_usb_frm_hdr *bad_pkt = up_get_usb_frm_hdr(buffer.data(), 0);
 	bad_pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	bad_pkt->device_id = VIDEO_CAMERA_ID;
-	bad_pkt->le_length = UP_LE16_TO_CPU(UP_MAX_WIRE_LEN + 100);
+	bad_pkt->le_length = UP_LE16_TO_CPU(UP_MAX_VIDEO_FRM_FRAG_LEN + 100);
 
 	size_t valid_start = 200;
 	struct up_usb_frm_hdr *good_pkt =
-		up_get_pkt_hdr(buffer.data(), valid_start);
+		up_get_usb_frm_hdr(buffer.data(), valid_start);
 	good_pkt->le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	good_pkt->device_id = VIDEO_CAMERA_ID;
 	good_pkt->le_length = UP_LE16_TO_CPU(UP_VIDEO_FRM_FRAG_HDR_SIZE + 4);
 
 	struct up_video_frm_frag_hdr *pl =
-		up_get_pl_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
+		up_get_video_frm_frag_hdr(buffer.data(), valid_start + UP_USB_FRM_HDR_SIZE);
 	pl->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(pl + 1);

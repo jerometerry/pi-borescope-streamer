@@ -9,7 +9,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithDefaultInitializer)
 	struct up_video_frm_frag_hdr payload_header = {};
 	bool valid;
 
-	valid = up_valid_mjpeg_pl(&payload_header);
+	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
 
 	EXPECT_TRUE(valid);
 }
@@ -20,7 +20,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithInvalidCameraNumber)
 	bool valid;
 
 	payload_header.device_number = 99;
-	valid = up_valid_mjpeg_pl(&payload_header);
+	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
 
 	EXPECT_FALSE(valid);
 }
@@ -31,7 +31,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithHasGravitySensorSet)
 	bool valid;
 
 	up_set_has_gravity_sensor(&payload_header, true);
-	valid = up_valid_mjpeg_pl(&payload_header);
+	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
 
 	EXPECT_FALSE(valid);
 }
@@ -42,7 +42,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithButtonPressedSet)
 	bool valid;
 
 	up_set_button_pressed(&payload_header, true);
-	valid = up_valid_mjpeg_pl(&payload_header);
+	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
 
 	EXPECT_TRUE(valid);
 }
@@ -53,7 +53,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithOtherFlagsSet)
 	bool valid;
 
 	up_set_other_flags(&payload_header, 3);
-	valid = up_valid_mjpeg_pl(&payload_header);
+	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
 
 	EXPECT_FALSE(valid);
 }
@@ -67,15 +67,15 @@ TEST(ProtocolTest, ValidatesDeviceId)
 
 TEST(ProtocolTest, ValidatesPacketDelimeter)
 {
-	EXPECT_TRUE(up_is_valid_pkt_del(UP_PKT_DEL));
-	EXPECT_FALSE(up_is_valid_pkt_del(0x0000));
+	EXPECT_TRUE(up_is_valid_usb_frm_del(UP_PKT_DEL));
+	EXPECT_FALSE(up_is_valid_usb_frm_del(0x0000));
 }
 
 TEST(ProtocolTest, ChecksPacketHeaderCombination)
 {
-	EXPECT_TRUE(up_check_pkt_hdr(UP_PKT_DEL, VIDEO_CAMERA_ID));
-	EXPECT_FALSE(up_check_pkt_hdr(0x0000, VIDEO_CAMERA_ID));
-	EXPECT_FALSE(up_check_pkt_hdr(UP_PKT_DEL, 0xFF));
+	EXPECT_TRUE(up_check_usb_frm_hdr(UP_PKT_DEL, VIDEO_CAMERA_ID));
+	EXPECT_FALSE(up_check_usb_frm_hdr(0x0000, VIDEO_CAMERA_ID));
+	EXPECT_FALSE(up_check_usb_frm_hdr(UP_PKT_DEL, 0xFF));
 }
 
 TEST(ProtocolTest, GetsPacketDelimeterAndLength)
@@ -84,8 +84,8 @@ TEST(ProtocolTest, GetsPacketDelimeterAndLength)
 	pkt.le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt.le_length = UP_LE16_TO_CPU(500);
 
-	EXPECT_EQ(up_get_pkt_del(&pkt), UP_PKT_DEL);
-	EXPECT_EQ(up_get_pl_len(&pkt), 500);
+	EXPECT_EQ(up_get_usb_frm_del(&pkt), UP_PKT_DEL);
+	EXPECT_EQ(up_get_video_frm_frag_len(&pkt), 500);
 }
 
 TEST(ProtocolTest, ValidatesFullPacketHeaderStruct)
@@ -94,17 +94,17 @@ TEST(ProtocolTest, ValidatesFullPacketHeaderStruct)
 	pkt.le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
 	pkt.device_id = VIDEO_CAMERA_ID;
 
-	EXPECT_TRUE(up_is_valid_pkt_hdr(&pkt));
+	EXPECT_TRUE(up_is_valid_usb_frm_hdr(&pkt));
 
 	pkt.device_id = 0xFF;
-	EXPECT_FALSE(up_is_valid_pkt_hdr(&pkt));
+	EXPECT_FALSE(up_is_valid_usb_frm_hdr(&pkt));
 }
 
 TEST(ProtocolTest, GetsHeaderPointersFromBuffer)
 {
 	u8 buffer[100] = { 0 };
-	struct up_usb_frm_hdr *pkt = up_get_pkt_hdr(buffer, 10);
-	struct up_video_frm_frag_hdr *pl = up_get_pl_hdr(buffer, 20);
+	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer, 10);
+	struct up_video_frm_frag_hdr *pl = up_get_video_frm_frag_hdr(buffer, 20);
 
 	EXPECT_EQ((u8 *)pkt, buffer + 10);
 	EXPECT_EQ((u8 *)pl, buffer + 20);
