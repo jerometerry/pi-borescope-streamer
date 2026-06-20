@@ -219,7 +219,6 @@ target_compile_definitions(usockets PRIVATE LIBUS_NO_SSL=1)
 
 add_library(mjpeg_streamer_core STATIC
     src/mjpeg_server.cpp
-    src/v4l2_mjpeg_stream.cpp
     src/zero_allocation_response_builder.cpp
     ${GENERATED_HPP}
 )
@@ -227,12 +226,12 @@ add_library(MjpegStreamer::Core ALIAS mjpeg_streamer_core)
 
 if(APPLE)
     target_sources(mjpeg_streamer_core PRIVATE
-        src/mjpeg_stream_capture.cpp
-        src/usb_camera.cpp
-        src/usb_context.cpp
-        src/usb_device_finder.cpp
-        src/usb_driver.cpp
-        src/mjpeg_stream.cpp
+        src/libusb/mjpeg_stream_capture.cpp
+        src/libusb/usb_camera.cpp
+        src/libusb/usb_context.cpp
+        src/libusb/usb_device_finder.cpp
+        src/libusb/usb_driver.cpp
+        src/libusb/mjpeg_stream.cpp
         ${LINUX_DRIVER_DIR}/useeplus_protocol.c
     )
     target_link_libraries(mjpeg_streamer_core PUBLIC PkgConfig::LIBUSB)
@@ -240,6 +239,8 @@ endif()
 
 target_include_directories(mjpeg_streamer_core
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/libusb"
+    PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include/v4l2"
     PUBLIC "${LINUX_DRIVER_DIR}"
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated"
 )
@@ -255,7 +256,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(STATUS "Linux detected: Building v4l2 targets.")
 
     add_executable(v4l2_mjpeg_server
-        src/v4l2_mjpeg_server_main.cpp
+        src/v4l2/v4l2_mjpeg_stream.cpp
+        src/v4l2/v4l2_mjpeg_server_main.cpp
     )
     target_link_libraries(v4l2_mjpeg_server
         PRIVATE MjpegStreamer::Core project_warnings
@@ -263,13 +265,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 elseif(APPLE)
     message(STATUS "MacOS detected: Building libusb targets.")
 
-    add_executable(mjpeg_server src/mjpeg_server_main.cpp)
+    add_executable(mjpeg_server src/libusb/mjpeg_server_main.cpp)
     target_link_libraries(mjpeg_server PRIVATE MjpegStreamer::Core project_warnings)
 
-    add_executable(mjpeg_stream_capture src/mjpeg_stream_capture_main.cpp)
+    add_executable(mjpeg_stream_capture src/libusb/mjpeg_stream_capture_main.cpp)
     target_link_libraries(mjpeg_stream_capture PRIVATE MjpegStreamer::Core project_warnings)
 
-    add_executable(mjpeg_frame_extractor src/mjpeg_frame_extractor_main.cpp)
+    add_executable(mjpeg_frame_extractor src/libusb/mjpeg_frame_extractor_main.cpp)
     target_link_libraries(mjpeg_frame_extractor PRIVATE MjpegStreamer::Core project_warnings)
 endif()
 
