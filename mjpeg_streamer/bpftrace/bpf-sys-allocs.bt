@@ -1,0 +1,17 @@
+#!/usr/bin/env bpftrace
+
+BEGIN {
+    printf("Tracing system-wide memory allocations...\n");
+    printf("Aggregating by [Process Name -> User Stack]. Hit Ctrl-C to finish and dump stats.\n");
+}
+
+uprobe:libc:malloc,
+uprobe:libc:calloc,
+uprobe:libc:realloc
+{
+    @alloc_stacks[comm, ustack] = count();
+}
+
+END {
+    printf("\n--- Allocation Stack Traces by Process (Counted) ---\n");
+}
