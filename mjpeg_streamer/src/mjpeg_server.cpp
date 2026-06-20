@@ -1,7 +1,9 @@
 #include "mjpeg_server.hpp"
+
 #include <App.h>
 #include <HttpResponse.h>
 #include <Loop.h>
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>

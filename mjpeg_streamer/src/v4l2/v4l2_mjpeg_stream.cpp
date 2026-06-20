@@ -1,15 +1,15 @@
 #include "v4l2_mjpeg_stream.hpp"
+
 #include <cstdint>
 #include <span>
+
 #include "video_frame.hpp"
 #include "video_frame_buffer.hpp"
 
-V4l2MjpegStream::V4l2MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {
-}
+V4l2MjpegStream::V4l2MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {}
 
 void V4l2MjpegStream::send(std::span<const uint8_t> data) {
-    if (data.empty())
-        return;
+    if (data.empty()) return;
 
     currentClaimSequence_ = disruptor_->claim();
     VideoFrame& slot = disruptor_->getBySequence(currentClaimSequence_);

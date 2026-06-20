@@ -111,13 +111,3 @@ $(BUILD_DIR)/mjpeg_frame_extractor: $(BUILD_DIR)/src/libusb/mjpeg_frame_extracto
 
 clean:
 	rm -rf $(BUILD_DIR) $(GEN_DIR)
-
-FORMAT_SRCS := $(shell find src include tests ../linux_driver/tests -name '*.cpp' -o -name '*.h' -o -name '*.hpp' 2>/dev/null)
-
-format:
-	@echo "Formatting C++ code with clang-format"
-	@clang-format -i $(FORMAT_SRCS)
-
-check-format:
-	@echo "Checking C++ code formatting"
-	@clang-format --dry-run --Werror $(FORMAT_SRCS)

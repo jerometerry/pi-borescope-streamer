@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <span>
+
 #include "video_frame_buffer.hpp"
 
 class V4l2MjpegStream {

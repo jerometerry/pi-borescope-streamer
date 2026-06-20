@@ -91,7 +91,9 @@ class MjpegStream {
      */
     struct up_decoder decoder_{};
 
-    static void onFrameStartCallback(void* context, uint8_t frameId, uint8_t devNum); // NOLINT(bugprone-easily-swappable-parameters)
+    static void onFrameStartCallback(
+        void* context, uint8_t frameId,
+        uint8_t devNum);  // NOLINT(bugprone-easily-swappable-parameters)
     static void onVideoPayloadCallback(void* context, uint8_t* data, size_t len);
     static void onFrameCompleteCallback(void* context);
     static void onFrameIncompleteCallback(void* context);

@@ -46,7 +46,9 @@ void MjpegStream::send(std::span<const uint8_t> data) {
     }
 }
 
-void MjpegStream::onFrameStartCallback(void* context, uint8_t frameId, uint8_t devNum) { // NOLINT(bugprone-easily-swappable-parameters)
+void MjpegStream::onFrameStartCallback(
+    void* context, uint8_t frameId,
+    uint8_t devNum) {  // NOLINT(bugprone-easily-swappable-parameters)
     auto* self = static_cast<MjpegStream*>(context);
 
     if (self->frameActive_) {
