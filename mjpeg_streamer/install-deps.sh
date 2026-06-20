@@ -5,14 +5,14 @@ mkdir -p third_party
 
 if [ ! -d "third_party/uWebSockets" ]; then
     echo "Cloning uWebSockets..."
-    git clone --depth 1 --branch v20.67.0 https://github.com third_party/uWebSockets
+    git clone --depth 1 --branch v20.67.0 https://github.com/uNetworking/uWebSockets.git third_party/uWebSockets
 else
     echo "uWebSockets already exists, skipping clone."
 fi
 
 if [ ! -d "third_party/uSockets" ]; then
     echo "Cloning uSockets..."
-    git clone --depth 1 --branch v0.8.8 https://github.com third_party/uSockets
+    git clone --depth 1 --branch v0.8.8 https://github.com/uNetworking/uSockets.git third_party/uSockets
 else
     echo "uSockets already exists, skipping clone."
 fi
