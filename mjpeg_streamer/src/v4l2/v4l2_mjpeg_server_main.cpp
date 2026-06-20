@@ -50,13 +50,14 @@ class V4l2Camera {
         size_t length;
     };
 
-    int fd_{0};
+    int fd_;
     std::vector<MmapBuffer> buffers_;
     FrameHandler frame_handler_;
 
 public:
     V4l2Camera(const std::string& device_path, FrameHandler frame_handler) :
-        frame_handler_(std::move(frame_handler)), fd_(open(device_path.c_str(), O_RDWR | O_NONBLOCK, 0)) {
+        fd_(open(device_path.c_str(), O_RDWR | O_NONBLOCK, 0)),
+	frame_handler_(std::move(frame_handler))  {
         if (fd_ < 0) {
             throw std::runtime_error("Cannot open " + device_path);
         }
