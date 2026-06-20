@@ -1,13 +1,7 @@
 #include "mjpeg_server.hpp"
-
-extern "C" {
-    #include <libusockets.h>
-}
-
 #include <App.h>
 #include <HttpResponse.h>
 #include <Loop.h>
-
 #include <algorithm>
 #include <atomic>
 #include <cstdint>

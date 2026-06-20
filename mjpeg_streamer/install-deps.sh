@@ -2,5 +2,6 @@ mkdir -p third_party
 git clone --depth 1 --branch v20.67.0 https://github.com/uNetworking/uWebSockets.git third_party/uWebSockets
 git clone --depth 1 --branch v0.8.8 https://github.com/uNetworking/uSockets.git third_party/uSockets
 cd third_party/uSockets
-make CC="zig cc" CXX="zig c++" AR="zig ar"
+make clean
+make CC="zig cc" CXX="zig c++" AR="zig ar" CFLAGS="-std=c11 -Isrc -O3 -DLIBUS_NO_SSL"
 cd ../../
