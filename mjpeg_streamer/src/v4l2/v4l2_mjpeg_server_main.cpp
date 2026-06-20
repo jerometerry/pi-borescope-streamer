@@ -29,6 +29,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
@@ -49,7 +50,7 @@ class V4l2Camera {
         size_t length;
     };
 
-    int fd_;
+    int fd_{0};
     std::vector<MmapBuffer> buffers_;
     FrameHandler frame_handler_;
 
