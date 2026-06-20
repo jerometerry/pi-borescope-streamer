@@ -40,7 +40,7 @@
 
 namespace {
     constexpr int DEFAULT_PORT = 8080;
-    constexpr std::string_view DEFAULT_DEVICE_PATH = "/dev/video0";
+    constexpr std::string DEFAULT_DEVICE_PATH = "/dev/video0";
 
     std::atomic<bool> running{true};
     using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
