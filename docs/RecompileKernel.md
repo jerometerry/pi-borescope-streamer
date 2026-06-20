@@ -1,107 +1,133 @@
-# Recompile Kernel Steps
+# Recompiling the Raspberry Pi Kernel (eBPF & BTF Support)
 
-Official Raspberry Pi [Linux Kernel Docs](https://www.raspberrypi.com/documentation/computers/linux_kernel.html)
+To utilize advanced observability tools like eBPF and FlameGraphs, the Linux kernel must be compiled with BPF Type Format (BTF) support. On a default Raspberry Pi OS installation, this requires pulling the kernel source, configuring the tracers, and recompiling the core image.
 
-**Caution**: When recompiling the kernel an installing it onto boot media, it's possible to break booting of the Raspberry PI. Before attempting to recompile the kernel, I'd advise having a serial cable on hand and verifying that you can connect to your Raspberry PI using your terminal emulator of choice.
+_Reference: Official Raspberry Pi [Linux Kernel Documentation_](https://www.raspberrypi.com/documentation/computers/linux_kernel.html)
 
-I purchased a DTECH [USB to TTL Serial cable](https://www.amazon.ca/dp/B0FBM3KWBD). At first I wired it up to via GPIO pins GND. Then I switched to using the default UART port, by cutting off the DuPont connectors and adding a mini micro JST SH 1.0mm Pitch 3-Pin Male connector.
+## ⚠️ Important: Hardware Failsafes
 
-The official Raspberry Pi [Debug Probe](https://www.raspberrypi.com/products/debug-probe/) is your best bet for the least amount of hassle.
+**Caution:** Recompiling and replacing the boot kernel carries a high risk of breaking the boot process. Before attempting this, it is highly advised to configure a hardware serial connection so you can read kernel panics or boot failures from the console.
 
-With the USB to TTL Serial Cable attached, I use minicom to connect to the Raspberry PI.
+**Serial Debugging on the Raspberry Pi 5:**
+The Raspberry Pi 5 features a dedicated UART debug port.
+
+- **The Easy Way:** The official Raspberry Pi [Debug Probe](https://www.raspberrypi.com/products/debug-probe/) provides a plug-and-play solution.
+- **The DIY Way:** You can use a standard USB-to-TTL Serial cable (e.g., PL2303G or FTDI). Because the Pi 5 UART port is miniaturized, you will need to wire the cable to a **micro JST SH 1.0mm Pitch 3-Pin Male** connector.
+
+Connect to the Pi from your host machine using a terminal emulator like `minicom` (adjust your `/dev/tty` or `/dev/cu` device path accordingly):
 
 ```bash
 minicom -D /dev/cu.PL2303G-USBtoUART1220 -b 115200
+
 ```
 
-## Install Necessary Libraries
+---
+
+## 1. Install Build Dependencies
+
+Install the required build tools, SSL development headers, and ELF utilities needed for kernel and BTF generation.
 
 ```bash
+sudo apt update
 sudo apt install git bc bison flex libssl-dev make libc6-dev libncurses5-dev libelf-dev dwarves
+
 ```
 
-## Clone Raspberry PI Linux repo
+## 2. Clone the Kernel Source
 
-Clone using depth=1 to only pull down the necessary files. The repo is quite large.
+Clone the official Raspberry Pi Linux repository. Check your current kernel version using `uname -a` and ensure you are working on the corresponding branch (e.g., `rpi-6.6.y`).
+
+_Note: Use `--depth=1` to prevent downloading gigabytes of unnecessary git history._
 
 ```bash
 git clone --depth=1 https://github.com/raspberrypi/linux
 cd linux
+
 ```
 
-Checkout the branch corresponding to the version of the linux kernel you are running. You can find the current kernel version via the command `uname -a`.
+## 3. Generate the Base Configuration
 
-The branch for the latest kernel version is checked out by default. The latest branch at the time of this writing is `rpi-6.18.y`.
-
-## Make Kernel Config
-
-**Raspberry Pi 5 64-bit OS**
+Set the kernel variable for the **Raspberry Pi 5 (64-bit)** and generate the default Broadcom 2712 configuration file.
 
 ```bash
 KERNEL=kernel_2712
 make bcm2712_defconfig
+
 ```
 
-## Edit Kernel Config
+## 4. Customize the Configuration (eBPF & BTF)
 
-You can use the built in config editor wizard via:
+Launch the built-in configuration wizard to safely toggle kernel flags:
 
 ```bash
 make menuconfig
+
 ```
 
-This opens up a console application that lets you tweak settings in a safer way than editing the config file directly. You can still edit the .config file manually if you want.
+Navigate through the menus and enable the following specific options to ensure full `bpftrace` and FlameGraph compatibility:
 
-It's a good idea to customize local version to include something to identify your custom kernel version: e.g. `-bpf`.
+1. **Tag Your Custom Kernel:**
 
-- General setup -> Local version - append to kernel release.
+- Navigate to: `General setup` -> `Local version - append to kernel release`
+- Set it to something identifiable, such as `-bpf` (so your kernel shows as `6.6.y-bpf`).
 
-## Configuring BTF Support
+2. **Enable BTF & Debug Info:**
 
-If you want to use eBPF, for example to generate FlameGraphs, you'll need to enable BTF (BPF Type Format) Support.
+- Navigate to: `Kernel hacking` -> `Compile-time checks and compiler options` -> `Compile the Kernel with debug info`
+- Select: `Rely on the toolchain's implicit default DWARF version`
+- Navigate to: `Kernel hacking` -> `Compile-time checks and compiler options` -> `Generate BTF typeinfo`
 
-- Kernel hacking -> Compile-time checks and compiler options -> Compile the Kernel with debug info
-  - Rely on the toolchain's implicit default DWARF version
-- Kernel hacking -> Compile-time checks and compiler options -> Generate BTF typeinfo
-- Kernel hacking -> Tracers -> Enable uprobes-based dynamic events
-- Kernel Hacking -> Printk and logs -> Enable dynamic printk() support
+3. **Enable Uprobes & Dynamic Logging:**
 
-If you want to run BPF / linux perf on custom applications you are building, ensure to add the following flags:
+- Navigate to: `Kernel hacking` -> `Tracers` -> `Enable uprobes-based dynamic events`
+- Navigate to: `Kernel hacking` -> `Printk and logs` -> `Enable dynamic printk() support`
 
-- `-g`: Embeds your source code maps into the build
-- `-fno-omit-frame-pointer`: Instructs the compiler to keep the frame pointer register on the stack for every function call.
+Save the configuration and exit the wizard.
 
-## Build the kernel, modules, and device trees
+## 5. Build the Kernel
 
-**Raspberry Pi 5 64-bit OS**
+Compile the kernel image, modules, and Device Tree Blobs (DTBs). Using `-j$(nproc)` ensures the compiler uses all available CPU cores.
 
 ```bash
-make -j6 Image.gz modules dtbs
+make -j$(nproc) Image.gz modules dtbs
+
 ```
 
-## Install modules
+_(Note: This process is incredibly CPU-intensive and can take up to an hour depending on your hardware cooling.)_
+
+## 6. Installation & Deployment
+
+Once the build completes successfully, install the new modules to your root filesystem, backup your existing kernel, and deploy the new images to the boot partition.
+
+**1. Install the Kernel Modules:**
 
 ```bash
-sudo make -j6 modules_install
+sudo make -j$(nproc) modules_install
+
 ```
 
-## Backup Current kernel image
+**2. Backup the Current Kernel:**
 
 ```bash
 sudo cp /boot/firmware/$KERNEL.img /boot/firmware/$KERNEL-backup.img
+
 ```
 
-## Copy the new kernel and DTBs to the boot partition
+**3. Deploy the New Kernel & Device Trees:**
 
 ```bash
 sudo cp arch/arm64/boot/Image.gz /boot/firmware/$KERNEL.img
 sudo cp arch/arm64/boot/dts/broadcom/*.dtb /boot/firmware/
 sudo cp arch/arm64/boot/dts/overlays/*.dtb* /boot/firmware/overlays/
 sudo cp arch/arm64/boot/dts/overlays/README /boot/firmware/overlays/
+
 ```
 
-## Reboot
+**4. Reboot:**
 
 ```bash
 sudo reboot
+
 ```
+
+If the system boots successfully, running `uname -a` will now display your custom `-bpf` tag, and you are ready to start profiling with eBPF.

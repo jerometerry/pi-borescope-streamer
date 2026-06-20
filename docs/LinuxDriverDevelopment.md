@@ -1,149 +1,131 @@
-# Useeplus Linux Driver
+# Useeplus Linux Driver Development
 
-## Prerequisites
+This guide covers the workflow for compiling, loading, testing, and debugging the `useeplus_v4l2` kernel module on a Raspberry Pi.
+
+## 1. Prerequisites & Environment Setup
+
+To compile kernel modules, you need the build tools and the specific Linux headers matching your active kernel.
 
 ```bash
 sudo apt update
 sudo apt install build-essential linux-headers-$(uname -r)
+
 ```
 
-## Linux Kernel Style Check
+### Linux Kernel Style Guide
 
-https://docs.kernel.org/process/coding-style.html
+When writing kernel drivers, it is highly recommended to strictly adhere to the official Linux Kernel coding standards.
 
-https://docs.kernel.org/driver-api/index.html
+- [Linux Kernel Coding Style](https://docs.kernel.org/process/coding-style.html)
+- [Driver API Documentation](https://docs.kernel.org/driver-api/index.html)
+- [Writing USB Drivers](https://docs.kernel.org/driver-api/usb/writing_usb_driver.html)
+- [Kernel .clang-format Configuration](https://github.com/torvalds/linux/blob/master/.clang-format)
 
-https://docs.kernel.org/driver-api/usb/writing_usb_driver.html
-
-https://github.com/torvalds/linux/blob/master/.clang-format
-
-The Linux Kernel has it's own style checker. It's good practice when writing kernel drivers to stick with the
-Linux Kernel requirements.
-
-On the Raspberry Pi, you can check out the official linux repo, which contains the checkpath.pl script.
-
-See my [Recompiling Kernel](../../RecompileKernel.md) docs for Raspberry Pi specific details on recompiling the kernel.
-If you're tinkering with building linux drivers, recompiling the kernel may be necessary to configure it for your needs.
-
-**Checkout the Raspberry Pi Linux Repo**
-
-Make sure to switch to the branch for your specific kernel version.
+To run the official kernel style checker (`checkpatch.pl`), you can clone a shallow copy of the Raspberry Pi Linux repository. Ensure you check out the branch matching your current kernel version. _(See the [Recompiling Kernel](https://www.google.com/search?q=../../RecompileKernel.md) documentation for advanced configuration details)._
 
 ```bash
+# Clone the repository to get the scripts
 git clone --depth=1 https://github.com/raspberrypi/linux
+
+# Run the style checker against your source file
+./linux/scripts/checkpatch.pl --file ./useeplus_v4l2.c
+
 ```
 
-**Running Linux Kernel Style Check**
+## 2. Building the Driver
 
-```bash
-$/github/linux/scripts/checkpatch.pl --file ./useeplus_v4l2.c
-```
-
-## Building
+The module utilizes the standard `kbuild` system.
 
 ```bash
 make clean
 make
-```
 
-## Verifying Build
-
-```bash
+# Verify the compiled module targets the correct architecture
 modinfo useeplus_v4l2.ko
+
 ```
 
-## Load Linux Driver
+## 3. Module Management (Load & Unload)
+
+When developing, you will frequently need to unload the old driver and insert the newly compiled version.
 
 ```bash
-# Watch dmesg in a separate terminal window
-sudo dmesg -w
-
-# Check what's using the module
+# 1. Ensure nothing is currently locking the video device
 sudo lsof /dev/video0
 
-# Verify no useeplus_v4l2 module is found
-lsmod | grep useeplus_v4l2
-
-# If there is, remove the existing useeplus_v4l2 module to deploy a new version
+# 2. Unload the existing module (if it is currently running)
 sudo rmmod useeplus_v4l2
 
-# check if videobuf2_vmalloc module is loaded
-lsmod | grep videobuf2_vmalloc
-
-# If it's not, load it
+# 3. Ensure required kernel dependencies are loaded
 sudo modprobe videobuf2_vmalloc
 
-# Load the new useeplus_v4l2 module
+# 4. Insert the newly compiled module
 sudo insmod ./useeplus_v4l2.ko
 
-# Verify useeplus_v4l2 module is loaded
+# 5. Verify the module successfully registered
 lsmod | grep useeplus_v4l2
 
-# Verify driver was loaded by viewing dmesg output
-dmesg | tail -n 20
 ```
 
-## Changing Log Level
+## 4. Verification & Testing
+
+Once the hardware is physically plugged in and the driver is loaded, verify the Video4Linux subsystem recognizes it.
 
 ```bash
-# View current log levels
-cat /proc/sys/kernel/printk
-```
-
-```bash
-# Set to debug logging for testing
-sudo sysctl -w kernel.printk="8 4 1 3"
-```
-
-```bash
-# Restore default logging
-sudo sysctl -w kernel.printk="3 4 1 3"
-```
-
-## Verify useeplus_v4l2 Registered with Video4Linux
-
-Plug in the useeplus_v4l2 into a USB port on the Raspberry Pi. Run this command to confirm the useeplus_v4l2 is listed
-
-```bash
+# List all registered V4L2 devices
 v4l2-ctl --list-devices
-```
 
-## Verify useeplus_v4l2 Driver For V4L2 Compliance
-
-```bash
-# Assuming /dev/video0 is the video device the supercamera is connected to.
+# Run the official compliance test suite against the new node
 v4l2-compliance -d /dev/video0
+
 ```
 
-## Capturing Snapshots with FFMPEGs
+### Capturing Test Snapshots
+
+You can use `ffmpeg` to pull raw frames directly from the V4L2 node to verify the payload is intact:
 
 ```bash
 ffmpeg -f v4l2 -i /dev/video0 -vframes 10 -update 1 snapshot.jpg
+
 ```
 
-## Launch the uStreamer Server
+### Launching the MJPEG Stream
 
-Start the MJPEG HTTP server, pointing it to the v4l2 device the useeplus_v4l2 was assigned ( e.g. `/dev/video0`).
-Binding the host to `0.0.0.0` ensures the stream is accessible from any device on your local network:
+_Note: While you can use third-party tools like `ustreamer` for benchmarking, you can now natively pipe this V4L2 node into the project's custom user-space streaming server._
 
 ```bash
+# Using the custom zero-allocation server:
+./build/v4l2_mjpeg_server
+
+# Alternatively, testing with uStreamer:
 ustreamer -d /dev/video0 -r 640x480 -f 30 -m MJPEG -p 8080 --host 0.0.0.0
 
-
 ```
 
-## Unload Linux Driver
+## 5. Debugging
+
+The kernel ring buffer (`dmesg`) is your primary debugging tool for driver development.
 
 ```bash
-sudo rmmod useeplus_v4l2
-```
-
-## Verify Linux Driver Loaded
-
-```bash
-dmesg | tail -n 20
-```
-
-```bash
+# Follow the live kernel logs in a dedicated terminal window
 sudo dmesg -w
+
+# Alternatively, just print the last 20 driver events
+dmesg | tail -n 20
+
+```
+
+### Changing Kernel Log Levels
+
+If your `pr_debug()` or `dev_dbg()` statements are not appearing in `dmesg`, you may need to temporarily elevate the kernel's printk logging verbosity.
+
+```bash
+# View the current log levels
+cat /proc/sys/kernel/printk
+
+# Elevate to debug logging
+sudo sysctl -w kernel.printk="8 4 1 3"
+
+# Restore default logging when finished
+sudo sysctl -w kernel.printk="3 4 1 3"
 ```

@@ -1,135 +1,121 @@
-## On-Tree Builds
+# Integrating `useeplus` into the Linux Kernel Tree
 
-To build the useeplus v4l2 driver as part of the Kernel build, there's a few steps
+This document outlines the process for integrating the `useeplus` V4L2 driver directly into the official Linux kernel source tree. This is the preferred method for long-term maintenance and kernel-level testing.
 
-### Create /drivers/media/usb/useeplus Folder
+## 1. Registering the Driver in the Kernel Tree
 
-The useeplus v4l2 driver belongs in /drivers/media/usb. Create a new folder called useeplus
+### Create the Source Directory
 
-### Add useeplus .c/.h, Kconfig, Makefile
+Place your `useeplus` source files (`.c`, `.h`), `Kconfig`, and `Makefile` into the designated multimedia directory:
+`/drivers/media/usb/useeplus/`
 
-Copy the useeplus source code, Kconfig file and Makefile into the /useeplus folder under
-/drivers/media/usb.
+### Update the USB Media Subsystem
 
-### Add useeplus to /drivers/media/usb/Kconfig
+You must register the driver with the Linux configuration and build systems to ensure it is recognized during the kernel compilation process.
 
-To register the useeplus driver as a module to select during kernel configuration, you need
-to register the useeplus/Kconfig file in /drivers/media/usb/Kconfig, by adding the following
-line to the `if MEDIA_CAMERA_SUPPORT` / `endif` block:
+1. **Register with `Kconfig`:** Add the following line to `/drivers/media/usb/Kconfig` inside the `if MEDIA_CAMERA_SUPPORT` block:
 
 ```bash
 source "drivers/media/usb/useeplus/Kconfig"
+
 ```
 
-Read the instructions in the comments of that file, and ensure to keep the list alphabetical.
-
-### Add useeplus to /drivers/media/usb/Makefile
-
-To register the useeplus driver as a module to compile during the modules build step of the
-kernel build process, add the following line to /drivers/media/usb/Makefile, in the bottom section
-that's for all drivers that aren't DVD USB :
+_Ensure you maintain the alphabetical order within the file._ 2. **Register with `Makefile`:** Add the following entry to the bottom of `/drivers/media/usb/Makefile` (within the section for USB camera drivers):
 
 ```bash
 obj-$(CONFIG_USB_USEEPLUS) += useeplus/
+
 ```
 
-Read the instructions in the comments of that file, and ensure to keep the list alphabetical.
+## 2. Kernel Configuration
 
-### Add `Useeplus Protocol USB Camera support` to Kernel .config file
+Once registered, you can toggle the driver during the configuration phase.
 
-If you are using `make menuconfig`, then enable `Useeplus Protocol USB Camera support` under
+- **GUI Method:** Use `make menuconfig` and enable the driver at:
+  `Device Drivers` ➔ `Multimedia support` ➔ `Media drivers` ➔ `Media USB Adapters` ➔ `Useeplus Protocol USB Camera support`
+- **Manual Method:** Manually edit your `.config` file to include:
 
-`Device Drivers ➔ Multimedia support ➔ Media drivers ➔ Media USB Adapters`
-
-If you prefer editing the .config file manually
-
-```bash
-#
-# Webcam devices
-#
-
-...
-
+```text
 CONFIG_USB_USEEPLUS=m
 
-...
 ```
 
-### Compiling the kernel
+---
+
+## 3. Kernel Compilation & Installation
+
+To build the entire kernel tree, execute these steps from the root of your Linux source directory:
 
 ```bash
-# run this in the linux tree root folder
+# 1. Build the kernel image, modules, and device trees
+make -j$(nproc) Image.gz modules dtbs
 
-# Build the kernel and modules
-make -j6 Image.gz modules dtbs
+# 2. Install the kernel modules to the system
+sudo make -j$(nproc) modules_install
 
-# Install the modules
-sudo make -j6 modules_install
-
-# Backup the previous (working) kernel, just in case.
-# change kernel_2712 to your actual kernel name.
+# 3. Backup the current boot kernel
 sudo cp /boot/firmware/kernel_2712.img /boot/firmware/kernel_2712-backup.img
 
-# Drop in the brand spanking new kernel image
+# 4. Deploy the new image and device tree blobs (DTBs)
 sudo cp arch/arm64/boot/Image.gz /boot/firmware/kernel_2712.img
-
-# Copy over the Device Tree Sources configs so kernel bootloader can configure
-# the onboard hardware (CPU, GPIO, peripherals, etc.)
 sudo cp arch/arm64/boot/dts/broadcom/*.dtb /boot/firmware/
 sudo cp arch/arm64/boot/dts/overlays/*.dtb* /boot/firmware/overlays/
 sudo cp arch/arm64/boot/dts/overlays/README /boot/firmware/overlays/
 
-# Reboot, and the useeplus driver should load automatically when plugging in a
-`Geek szitman supercamera`.
+# 5. Reboot to initialize the new kernel
 sudo reboot
+
 ```
 
-### Deploying Modules
+---
 
-Driver modules are hot reloadable, so we don't have to recompile the kernel after making driver
-changes. Just recompile and install the modules
+## 4. Rapid Driver Iteration
+
+You do not need to recompile the entire kernel to test changes to your driver. Use these workflows to rebuild and reload the module independently.
+
+### Recompiling & Reinstalling All Modules
+
+If you have made widespread changes, rebuild all modules from the root tree:
 
 ```bash
-# run this in the linux tree root folder
-
-# compile all the modules
-make modules -j6
-# install the drivers
+make modules -j$(nproc)
 sudo make modules_install
+
 ```
 
-### Deploying useeplus Driver module independently
+### Targeted Rebuild (Recommended)
+
+To rebuild only the `useeplus` module and its dependencies, execute the build command specifically against the driver directory:
 
 ```bash
-# run this in the linux tree root folder
-
+# Compile just the useeplus module
 make M=drivers/media/usb/useeplus modules
 
+# Deploy just the useeplus module
 sudo make M=drivers/media/usb/useeplus modules_install
 
 ```
 
-### Docker
+---
 
-For testing compiling the Linux Kernel on MacOS, you can run an Ubuntu docker container. I've
-included and example Dockerfile in the on-tree folder. You can use that to create a docker volume
-to hold the sources, then build and connect a docker container from the Dockerfile to perform
-kernel builds. Here's a script showing the steps.
+## 5. Build Environment via Docker (macOS)
+
+For developers compiling the Linux kernel on macOS, you can utilize an Ubuntu-based Docker container to maintain a consistent build environment.
 
 ```bash
-# create a new volume
+# 1. Create a persistent volume to hold the source tree
 docker volume create kernel-workspace
 
-# build the docker image, run the container, and attach to the kernel-workspace volume
+# 2. Launch and attach to the build environment
 docker run --rm -it -v kernel-workspace:/kernel-src local-kernel-builder bash
 
+# 3. Inside the container:
 git clone https://github.com/jerometerry/linux.git
 cd linux
-
-# switch to the useeplus driver branch
 git checkout -b useeplus_v4l2 origin/useeplus_v4l2
 
-# create the default .config file
+# 4. Generate config and trigger build
 make defconfig
 make -j$(nproc)
+
 ```

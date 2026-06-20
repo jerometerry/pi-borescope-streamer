@@ -1,99 +1,56 @@
 # Building pi-borescope-streamer
 
-This project utilizes modern CMake with `CMakePresets.json` to guarantee reproducible builds across local development environments (macOS) and target hardware (Raspberry Pi).
+This project utilizes **GNU Make** combined with the **Zig** compiler (`zig cc` / `zig c++`).
+
+Switching to Zig provides a hermetic, drop-in C++23 compiler that guarantees reproducible builds, trivial cross-compilation, and strict Undefined Behavior Sanitization (UBSan) out of the box across both local development environments (macOS) and target hardware (Raspberry Pi).
+
+_(Note: While CMake is no longer the build system, a minimal CMake installation is still required as a standalone script-runner to convert the HTML dashboard into a C++ header)._
 
 ## Dependencies
 
-### Core Build Tools & Compilers
+### Core Build Tools & Libraries
 
-These are required just to configure the project and compile the standard release binaries.
+These are required to configure the project, download third-party dependencies, and compile the standard release binaries.
 
 - **macOS (Homebrew):**
 
 ```bash
-xcode-select --install # Provides AppleClang, Git, and base system headers
-brew install cmake ninja pkg-config
+xcode-select --install # Provides Git and base system tools
+brew install make cmake pkg-config libusb openssl@3 zig
 
 ```
 
-- **Raspberry Pi / Debian (APT):**
+- **Raspberry Pi / Debian (Linux):**
 
 ```bash
 sudo apt update
-sudo apt install build-essential cmake ninja-build pkg-config git
+sudo apt install build-essential cmake pkg-config git libusb-1.0-0-dev libssl-dev zlib1g-dev
 
 ```
 
-### Required System Libraries
+_(Note: You will need to install Zig manually from the [official Zig website](https://ziglang.org/download/) or via a package manager, as Debian repositories often contain heavily outdated versions)._
 
-Your project natively links against OpenSSL, Zlib, and Libusb. These must be present on the system before CMake can successfully generate the build tree.
+### Formatting and IDE Dependencies
 
-- **macOS (Homebrew):**
-- _(Note: macOS ships with Zlib, so you only need to install OpenSSL and Libusb)._
-
-```bash
-brew install openssl@3 libusb
-
-```
-
-- **Raspberry Pi / Debian (APT):**
-
-```bash
-sudo apt install libssl-dev zlib1g-dev libusb-1.0-0-dev
-
-```
-
-### Static Analysis Tools (The `analysis` Preset)
-
-If a developer wants to run your comprehensive code-quality checks, they will need this stack.
+If a developer wants to run the code formatting scripts or set up advanced VS Code IntelliSense, they will need the LLVM toolchain (for `clang-format` and `clangd`) and `bear` (to generate compilation databases from Makefiles).
 
 - **macOS (Homebrew):**
 
 ```bash
-brew install llvm cppcheck include-what-you-use
+brew install llvm bear
 
 ```
 
-- _Note: Homebrew's `llvm` provides `clang-tidy`._
-
-- **Raspberry Pi / Debian (APT):**
+- **Raspberry Pi / Debian (Linux):**
 
 ```bash
-sudo apt install clang-tidy cppcheck iwyu
-
-```
-
-- **Python Requirement (Both Platforms):**
-  To convert the Cppcheck XML output into the HTML report you specified in your README, the user must install the Pygments library via Python.
-
-```bash
-pip3 install --user pygments --break-system-packages
-
-```
-
-### Documentation Generation (The `docs` Target)
-
-Doxygen requires the `dot` tool to generate dependency graphs, class diagrams, and include hierarchies. `dot` is packaged inside the Graphviz suite.
-
-- **macOS (Homebrew):**
-
-```bash
-brew install doxygen graphviz
-
-```
-
-- **Raspberry Pi / Debian (APT):**
-
-```bash
-sudo apt install doxygen graphviz
+sudo apt install clang-format clangd bear
 
 ```
 
 ### Hardware & Daemon Dependencies (Linux Only)
 
-If a user is deploying this on a Raspberry Pi and wants to utilize the `v4l2-borescope-daemon` features to pipe the stream into `/dev/video*`, they need the Video4Linux loopback driver.
-
-- **Raspberry Pi / Debian (APT):**
+If a user is deploying this on a Raspberry Pi and wants to utilize the `v4l2-borescope-daemon` features to pipe the Presentation-Layer Video Frames into `/dev/video*`, they need the Video4Linux loopback driver.
 
 ```bash
 sudo apt install v4l2loopback-dkms v4l2-utils
@@ -102,55 +59,48 @@ sudo apt install v4l2loopback-dkms v4l2-utils
 
 _(FFmpeg is also highly recommended for testing the daemon, via `sudo apt install ffmpeg`)._
 
-## Command Line Workflow (macOS & Raspberry Pi)
+---
 
-Because the project relies on Presets, the build commands are identical regardless of your operating system.
+## Command Line Workflow
 
-**Standard Release Build (Fast & Lean)**
-_Compiles only the core application binaries. Testing and static analysis dependencies are ignored to speed up the build._
+Because the `Makefile` automatically detects the host OS (macOS vs. Linux), the build commands are identical regardless of your operating system. Third-party dependencies (`uSockets`, `uWebSockets`, `googletest`) are automatically cloned and compiled into the `build/` directory during the first run.
+
+**Standard Build**
+_Compiles the core application binaries. Testing libraries are ignored to speed up the build._
 
 ```bash
-# Configure the build tree once
-cmake --preset release
+# Compile the project using Zig
+make
 
-# Compile the binaries
-cmake --build --preset release -j$(nproc)
-
-# Run as usual
-./out/build/release/v4l2_mjpeg_server
+# Run the appropriate binary (macOS example)
+./build/mjpeg_server
 
 ```
-
-_(Note: If pulling new CMake changes to a clean board for the first time, run the configure step with `cmake --preset release --fresh` to clear out any old cached variables)._
 
 **Running Tests**
+_Compiles GoogleTest using Zig, links the test suites, and immediately executes them._
 
 ```bash
-cmake --preset test
-cmake --build --preset test -j$(nproc)
-ctest --test-dir out/build/test --output-on-failure
+make test
 
 ```
 
-**Running Static Analysis (Clang-Tidy, Cppcheck, IWYU)**
+**Code Formatting**
+_Runs the `run-format.sh` script to align all source files with `.clang-format`._
 
 ```bash
-# Configure for full static analysis
-cmake --preset analysis
+# Automatically format all C++ files
+make format
 
-# Build with Clang-Tidy and IWYU natively enabled
-cmake --build --preset analysis -j$(nproc)
-
-# Generate a standalone Cppcheck XML report
-cmake --build --preset cppcheck
+# Dry-run check (fails if formatting is required)
+make check-format
 
 ```
 
-**Running Benchmarks**
+**Clean the Build Tree**
 
 ```bash
-cmake --preset benchmark
-cmake --build --preset benchmark -j$(nproc)
+make clean
 
 ```
 
@@ -158,40 +108,48 @@ cmake --build --preset benchmark -j$(nproc)
 
 ## Visual Studio Code Setup (Recommended)
 
-Out of the box, VS Code's default C++ tools conflict with `clangd`, leading to broken IntelliSense and red squiggles. Follow this setup to get a fully integrated, JetBrains-style development and debugging experience.
+Out of the box, VS Code's default C++ tools conflict with `clangd`, leading to broken IntelliSense. Furthermore, raw Makefiles do not automatically tell VS Code where your header files are. Follow this setup to get a fully integrated development and debugging experience.
 
 ### 1. Required Extensions
 
 Ensure the following extensions are installed:
 
-- **clangd** (`llvm-vs-code-extensions.vscode-clangd`): For superior code intelligence and formatting.
-- **CMake Tools** (`ms-vscode.cmake-tools`): For natively reading the `CMakePresets.json` file.
-- **CodeLLDB** (`vadimcn.vscode-lldb`): A fast, reliable debugger for LLVM/macOS environments.
-- **C/C++** (`ms-vscode.cpptools`): Microsoft's default extension (we will disable its language server in the next step, but it is sometimes useful to keep around as a fallback).
+- **clangd** (`llvm-vs-code-extensions.vscode-clangd`): For superior code intelligence.
+- **CodeLLDB** (`vadimcn.vscode-lldb`): A fast, reliable debugger for LLVM/Zig environments.
+- **C/C++** (`ms-vscode.cpptools`): Microsoft's default extension (we will disable its language server in the next step, but the debugger backend is occasionally useful).
 
-### 2. Resolving IntelliSense Conflicts (`.vscode/settings.json`)
+### 2. Generating `compile_commands.json` (The Secret Sauce)
 
-To stop the Microsoft C/C++ extension from fighting `clangd`, you must explicitly disable its IntelliSense engine and tell `clangd` where CMake is putting your compile commands.
+For `clangd` to understand your `#include` paths (like `uWebSockets` or `gtest`), it needs a compilation database. You generate this by running `make` through `bear`.
+
+Run this command in your terminal whenever you add new files or change include paths:
+
+```bash
+make clean
+bear -- make test
+
+```
+
+This will generate a `compile_commands.json` file in the root of your project, which `clangd` will automatically ingest.
+
+### 3. Resolving IntelliSense Conflicts (`.vscode/settings.json`)
+
+To stop the Microsoft C/C++ extension from fighting `clangd`, explicitly disable its IntelliSense engine.
 
 Create or update `.vscode/settings.json` in the root of the project:
 
 ```json
 {
-  "cmake.copyCompileCommands": "${workspaceFolder}/compile_commands.json",
-  "clangd.arguments": [
-    "--compile-commands-dir=${workspaceFolder}/out/build/debug",
-    "--header-insertion=iwyu",
-    "--background-index"
-  ],
+  "clangd.arguments": ["--background-index", "--compile-commands-dir=${workspaceFolder}"],
   "C_Cpp.intelliSenseEngine": "disabled",
   "C_Cpp.autocomplete": "disabled",
   "C_Cpp.errorSquiggles": "disabled"
 }
 ```
 
-### 3. Debugging Tests (`.vscode/launch.json`)
+### 4. Debugging Tests (`.vscode/launch.json`)
 
-To enable one-click debugging that maps directly to the active CMake target, configure CodeLLDB.
+To enable one-click debugging, configure CodeLLDB to attach directly to your compiled test binaries.
 
 Create or update `.vscode/launch.json` in the root of the project:
 
@@ -200,26 +158,37 @@ Create or update `.vscode/launch.json` in the root of the project:
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug CTest Target",
+      "name": "Debug Project Tests",
       "type": "lldb",
       "request": "launch",
-      "program": "${command:cmake.launchTargetPath}",
+      "program": "${workspaceFolder}/build/run_project_tests",
       "args": [],
-      "cwd": "${command:cmake.launchTargetDirectory}"
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug Linux Driver Tests",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/run_linux_driver_tests",
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug macOS Server",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/mjpeg_server",
+      "args": [],
+      "cwd": "${workspaceFolder}"
     }
   ]
 }
 ```
 
-### 4. The "Anti-UI" Development Loop
+### 5. The Development Loop
 
-The visual UI provided by CMake Tools can sometimes lose track of test binaries, especially when adding new source files. To guarantee a reliable build-and-debug cycle, rely on the Command Palette instead of the sidebar icons:
+Because we removed the heavy CMake Tools UI extension, your development cycle is now much faster and terminal-driven:
 
-1. **Set the Environment:** Open the Command Palette (`Cmd + Shift + P`) and lock in the test preset:
-
-- `CMake: Select Configure Preset` -> **test**
-- `CMake: Select Build Preset` -> **test**
-- `CMake: Set Build Target` -> **run_project_tests**
-
-2. **Build Explicitly:** Make your code changes, then press `Cmd + Shift + B` (or `Ctrl + Shift + B` on Linux) to incrementally compile the test binary.
-3. **Debug:** Drop a breakpoint in your `.cpp` file and press `F5`. CodeLLDB will attach directly to the newly built binary.
+1. Write your code.
+2. Run `make test` in the VS Code integrated terminal.
+3. If a test fails, drop a breakpoint in the file, select **Debug Project Tests** in the VS Code Run & Debug sidebar, and press `F5`.
