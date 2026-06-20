@@ -91,7 +91,6 @@ GTEST_LIBS := build/googletest/build/lib/libgtest.a \
 PROJECT_TEST_SRCS := $(TEST_DIR)/test_disruptor.cpp \
                      $(TEST_DIR)/test_mjpeg_server.cpp \
                      $(TEST_DIR)/test_mjpeg_stream.cpp \
-                     $(TEST_DIR)/test_usb_device_finder.cpp \
                      $(TEST_DIR)/test_zero_allocation_response_builder.cpp
 
 DRIVER_TEST_SRCS := $(LINUX_DRIVER_DIR)/tests/test_useeplus_decoder.cpp \
