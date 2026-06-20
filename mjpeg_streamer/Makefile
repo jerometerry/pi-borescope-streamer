@@ -23,8 +23,8 @@ ifeq ($(UNAME_S),Linux)
     CXXFLAGS += -pthread
     LDFLAGS  += -pthread
     ifneq (,$(filter aarch64%,$(UNAME_P)))
-        CXXFLAGS += -mcpu=cortex-a76 -mtune=cortex-a76
-        CFLAGS   += -mcpu=cortex-a76 -mtune=cortex-a76
+        CXXFLAGS += -target aarch64-linux-gnu -mcpu=cortex-a76
+        CFLAGS   += -target aarch64-linux-gnu -mcpu=cortex-a76
     endif
 else ifeq ($(UNAME_S),Darwin)
     PLATFORM := MACOS
@@ -35,10 +35,12 @@ INCLUDES := -I$(INC_DIR) \
             -I$(INC_DIR)/v4l2 \
             -I$(LINUX_DRIVER_DIR) \
             -I$(GEN_DIR) \
-            -Ithird_party/uWebSockets/src \
-            -Ithird_party/uSockets/src
+            -I$(BUILD_DIR)/sockets/uWebSockets/src \
+            -I$(BUILD_DIR)/sockets/uSockets/src
 
-LDFLAGS += -Wl,--start-group third_party/uSockets/uSockets.a build/libmjpeg_streamer_core.a \
+LDFLAGS += -Wl,--start-group \
+	$(BUILD_DIR)/sockets/uSockets/uSockets.a \
+	$(BUILD_DIR)/libmjpeg_streamer_core.a \
 	-Wl,--end-group -lz -lssl -lcrypto -lpthread
 
 ifeq ($(PLATFORM),MACOS)
@@ -76,9 +78,20 @@ else ifeq ($(PLATFORM),MACOS)
                $(BUILD_DIR)/mjpeg_frame_extractor
 endif
 
-.PHONY: all clean format check-format
+# Sentinel tracking file location for built dependencies
+DEPS_SENTINEL := $(BUILD_DIR)/.deps_installed
 
-all: $(TARGETS)
+.PHONY: all clean format check-format install-deps
+
+all: install-deps $(TARGETS)
+
+install-deps: $(DEPS_SENTINEL)
+
+$(DEPS_SENTINEL): install-deps.sh
+	@echo "Checking project dependency trees..."
+	@./install-deps.sh
+	@mkdir -p $(BUILD_DIR)
+	@touch $(DEPS_SENTINEL)
 
 $(GENERATED_HPP): $(HTML_FILE) GenerateHeader.cmake
 	@mkdir -p $(GEN_DIR)
@@ -111,3 +124,9 @@ $(BUILD_DIR)/mjpeg_frame_extractor: $(BUILD_DIR)/src/libusb/mjpeg_frame_extracto
 
 clean:
 	rm -rf $(BUILD_DIR) $(GEN_DIR)
+
+format:
+	@./run-format.sh format
+
+check-format:
+	@./run-format.sh check
