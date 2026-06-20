@@ -86,7 +86,7 @@ public:
             ioctl(fd_, VIDIOC_QUERYBUF, &buf);
 
             buffers_[i].length = buf.length;
-            buffers_[i].start = mmap(NULL, buf.length, PROT_READ | PROT_WRITE,
+            buffers_[i].start = mmap(nullptr, buf.length, PROT_READ | PROT_WRITE,
                                      MAP_SHARED, fd_, buf.m.offset);
 
             ioctl(fd_, VIDIOC_QBUF, &buf);
@@ -117,7 +117,7 @@ public:
             FD_SET(fd_, &fds);
             struct timeval tv = {1, 0};
 
-            int r = select(fd_ + 1, &fds, NULL, NULL, &tv);
+            int r = select(fd_ + 1, &fds, nullptr, nullptr, &tv);
 
             if (r > 0) {
                 struct v4l2_buffer buf = {};
