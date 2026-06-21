@@ -6,7 +6,7 @@
 /**
  * @brief Utility for formatting raw JPEG buffers into HTTP chunked responses.
  */
-namespace ZeroAllocationResponseBuilder {
+namespace HttpResponseBuilder {
 /**
  * @brief Prepends HTTP multipart boundaries directly into the Buffer's reserved padding.
  * @details By walking a pointer backward into the pre-allocated 128-byte prefix padding
@@ -20,4 +20,4 @@ namespace ZeroAllocationResponseBuilder {
  * and the image payload.
  */
 std::string_view build(VideoFrameFragment& frame);
-}  // namespace ZeroAllocationResponseBuilder
+}  // namespace HttpResponseBuilder

@@ -1,4 +1,4 @@
-#include "zero_allocation_response_builder.hpp"
+#include "http_response_builder.hpp"
 
 #include <charconv>
 #include <cstring>
@@ -8,7 +8,7 @@
 
 #include "video_frame_fragment.hpp"
 
-std::string_view ZeroAllocationResponseBuilder::build(VideoFrameFragment& frame) {
+std::string_view HttpResponseBuilder::build(VideoFrameFragment& frame) {
     size_t size = frame.contentSize();
 
     char lb[32];

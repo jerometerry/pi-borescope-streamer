@@ -57,7 +57,7 @@ HTML_FILE     := $(SRC_DIR)/index.html
 GENERATED_HPP := $(GEN_DIR)/index_html.hpp
 
 CORE_SRCS := $(SRC_DIR)/mjpeg_server.cpp \
-             $(SRC_DIR)/zero_allocation_response_builder.cpp \
+             $(SRC_DIR)/http_response_builder.cpp \
              $(SRC_DIR)/libusb/mjpeg_stream_capture.cpp \
              $(SRC_DIR)/libusb/usb_camera.cpp \
              $(SRC_DIR)/libusb/usb_context.cpp \
@@ -88,7 +88,7 @@ GTEST_LIBS := build/googletest/build/lib/libgtest.a \
 PROJECT_TEST_SRCS := $(TEST_DIR)/test_disruptor.cpp \
                      $(TEST_DIR)/test_mjpeg_server.cpp \
                      $(TEST_DIR)/test_useeplus_video_stream.cpp \
-                     $(TEST_DIR)/test_zero_allocation_response_builder.cpp
+                     $(TEST_DIR)/test_http_response_builder.cpp
 
 DRIVER_TEST_SRCS := $(LINUX_DRIVER_DIR)/tests/test_useeplus_decoder.cpp \
                     $(LINUX_DRIVER_DIR)/tests/test_useeplus_protocol.cpp \

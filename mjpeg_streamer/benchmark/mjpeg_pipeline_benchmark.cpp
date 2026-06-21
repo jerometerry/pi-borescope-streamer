@@ -15,7 +15,7 @@
 #include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
 #include "useeplus_video_stream.hpp"
-#include "zero_allocation_response_builder.hpp"
+#include "http_response_builder.hpp"
 
 namespace {
     std::string fileName_ = "./test_data/camera_stream.mjpeg";
@@ -72,7 +72,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
                 VideoFrameFragment& slot = ringBuffer.getBySequence(nextRead);
 
                 if (slot.contentSize() > 0) {
-                    ZeroAllocationResponseBuilder::build(slot);
+                    HttpResponseBuilder::build(slot);
                     benchmark::DoNotOptimize(slot.contentSize());
                     benchmark::ClobberMemory();
                 }
@@ -119,7 +119,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
                 VideoFrameFragment& slot = ringBuffer.getBySequence(nextRead);
 
                 if (slot.contentSize() > 0) {
-                    ZeroAllocationResponseBuilder::build(slot);
+                    HttpResponseBuilder::build(slot);
                     benchmark::DoNotOptimize(slot.contentSize());
                     benchmark::ClobberMemory();
                 }
