@@ -13,11 +13,11 @@
 #include <stddef.h>
 
 #ifdef __cplusplus
-using u8  = uint8_t;
+using u8 = uint8_t;
 using u16 = uint16_t;
 using u32 = uint32_t;
 #else
-typedef uint8_t u8;
+typedef uint8_t	 u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 #endif
@@ -29,7 +29,10 @@ typedef uint32_t u32;
 #if defined(__APPLE__)
 #include <libkern/OSByteOrder.h>
 #ifdef __cplusplus
-inline uint16_t le16_to_cpu(uint16_t x) { return OSSwapLittleToHostInt16(x); }
+inline uint16_t le16_to_cpu(uint16_t x)
+{
+	return OSSwapLittleToHostInt16(x);
+}
 #else
 #define le16_to_cpu(x) OSSwapLittleToHostInt16(x)
 #endif
@@ -40,7 +43,10 @@ inline uint16_t le16_to_cpu(uint16_t x) { return OSSwapLittleToHostInt16(x); }
 #endif
 #include <endian.h>
 #ifdef __cplusplus
-inline uint16_t le16_to_cpu(uint16_t x) { return le16toh(x); }
+inline uint16_t le16_to_cpu(uint16_t x)
+{
+	return le16toh(x);
+}
 #else
 #define le16_to_cpu(x) le16toh(x)
 #endif
@@ -151,12 +157,12 @@ struct up_decoder_callbacks {
 
 struct up_decoder {
 	struct up_decoder_callbacks cb;
-	void *context;
+	void			   *context;
 
-	int frame_id;
 	bool building_frame;
-	bool found_soi;
 	bool eof_reached;
+	bool found_soi;
+	int  frame_id;
 };
 
 #ifdef __cplusplus
@@ -201,15 +207,15 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buffer, size_t len);
 
 struct up_usb_frm_hdr {
 	u16 le_delimiter;
-	u8 device_id;
+	u8  device_id;
 	u16 le_length;
 } __packed;
 
 struct up_video_frm_frag_hdr {
-	u8 frame_id;
-	u8 device_number;
-	u8 flags;
 	u32 le_gravity_sensor;
+	u8  device_number;
+	u8  frame_id;
+	u8  flags;
 } __packed;
 
 #ifdef __cplusplus
@@ -218,8 +224,10 @@ constexpr int JPEG_SOI_MAX_POS = 256;
 constexpr int MAX_GHOST_HDR_OFF = 160;
 
 constexpr size_t UP_USB_FRM_HDR_LEN = sizeof(struct up_usb_frm_hdr);
-constexpr size_t UP_VIDEO_FRM_FRAG_HDR_LEN = sizeof(struct up_video_frm_frag_hdr);
-constexpr size_t VIDEO_DATA_OFFSET = UP_USB_FRM_HDR_LEN + UP_VIDEO_FRM_FRAG_HDR_LEN;
+constexpr size_t UP_VIDEO_FRM_FRAG_HDR_LEN =
+	sizeof(struct up_video_frm_frag_hdr);
+constexpr size_t VIDEO_DATA_OFFSET =
+	UP_USB_FRM_HDR_LEN + UP_VIDEO_FRM_FRAG_HDR_LEN;
 #else
 #define UP_MAX_VIDEO_FRM_FRAG_LEN 1024
 #define JPEG_SOI_MAX_POS 256
@@ -231,23 +239,23 @@ constexpr size_t VIDEO_DATA_OFFSET = UP_USB_FRM_HDR_LEN + UP_VIDEO_FRM_FRAG_HDR_
 #endif
 
 struct up_decode_context {
-	size_t index;
+	size_t	      index;
 	unsigned long flags;
 
 	u8 *vaddr;
 
 	struct up_buffer *active_buf;
-	size_t active_pl_len;
+	size_t		  active_pl_len;
 
-	u8 *decode_buf;
 	size_t decode_buf_len;
+	u8    *decode_buf;
 };
 
 struct up_decode_state {
 	size_t usb_frm_len;
-	u8 frame_id;
-	u8 dev_num;
-	u8 flags;
+	u8     frame_id;
+	u8     dev_num;
+	u8     flags;
 };
 
 size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len);
@@ -282,7 +290,8 @@ static inline struct up_usb_frm_hdr *up_get_usb_frm_hdr(u8 *buf, size_t index)
 	return (struct up_usb_frm_hdr *)(buf + index);
 }
 
-static inline struct up_video_frm_frag_hdr *up_get_video_frm_frag_hdr(u8 *buf, size_t index)
+static inline struct up_video_frm_frag_hdr *
+up_get_video_frm_frag_hdr(u8 *buf, size_t index)
 {
 	return (struct up_video_frm_frag_hdr *)(buf + index);
 }
@@ -290,7 +299,7 @@ static inline struct up_video_frm_frag_hdr *up_get_video_frm_frag_hdr(u8 *buf, s
 static inline bool up_is_valid_usb_frm_hdr(struct up_usb_frm_hdr *hdr)
 {
 	u16 del = up_get_usb_frm_del(hdr);
-	u8 dev_id = hdr->device_id;
+	u8  dev_id = hdr->device_id;
 
 	return up_check_usb_frm_hdr(del, dev_id);
 }
@@ -325,7 +334,8 @@ static inline bool up_has_other_flags(u8 flags)
 	return up_get_other_flags(flags) != 0;
 }
 
-static inline void up_set_has_gravity_sensor(struct up_video_frm_frag_hdr *hdr, bool has_gs)
+static inline void up_set_has_gravity_sensor(struct up_video_frm_frag_hdr *hdr,
+					     bool has_gs)
 {
 	uint8_t val = hdr->flags;
 
@@ -337,7 +347,8 @@ static inline void up_set_has_gravity_sensor(struct up_video_frm_frag_hdr *hdr, 
 	hdr->flags = val;
 }
 
-static inline void up_set_button_pressed(struct up_video_frm_frag_hdr *hdr, bool pressed)
+static inline void up_set_button_pressed(struct up_video_frm_frag_hdr *hdr,
+					 bool			       pressed)
 {
 	uint8_t val = hdr->flags;
 
@@ -349,7 +360,8 @@ static inline void up_set_button_pressed(struct up_video_frm_frag_hdr *hdr, bool
 	hdr->flags = val;
 }
 
-static inline void up_set_other_flags(struct up_video_frm_frag_hdr *hdr, uint8_t other)
+static inline void up_set_other_flags(struct up_video_frm_frag_hdr *hdr,
+				      uint8_t			    other)
 {
 	uint8_t val = hdr->flags;
 
@@ -358,7 +370,8 @@ static inline void up_set_other_flags(struct up_video_frm_frag_hdr *hdr, uint8_t
 	hdr->flags = val;
 }
 
-static inline bool up_is_valid_video_frm_frag_hdr(const struct up_video_frm_frag_hdr *hdr)
+static inline bool
+up_is_valid_video_frm_frag_hdr(const struct up_video_frm_frag_hdr *hdr)
 {
 	if (!hdr)
 		return false;

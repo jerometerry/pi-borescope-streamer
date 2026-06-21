@@ -6,13 +6,15 @@ static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t buf_off,
 			       size_t *u_hdr_off)
 {
 	struct up_usb_frm_hdr *u_hdr;
-	size_t		       o;
 	size_t		       ghost_lim;
+	size_t		       o;
 
-	if (UP_USB_FRM_HDR_LEN + buf_off > len) return false;
+	if (UP_USB_FRM_HDR_LEN + buf_off > len)
+		return false;
 
 	ghost_lim = len - buf_off - UP_USB_FRM_HDR_LEN;
-	if (ghost_lim > MAX_GHOST_HDR_OFF) ghost_lim = MAX_GHOST_HDR_OFF;
+	if (ghost_lim > MAX_GHOST_HDR_OFF)
+		ghost_lim = MAX_GHOST_HDR_OFF;
 
 	for (o = UP_USB_FRM_HDR_LEN; o <= ghost_lim; o++) {
 		u_hdr = up_get_usb_frm_hdr(buf, buf_off + o);
@@ -39,7 +41,8 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 	u_hdr_off = 0;
 	buf_off = *cur_pos;
 
-	if (UP_USB_FRM_HDR_LEN + buf_off > len) return UP_DECODE_NEED_DATA;
+	if (UP_USB_FRM_HDR_LEN + buf_off > len)
+		return UP_DECODE_NEED_DATA;
 
 	u_hdr = up_get_usb_frm_hdr(buf, buf_off);
 
@@ -76,7 +79,8 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 
 	state->usb_frm_len = UP_USB_FRM_HDR_LEN + u_frm_pl_len;
 
-	if ((state->usb_frm_len + buf_off) > len) return UP_DECODE_NEED_DATA;
+	if ((state->usb_frm_len + buf_off) > len)
+		return UP_DECODE_NEED_DATA;
 
 	if (u_frm_pl_len < UP_VIDEO_FRM_FRAG_HDR_LEN) {
 		*cur_pos += state->usb_frm_len;
@@ -109,7 +113,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	cur_pos = 0;
 	found = false;
 
-	if (len == 0 || !buf) return 0;
+	if (len == 0 || !buf)
+		return 0;
 
 	while ((len - cur_pos) >= VIDEO_DATA_OFFSET) {
 		switch (up_decode(buf, len, &cur_pos, &state)) {
@@ -127,7 +132,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			break;
 		}
 
-		if (state.dev_num > MAX_DEV_NUM) goto advance;
+		if (state.dev_num > MAX_DEV_NUM)
+			goto advance;
 
 		if (dec->building_frame && dec->frame_id != state.frame_id) {
 			if (!dec->eof_reached &&
@@ -147,12 +153,14 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			dec->eof_reached = false;
 		}
 
-		if (dec->eof_reached) goto advance;
+		if (dec->eof_reached)
+			goto advance;
 
 		v_hdr = up_get_video_frm_frag_hdr(buf,
 						  UP_USB_FRM_HDR_LEN + cur_pos);
 
-		if (!up_is_valid_video_frm_frag_hdr(v_hdr)) goto advance;
+		if (!up_is_valid_video_frm_frag_hdr(v_hdr))
+			goto advance;
 
 		video_data_start = VIDEO_DATA_OFFSET + cur_pos;
 		video_data_len = state.usb_frm_len - VIDEO_DATA_OFFSET;
@@ -176,7 +184,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 				}
 			}
 
-			if (!found) goto advance;
+			if (!found)
+				goto advance;
 		}
 
 		img_size = video_data_len;
