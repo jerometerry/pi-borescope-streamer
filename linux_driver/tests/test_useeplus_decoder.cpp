@@ -108,6 +108,10 @@ class DecoderTest : public ::testing::Test {
 	{
 		return mock_context_.payload_data[index];
 	}
+
+	bool was_on_video_payload_called() {
+		return video_frame_fragments > 0;
+	}
 };
 
 TEST_F(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame)
