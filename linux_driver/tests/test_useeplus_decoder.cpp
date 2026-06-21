@@ -114,6 +114,7 @@ TEST_F(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame)
 {
 	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
 	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 6);
@@ -151,6 +152,7 @@ TEST_F(DecoderTest, SkipsGhostHeadersAndFindsValidPayload)
 
 	struct up_usb_frm_hdr *u_hdr =
 		up_get_usb_frm_hdr(buffer.data(), valid_start);
+
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
 	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
@@ -177,6 +179,7 @@ TEST_F(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 {
 	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
 	u_hdr->le_length = le16_to_cpu(100);
@@ -191,12 +194,14 @@ TEST_F(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 {
 	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = VIDEO_CAMERA_ID;
+	u_hdr->device_id = static_cast<uint8_t>(9);
 	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
 	struct up_video_frm_frag_hdr *v_hdr =
 		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
+
 	v_hdr->frame_id = 1;
 	up_set_has_gravity_sensor(v_hdr, true);
 
@@ -218,12 +223,14 @@ TEST_F(DecoderTest, DropsChunkIfSoiNotFound)
 {
 	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
 	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
 	struct up_video_frm_frag_hdr *v_hdr =
 		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
+
 	v_hdr->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(v_hdr + 1);
@@ -252,12 +259,14 @@ TEST_F(DecoderTest, HuntsForSignatureOnInvalidPacket)
 	size_t		       valid_start = 3;
 	struct up_usb_frm_hdr *u_hdr =
 		up_get_usb_frm_hdr(buffer.data(), valid_start);
+
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
 	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
 	struct up_video_frm_frag_hdr *v_hdr = up_get_video_frm_frag_hdr(
 		buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
+
 	v_hdr->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(v_hdr + 1);
@@ -279,6 +288,7 @@ TEST_F(DecoderTest, RejectsMassiveLengthAndHunts)
 	std::vector<u8> buffer(1024, 0x00);
 
 	struct up_usb_frm_hdr *bad_pkt = up_get_usb_frm_hdr(buffer.data(), 0);
+
 	bad_pkt->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	bad_pkt->device_id = VIDEO_CAMERA_ID;
 	bad_pkt->le_length = le16_to_cpu(UP_MAX_VIDEO_FRM_FRAG_LEN + 100);
@@ -286,15 +296,18 @@ TEST_F(DecoderTest, RejectsMassiveLengthAndHunts)
 	size_t		       valid_start = 200;
 	struct up_usb_frm_hdr *good_pkt =
 		up_get_usb_frm_hdr(buffer.data(), valid_start);
+
 	good_pkt->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	good_pkt->device_id = VIDEO_CAMERA_ID;
 	good_pkt->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
 
 	struct up_video_frm_frag_hdr *v_hdr = up_get_video_frm_frag_hdr(
 		buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
+
 	v_hdr->frame_id = 1;
 
 	u8 *payload_data = (u8 *)(v_hdr + 1);
+
 	payload_data[0] = JPEG_DEL;
 	payload_data[1] = JPEG_SOI;
 	payload_data[2] = JPEG_DEL;
