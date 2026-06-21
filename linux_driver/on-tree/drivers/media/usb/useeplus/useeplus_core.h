@@ -43,7 +43,7 @@ enum up_config {
 
 struct up_buffer {
 	struct vb2_v4l2_buffer vb2_buffer;
-	struct list_head list;
+	struct list_head       list;
 };
 
 enum up_stream_state {
@@ -53,51 +53,51 @@ enum up_stream_state {
 
 struct up_drv_data {
 	struct {
-		struct usb_device *udev;
+		struct urb	     *urbs[NUM_URBS];
+		u8		     *urb_buffers[NUM_URBS];
+		struct usb_device    *udev;
 		struct usb_interface *itf;
-		u8 video_in_ep;
-		u8 video_out_ep;
-		u8 iap_in_ep;
-		u8 iap_out_ep;
-		struct urb *urbs[NUM_URBS];
-		u8 *urb_buffers[NUM_URBS];
-		dma_addr_t urb_dma_addrs[NUM_URBS];
+		u8		      video_out_ep;
+		u8		      video_in_ep;
+		u8		      iap_out_ep;
+		u8		      iap_in_ep;
+		dma_addr_t	      urb_dma_addrs[NUM_URBS];
 	} usb;
 
 	struct {
-		struct v4l2_device v4l2_dev;
 		struct video_device video_dev;
+		struct v4l2_device  v4l2_dev;
 
+		struct vb2_queue queue;
 		// Mutex protecting the video_queue
 		struct mutex lock;
-		struct vb2_queue queue;
-		u32 width;
-		u32 height;
+		u32	     height;
+		u32	     width;
 	} v4l2;
 
 	struct {
 		unsigned long streaming;
 		// Spinlock protecting access to ready_queue
-		spinlock_t ready_lock;
+		spinlock_t	 ready_lock;
 		struct list_head ready_queue;
-		u64 sequence;
+		u64		 sequence;
 	} pipeline;
 
 	struct {
 		struct workqueue_struct *wq;
-		struct work_struct work;
+		struct work_struct	 work;
 		DECLARE_KFIFO_PTR(fifo, u8);
 
-		u8 *workspace_buf;
+		u8    *workspace_buf;
 		size_t workspace_len;
 
 		struct up_buffer *active_buf;
-		size_t active_pl_len;
+		size_t		  active_pl_len;
 
-		int frame_id;
 		bool building_frame;
-		bool found_soi;
 		bool eof_reached;
+		bool found_soi;
+		int  frame_id;
 	} decoder;
 
 	struct {

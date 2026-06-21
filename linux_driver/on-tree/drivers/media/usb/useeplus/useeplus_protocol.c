@@ -2,10 +2,12 @@
 
 #include "useeplus_protocol.h"
 
-static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t buf_off, size_t *u_hdr_off)
+static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t buf_off,
+			       size_t *u_hdr_off)
 {
 	struct up_usb_frm_hdr *u_hdr;
-	size_t o, ghost_lim;
+	size_t		       ghost_lim;
+	size_t		       o;
 
 	if (UP_USB_FRM_HDR_LEN + buf_off > len)
 		return false;
@@ -29,10 +31,12 @@ static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t buf_off, size_t *u_hd
 static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 				       struct up_decode_state *state)
 {
-	size_t buf_off, u_hdr_off, v_hdr_off;
-	struct up_usb_frm_hdr *u_hdr;
 	struct up_video_frm_frag_hdr *v_hdr;
-	u16 u_frm_pl_len;
+	struct up_usb_frm_hdr	     *u_hdr;
+	u16			      u_frm_pl_len;
+	size_t			      u_hdr_off;
+	size_t			      v_hdr_off;
+	size_t			      buf_off;
 
 	u_hdr_off = 0;
 	buf_off = *cur_pos;
@@ -95,14 +99,32 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 
 size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 {
-	size_t i, video_data_start, video_data_len, img_size, soi_lim, cur_pos;
-	struct up_decode_state state;
+	void (*o_vfs)(void *context, u8 frame_id, u8 dev_num);
+	void (*o_vff)(void *context, u8 *data, size_t len);
+	void (*o_vfic)(void *context);
+	void (*o_vfc)(void *context);
 	struct up_video_frm_frag_hdr *v_hdr;
-	u8 *video_data_ptr;
-	bool found;
+	struct up_decode_state	      state;
+	size_t			      video_data_start;
+	size_t			      video_data_len;
+	u8			     *video_data_ptr;
+	size_t			      img_size;
+	size_t			      soi_lim;
+	size_t			      cur_pos;
+	size_t			      v_off;
+	u8			      frame_id;
+	bool			      found;
+	u8			      dev_num;
+	void			     *ctx;
+	size_t			      i;
 
 	cur_pos = 0;
 	found = false;
+
+	o_vfs = dec->cb.on_video_frame_start;
+	o_vff = dec->cb.on_video_frame_fragment;
+	o_vfc = dec->cb.on_video_frame_complete;
+	o_vfic = dec->cb.on_video_frame_incomplete;
 
 	if (len == 0 || !buf)
 		return 0;
@@ -126,16 +148,18 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		if (state.dev_num > MAX_DEV_NUM)
 			goto advance;
 
-		if (dec->building_frame && dec->frame_id != state.frame_id) {
-			if (!dec->eof_reached && dec->cb.on_video_frame_incomplete)
-				dec->cb.on_video_frame_incomplete(dec->context);
+		ctx = dec->context;
+		frame_id = state.frame_id;
+		dev_num = state.dev_num;
+
+		if (dec->building_frame && dec->frame_id != frame_id) {
+			if (!dec->eof_reached && o_vfic)
+				o_vfic(dec->context);
 		}
 
 		if (!dec->building_frame || dec->frame_id != state.frame_id) {
-			if (dec->cb.on_video_frame_start)
-				dec->cb.on_video_frame_start(dec->context,
-						       state.frame_id,
-						       state.dev_num);
+			if (o_vfs)
+				o_vfs(ctx, frame_id, dev_num);
 
 			dec->frame_id = state.frame_id;
 			dec->building_frame = true;
@@ -146,7 +170,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		if (dec->eof_reached)
 			goto advance;
 
-		v_hdr = up_get_video_frm_frag_hdr(buf, UP_USB_FRM_HDR_LEN + cur_pos);
+		v_off = UP_USB_FRM_HDR_LEN + cur_pos;
+		v_hdr = up_get_video_frm_frag_hdr(buf, v_off);
 
 		if (!up_is_valid_video_frm_frag_hdr(v_hdr))
 			goto advance;
@@ -188,11 +213,12 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			}
 		}
 
-		if (dec->cb.on_video_frame_fragment)
-			dec->cb.on_video_frame_fragment(dec->context, video_data_ptr, img_size);
+		if (o_vff)
+			o_vff(dec->context, video_data_ptr, img_size);
 
-		if (dec->eof_reached && dec->cb.on_video_frame_complete)
-			dec->cb.on_video_frame_complete(dec->context);
+		;
+		if (dec->eof_reached && o_vfc)
+			o_vfc(dec->context);
 
 advance:
 		cur_pos += state.usb_frm_len;

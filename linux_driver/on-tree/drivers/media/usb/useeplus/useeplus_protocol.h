@@ -13,18 +13,18 @@
  * Because Video Frames are large, they are chunked into smaller "Video Frame Fragments".
  * Each fragment is then encapsulated in a Link-Layer (Layer 2) "USB Frame" for transport.
  *
- * | Byte Offset | Field Name               | Size | OSI Layer | Description                         |
- * |-------------|--------------------------|------|-----------|-------------------------------------|
- * | 0x00        | Start Frame Delimiter    | 2    | L2 (USB)  | 0xBBAA (Little-Endian signature)    |
- * | 0x02        | Device ID                | 1    | L2 (USB)  | 0x0B = Video, 0x07 = Gravity Sensor |
- * | 0x03        | Payload Length           | 2    | L2 (USB)  | Total bytes following the USB Header|
- * |-------------|--------------------------|------|-----------|-------------------------------------|
- * | 0x05        | Frame ID                 | 1    | L6 (Video)| Rolls over when a new Video Frame starts |
- * | 0x06        | Device Number            | 1    | L6 (Video)| Secondary internal lens index       |
- * | 0x07        | Flags                    | 1    | L6 (Video)| Bit 0: Gravity, Bit 1: Button       |
- * | 0x08        | IMU Matrix               | 4    | L6 (Video)| 32-bit accelerometer telemetry      |
- * |-------------|--------------------------|------|-----------|-------------------------------------|
- * | 0x0C (12)   | Video Frame Fragment     | Var  | L6 (Video)| Fragmented chunk of the MJPEG stream|
+ * | Byte Offset | Field Name            | Size | OSI Layer | Description                         |
+ * |-------------|-----------------------|------|-----------|-------------------------------------|
+ * | 0x00        | Start Frame Delimiter | 2    | L2 (USB)  | 0xBBAA (Little-Endian signature)    |
+ * | 0x02        | Device ID             | 1    | L2 (USB)  | 0x0B = Video, 0x07 = Gravity Sensor |
+ * | 0x03        | Payload Length        | 2    | L2 (USB)  | Total bytes following the USB Header|
+ * |-------------|-----------------------|------|-----------|-------------------------------------|
+ * | 0x05        | Frame ID              | 1    | L6 (Video)| Rolls on new Video Frame start      |
+ * | 0x06        | Device Number         | 1    | L6 (Video)| Secondary internal lens index       |
+ * | 0x07        | Flags                 | 1    | L6 (Video)| Bit 0: Gravity, Bit 1: Button       |
+ * | 0x08        | IMU Matrix            | 4    | L6 (Video)| 32-bit accelerometer telemetry      |
+ * |-------------|-----------------------|------|-----------|-------------------------------------|
+ * | 0x0C (12)   | Video Frame Fragment  | Var  | L6 (Video)| MJPEG fragment                      |
  *
  * Video Frame Assembly Rules
  *
@@ -150,42 +150,33 @@ struct up_decoder_callbacks {
 };
 
 struct up_decode_context {
-	size_t index;
+	size_t	      index;
 	unsigned long flags;
 
 	u8 *vaddr;
 
 	struct up_buffer *active_buf;
-	size_t active_pl_len;
+	size_t		  active_pl_len;
 
-	u8 *decode_buf;
 	size_t decode_buf_len;
-};
-
-enum up_decode_status {
-	UP_DECODE_OK,
-	UP_INVALID_USB_FRM_HDR,
-	UP_INVALID_VIDEO_FRM_FRAG_HDR,
-	UP_IS_GHOST_HDR,
-	UP_DECODE_SKIP,
-	UP_DECODE_NEED_DATA
+	u8    *decode_buf;
 };
 
 struct up_decode_state {
 	size_t usb_frm_len;
-	u8 frame_id;
-	u8 dev_num;
-	u8 flags;
+	u8     frame_id;
+	u8     dev_num;
+	u8     flags;
 };
 
 struct up_decoder {
 	struct up_decoder_callbacks cb;
-	void *context;
+	void			   *context;
 
-	int frame_id;
 	bool building_frame;
-	bool found_soi;
 	bool eof_reached;
+	bool found_soi;
+	int  frame_id;
 };
 
 size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len);
@@ -200,12 +191,12 @@ static inline bool up_is_valid_usb_frm_del(u16 delimiter)
 	return (delimiter == UP_PKT_DEL);
 }
 
-static inline u16 up_get_usb_frm_del(struct up_usb_frm_hdr *hdr)
+static inline u16 up_get_usb_frm_del(const struct up_usb_frm_hdr *hdr)
 {
 	return le16_to_cpu(hdr->le_delimiter);
 }
 
-static inline u16 up_get_usb_frm_pl_len(struct up_usb_frm_hdr *hdr)
+static inline u16 up_get_usb_frm_pl_len(const struct up_usb_frm_hdr *hdr)
 {
 	return le16_to_cpu(hdr->le_length);
 }
@@ -220,7 +211,8 @@ static inline struct up_usb_frm_hdr *up_get_usb_frm_hdr(u8 *buf, size_t index)
 	return (struct up_usb_frm_hdr *)(buf + index);
 }
 
-static inline struct up_video_frm_frag_hdr *up_get_video_frm_frag_hdr(u8 *buf, size_t index)
+static inline struct up_video_frm_frag_hdr *
+up_get_video_frm_frag_hdr(u8 *buf, size_t index)
 {
 	return (struct up_video_frm_frag_hdr *)(buf + index);
 }
@@ -228,17 +220,17 @@ static inline struct up_video_frm_frag_hdr *up_get_video_frm_frag_hdr(u8 *buf, s
 static inline bool up_is_valid_usb_frm_hdr(struct up_usb_frm_hdr *hdr)
 {
 	u16 del = up_get_usb_frm_del(hdr);
-	u8 dev_id = hdr->device_id;
+	u8  dev_id = hdr->device_id;
 
 	return up_check_usb_frm_hdr(del, dev_id);
 }
 
-static inline bool up_is_jpg_soi(u8 *ptr, size_t i)
+static inline bool up_is_jpg_soi(const u8 *ptr, size_t i)
 {
 	return (ptr[i] == JPEG_DEL && ptr[i + 1] == JPEG_SOI);
 }
 
-static inline bool up_is_jpg_eoi(u8 *ptr, size_t i)
+static inline bool up_is_jpg_eoi(const u8 *ptr, size_t i)
 {
 	return (ptr[i] == JPEG_DEL && ptr[i + 1] == JPEG_EOI);
 }
@@ -263,7 +255,8 @@ static inline bool up_has_other_flags(u8 flags)
 	return up_get_other_flags(flags) != 0;
 }
 
-static inline void up_set_has_gravity_sensor(struct up_video_frm_frag_hdr *hdr, bool has_gs)
+static inline void up_set_has_gravity_sensor(struct up_video_frm_frag_hdr *hdr,
+					     bool has_gs)
 {
 	uint8_t val = hdr->flags;
 
@@ -275,7 +268,8 @@ static inline void up_set_has_gravity_sensor(struct up_video_frm_frag_hdr *hdr, 
 	hdr->flags = val;
 }
 
-static inline void up_set_button_pressed(struct up_video_frm_frag_hdr *hdr, bool pressed)
+static inline void up_set_button_pressed(struct up_video_frm_frag_hdr *hdr,
+					 bool			       pressed)
 {
 	uint8_t val = hdr->flags;
 
@@ -287,7 +281,8 @@ static inline void up_set_button_pressed(struct up_video_frm_frag_hdr *hdr, bool
 	hdr->flags = val;
 }
 
-static inline void up_set_other_flags(struct up_video_frm_frag_hdr *hdr, uint8_t other)
+static inline void up_set_other_flags(struct up_video_frm_frag_hdr *hdr,
+				      uint8_t			    other)
 {
 	uint8_t val = hdr->flags;
 
@@ -296,7 +291,8 @@ static inline void up_set_other_flags(struct up_video_frm_frag_hdr *hdr, uint8_t
 	hdr->flags = val;
 }
 
-static inline bool up_is_valid_video_frm_frag_hdr(struct up_video_frm_frag_hdr *hdr)
+static inline bool
+up_is_valid_video_frm_frag_hdr(const struct up_video_frm_frag_hdr *hdr)
 {
 	if (!hdr)
 		return false;
