@@ -20,14 +20,14 @@ extern "C" {
  * them down the wire. To make matters worse, buggy camera hardware sometimes inserts
  * broken or "ghost" labels into the data stream.
  *
- * MjpegStream acts as the sorting facility. It takes the raw firehose of data from
+ * UseeplusVideoStream acts as the sorting facility. It takes the raw firehose of data from
  * the transport layer, throws out the glitches, and carefully stitches the valid chunks back
  * together into standard JPEG images. Once it successfully builds a complete picture,
  * it hands it off to be broadcast. It also actively scans the hidden status signals in
  * the chunks and alerts the system whenever the user's finger is holding down the physical hardware
  * button.
  */
-class MjpegStream {
+class UseeplusVideoStream {
    public:
     /**
      * @brief Construct the decoder and wire up its output destinations.
@@ -35,9 +35,9 @@ class MjpegStream {
      * @param onFrameReady The function we call to hand off a finished, clean JPEG picture.
      * Usually, this connects to the MjpegServer so the picture can be sent to web browsers.
      */
-    explicit MjpegStream(VideoFrameBuffer& disruptor);
+    explicit UseeplusVideoStream(VideoFrameBuffer& disruptor);
 
-    ~MjpegStream() = default;
+    ~UseeplusVideoStream() = default;
 
     /**
      * @brief Pour new raw data from the camera cable into the decoder.

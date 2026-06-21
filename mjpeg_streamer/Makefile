@@ -63,8 +63,7 @@ CORE_SRCS := $(SRC_DIR)/mjpeg_server.cpp \
              $(SRC_DIR)/libusb/usb_context.cpp \
              $(SRC_DIR)/libusb/usb_device_finder.cpp \
              $(SRC_DIR)/libusb/usb_driver.cpp \
-             $(SRC_DIR)/libusb/mjpeg_stream.cpp \
-             $(SRC_DIR)/v4l2/v4l2_mjpeg_stream.cpp \
+	     $(SRC_DIR)/libusb/useeplus_video_stream.cpp \
              $(LINUX_DRIVER_DIR)/useeplus_protocol.c
 
 CORE_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(CORE_SRCS)))
@@ -88,7 +87,7 @@ GTEST_LIBS := build/googletest/build/lib/libgtest.a \
 
 PROJECT_TEST_SRCS := $(TEST_DIR)/test_disruptor.cpp \
                      $(TEST_DIR)/test_mjpeg_server.cpp \
-                     $(TEST_DIR)/test_mjpeg_stream.cpp \
+                     $(TEST_DIR)/test_useeplus_video_stream.cpp \
                      $(TEST_DIR)/test_zero_allocation_response_builder.cpp
 
 DRIVER_TEST_SRCS := $(LINUX_DRIVER_DIR)/tests/test_useeplus_decoder.cpp \

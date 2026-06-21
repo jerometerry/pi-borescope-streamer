@@ -14,7 +14,7 @@
 #include "constants.hpp"
 #include "video_frame_fragment.hpp"
 #include "video_frame_buffer.hpp"
-#include "mjpeg_stream.hpp"
+#include "useeplus_video_stream.hpp"
 #include "zero_allocation_response_builder.hpp"
 
 namespace {
@@ -82,7 +82,7 @@ static void BM_Pipeline_Throughput(benchmark::State& state) {
         }
     });
 
-    MjpegStream stream(ringBuffer);
+    UseeplusVideoStream stream(ringBuffer);
 
     size_t pageIndex = 0;
     for (auto _ : state) {
@@ -129,7 +129,7 @@ static void BM_Pipeline_DiskBound(benchmark::State& state) {
         }
     });
 
-    MjpegStream stream(ringBuffer);
+    UseeplusVideoStream stream(ringBuffer);
     std::vector<uint8_t> chunk(4096);
 
     for (auto _ : state) {

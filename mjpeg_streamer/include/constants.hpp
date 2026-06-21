@@ -159,7 +159,7 @@ inline constexpr size_t BULK_TRANSFER_COUNT = 4;
  * @brief The payload size of a single USB bulk transfer request.
  * @details 16 KB is a highly optimized chunk size for USB 2.0 High-Speed bulk endpoints.
  * It is large enough to maintain high throughput bandwidth, but small enough to guarantee
- * minimal latency when passing chunks to the MjpegStream decoder.
+ * minimal latency when passing chunks to the UseeplusVideoStream decoder.
  */
 inline constexpr size_t BULK_TRANSFER_SIZE = Units::SIXTEEN_KILOBYTES;
 

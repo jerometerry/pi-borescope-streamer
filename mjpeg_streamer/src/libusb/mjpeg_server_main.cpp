@@ -25,7 +25,7 @@
 
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
-#include "mjpeg_stream.hpp"
+#include "useeplus_video_stream.hpp"
 #include "usb_camera.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
@@ -117,7 +117,7 @@ int main(int argc, const char* argv[]) {
         VideoFrameBuffer ringBuffer;
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
-        MjpegStream stream(ringBuffer);
+        UseeplusVideoStream stream(ringBuffer);
 
         auto transfer = [&stream](UsbTransferStatus status,
                                   std::span<const uint8_t> payload) -> bool {

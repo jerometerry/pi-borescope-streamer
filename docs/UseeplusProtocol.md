@@ -101,7 +101,7 @@ A single Layer 2 USB Frame does not contain a full image.
 
 - **The Payload Math:** Each video USB Frame declares a total length of **939 bytes** (`ab 03` in Little-Endian). Subtracting the 7 bytes consumed by the `up_video_frm_frag_hdr` leaves exactly **932 bytes** of pure Video Frame Fragment (JPEG data) per USB Frame.
 - **The Frame Size:** At 640x480 resolution, a single compressed MJPEG Video Frame ranges from **15KB to 40KB**.
-- **The Assembly:** To transmit a 20KB image, the camera sends roughly 22 consecutive USB Frames. The `frame_id` remains constant across all chunks belonging to the same image. The `MjpegStream` decoder continuously jumps past the 12-byte `VIDEO_DATA_OFFSET` and appends the 932-byte fragments to the LMAX Disruptor memory pool. When the `frame_id` increments, the decoder filters out any padded tails before flushing the completed image to the broadcast queue.
+- **The Assembly:** To transmit a 20KB image, the camera sends roughly 22 consecutive USB Frames. The `frame_id` remains constant across all chunks belonging to the same image. The Useeplus decoder continuously jumps past the 12-byte `VIDEO_DATA_OFFSET` and appends the 932-byte fragments to the LMAX Disruptor memory pool. When the `frame_id` increments, the decoder filters out any padded tails before flushing the completed image to the broadcast queue.
 
 ## The 4KB Hardware Alignment Flaw (Ghost Headers)
 
@@ -109,9 +109,8 @@ The camera's physical endpoint forces all transmissions to align with standard *
 
 To fit four 944-byte physical USB Frames (12 bytes of protocol overhead + 932 bytes of fragment payload) into a 4096-byte memory page, the camera's firmware must inject 320 bytes of padding (4096 - (4 \* 944) = 320). The firmware distributes this dynamically, leaving unaligned gaps of 0, 80, or 160 bytes between individual chunks.
 
-Because the firmware fails to zero-initialize this padding, the camera leaks stale memory from its internal hardware buffer, creating **"Ghost Headers"** (stale `0xBBAA` Start Frame Delimiters) inside the padding.
-
-Our C++ `MjpegStream` bypasses this flaw by operating on fixed, linear 4KB read blocks. By calculating `chunkTotalSize = sizeof(up_usb_frm_hdr) + le_length`, the parser processes the exact boundaries of a valid USB Frame. It then uses a bounded look-ahead scan to detect ghost headers in the padding zone before they can corrupt the MJPEG stream parser, ensuring stable, zero-leak video synchronization.
+Because the firmware fails to zero-initialize this padding, the camera leaks stale memory from its internal hardware buffer, creating **"Ghost Headers"** (stale `0xBBAA` Start Frame Delimiters) inside the padding. The Useeplus decoder
+detects and skips these **"Ghost Headers"** .
 
 ## Useeplus Dual-Layer Protocol Map
 

@@ -1,4 +1,4 @@
-#include "mjpeg_stream.hpp"
+#include "useeplus_video_stream.hpp"
 extern "C" {
 #include "useeplus_protocol.h"
 }
@@ -15,17 +15,17 @@ extern "C" {
 #include "video_frame_buffer.hpp"
 #include "video_frame_fragment.hpp"
 
-MjpegStream::MjpegStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {
+UseeplusVideoStream::UseeplusVideoStream(VideoFrameBuffer& disruptor) : disruptor_(&disruptor) {
     inputBuffer_.reserve(Units::THIRTY_TWO_KILOBYTES);
 
     decoder_.context = this;
-    decoder_.cb.on_video_frame_start = MjpegStream::onFrameStartCallback;
-    decoder_.cb.on_video_frame_fragment = MjpegStream::onVideoPayloadCallback;
-    decoder_.cb.on_video_frame_complete = MjpegStream::onFrameCompleteCallback;
-    decoder_.cb.on_video_frame_incomplete = MjpegStream::onFrameIncompleteCallback;
+    decoder_.cb.on_video_frame_start = UseeplusVideoStream::onFrameStartCallback;
+    decoder_.cb.on_video_frame_fragment = UseeplusVideoStream::onVideoPayloadCallback;
+    decoder_.cb.on_video_frame_complete = UseeplusVideoStream::onFrameCompleteCallback;
+    decoder_.cb.on_video_frame_incomplete = UseeplusVideoStream::onFrameIncompleteCallback;
 }
 
-void MjpegStream::send(std::span<const uint8_t> data) {
+void UseeplusVideoStream::send(std::span<const uint8_t> data) {
     inputBuffer_.insert(inputBuffer_.end(), data.begin(), data.end());
 
     size_t available = inputBuffer_.size() - readOffset_;
@@ -46,10 +46,10 @@ void MjpegStream::send(std::span<const uint8_t> data) {
     }
 }
 
-void MjpegStream::onFrameStartCallback(
+void UseeplusVideoStream::onFrameStartCallback(
     void* context, uint8_t frameId,
     uint8_t devNum) {  // NOLINT(bugprone-easily-swappable-parameters)
-    auto* self = static_cast<MjpegStream*>(context);
+    auto* self = static_cast<UseeplusVideoStream*>(context);
 
     if (self->frameActive_) {
         self->disruptor_->publish(self->currentClaimSequence_);
@@ -72,16 +72,16 @@ void MjpegStream::onFrameStartCallback(
     self->frameActive_ = true;
 }
 
-void MjpegStream::onVideoPayloadCallback(void* context, uint8_t* data, size_t len) {
-    auto* self = static_cast<MjpegStream*>(context);
+void UseeplusVideoStream::onVideoPayloadCallback(void* context, uint8_t* data, size_t len) {
+    auto* self = static_cast<UseeplusVideoStream*>(context);
     if (self->frameActive_) {
         VideoFrameFragment& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);
         slot.insertContent(std::span<const uint8_t>(data, len));
     }
 }
 
-void MjpegStream::onFrameCompleteCallback(void* context) {
-    auto* self = static_cast<MjpegStream*>(context);
+void UseeplusVideoStream::onFrameCompleteCallback(void* context) {
+    auto* self = static_cast<UseeplusVideoStream*>(context);
 
     if (self->frameActive_) {
         self->disruptor_->publish(self->currentClaimSequence_);
@@ -89,8 +89,8 @@ void MjpegStream::onFrameCompleteCallback(void* context) {
     }
 }
 
-void MjpegStream::onFrameIncompleteCallback(void* context) {
-    auto* self = static_cast<MjpegStream*>(context);
+void UseeplusVideoStream::onFrameIncompleteCallback(void* context) {
+    auto* self = static_cast<UseeplusVideoStream*>(context);
 
     if (self->frameActive_) {
         VideoFrameFragment& slot = self->disruptor_->getBySequence(self->currentClaimSequence_);

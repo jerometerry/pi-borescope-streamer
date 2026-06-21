@@ -35,15 +35,16 @@
 
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
-#include "v4l2_mjpeg_stream.hpp"
 #include "video_frame_buffer.hpp"
 
 namespace {
-constexpr int DEFAULT_PORT = 8080;
-constexpr std::string DEFAULT_DEVICE_PATH = "/dev/video0";
+    constexpr int DEFAULT_PORT = 8080;
+    constexpr std::string DEFAULT_DEVICE_PATH = "/dev/video0";
 
-std::atomic<bool> running{true};
-using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
+    std::atomic<bool> running{true};
+    using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
+
+    int64_t currentClaimSequence_{-1};
 }  // namespace
 
 class V4l2Camera {
@@ -187,14 +188,17 @@ int main(int argc, const char* argv[]) {
 
         VideoFrameBuffer ringBuffer;
         ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
-        V4l2MjpegStream stream(ringBuffer);
 
-        FrameHandler handler = [&stream](std::span<const uint8_t> payload) -> bool {
+        FrameHandler handler = [&ringBuffer](std::span<const uint8_t> payload) -> bool {
             if (!running.load(std::memory_order_relaxed)) {
                 return false;
             }
             if (!payload.empty()) {
-                stream.send(payload);
+                currentClaimSequence_ = ringBuffer->claim();
+                VideoFrameFragment& slot = ringBuffer->getBySequence(currentClaimSequence_);
+                slot.clear();
+                slot.insertContent(data);
+                ringBuffer->publish(currentClaimSequence_);
             }
             return true;
         };

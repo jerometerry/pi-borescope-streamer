@@ -10,18 +10,18 @@
 
 #include "constants.hpp"
 #include "endian_conversion.hpp"
-#include "mjpeg_stream.hpp"
+#include "useeplus_video_stream.hpp"
 #include "video_frame_buffer.hpp"
 #include "video_frame_fragment.hpp"
 
-class MjpegStreamTest : public ::testing::Test {
+class UseeplusVideoStreamTest : public ::testing::Test {
    private:
     VideoFrameBuffer disruptor_;
-    MjpegStream stream_;
+    UseeplusVideoStream stream_;
     int64_t next_read_seq_{0};
 
    public:
-    MjpegStreamTest() : disruptor_(), stream_(disruptor_) {
+    UseeplusVideoStreamTest() : disruptor_(), stream_(disruptor_) {
         disruptor_.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
     }
 
@@ -101,7 +101,7 @@ MATCHER_P(FrameStartsWith, expectedFront, "BufferPtr internal data starts with e
 }
 // NOLINTEND(cppcoreguidelines-avoid-const-or-ref-data-members)
 
-TEST_F(MjpegStreamTest, TestUsbPayloadHeaderGettersAndSetters) {
+TEST_F(UseeplusVideoStreamTest, TestUsbPayloadHeaderGettersAndSetters) {
     std::vector<uint8_t> packet(1024, 0xDD);
 
     auto* packetHeader = getPacketHeader(packet);
@@ -136,7 +136,7 @@ TEST_F(MjpegStreamTest, TestUsbPayloadHeaderGettersAndSetters) {
     EXPECT_EQ(up_get_other_flags(payloadHeader->flags), 3);
 }
 
-TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
+TEST_F(UseeplusVideoStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     std::vector<uint8_t> packet(1024, 0xDD);
 
     auto* packetHeader = getPacketHeader(packet);
@@ -176,7 +176,7 @@ TEST_F(MjpegStreamTest, ExtractsPhysicalBufferIgnoringDeclaredLength) {
     EXPECT_EQ(actualOutputFrame, expectedOutput);
 }
 
-TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
+TEST_F(UseeplusVideoStreamTest, SafelyIgnoresHardwareTailChunks) {
     std::vector<uint8_t> packet(1024, 0x00);
 
     auto* packetHeader = getPacketHeader(packet);
@@ -216,7 +216,7 @@ TEST_F(MjpegStreamTest, SafelyIgnoresHardwareTailChunks) {
     EXPECT_EQ(actualOutputFrame, expectedOutput);
 }
 
-TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
+TEST_F(UseeplusVideoStreamTest, ReassemblesMultiChunkMjpegStream) {
     auto buildPacket = [](uint8_t frameId, const std::vector<uint8_t>& payload) {
         std::vector<uint8_t> packet(
             USB_PACKET_HEADER_SIZE + USB_PAYLOAD_HEADER_SIZE + payload.size(), 0x00);
@@ -271,7 +271,7 @@ TEST_F(MjpegStreamTest, ReassemblesMultiChunkMjpegStream) {
     EXPECT_EQ(actualOutputFrame, expectedOutput);
 }
 
-TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
+TEST_F(UseeplusVideoStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
     std::vector<uint8_t> const shortPacket = {UsbProtocol::USB_FRAME_HEADER_A,
                                               UsbProtocol::USB_FRAME_HEADER_B};
     send(shortPacket);
@@ -282,7 +282,7 @@ TEST_F(MjpegStreamTest, IgnoresInvalidHeaderOrShortBuffer) {
     verifyNoValidFramesPublished();
 }
 
-TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
+TEST_F(UseeplusVideoStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     std::vector<uint8_t> packet1(100, 0x00);
 
     auto* packetHeader1 = getPacketHeader(packet1);
@@ -334,7 +334,7 @@ TEST_F(MjpegStreamTest, AccumulatesDataAndEmitsOnFrameIdChange) {
     EXPECT_EQ(actualOutputFrame.front(), UsbProtocol::BOUNDARY_MARKER);
 }
 
-TEST_F(MjpegStreamTest, IgnoresInvalidCameraId) {
+TEST_F(UseeplusVideoStreamTest, IgnoresInvalidCameraId) {
     std::vector<uint8_t> packet(20, 0x00);
     auto* packetHeader = getPacketHeader(packet);
     packetHeader->le_delimiter = UsbProtocol::USB_FRAME_HEADER;
@@ -345,7 +345,7 @@ TEST_F(MjpegStreamTest, IgnoresInvalidCameraId) {
     verifyNoValidFramesPublished();
 }
 
-TEST_F(MjpegStreamTest, IgnoresPayloadExceedingBufferSize) {
+TEST_F(UseeplusVideoStreamTest, IgnoresPayloadExceedingBufferSize) {
     std::vector<uint8_t> packet(10, 0x00);
     auto* packetHeader = getPacketHeader(packet);
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
@@ -356,7 +356,7 @@ TEST_F(MjpegStreamTest, IgnoresPayloadExceedingBufferSize) {
     verifyNoValidFramesPublished();
 }
 
-TEST_F(MjpegStreamTest, IgnoresTruncatedMetadata) {
+TEST_F(UseeplusVideoStreamTest, IgnoresTruncatedMetadata) {
     std::vector<uint8_t> packet(10, 0x00);
     auto* packetHeader = getPacketHeader(packet);
     packetHeader->le_delimiter = EndianConversion::hostToWire(UsbProtocol::USB_FRAME_HEADER);
@@ -367,7 +367,7 @@ TEST_F(MjpegStreamTest, IgnoresTruncatedMetadata) {
     verifyNoValidFramesPublished();
 }
 
-TEST_F(MjpegStreamTest, IgnoresUnsupportedCameraConfiguration) {
+TEST_F(UseeplusVideoStreamTest, IgnoresUnsupportedCameraConfiguration) {
     std::vector<uint8_t> packet(20, 0x00);
 
     auto* packetHeader = getPacketHeader(packet);
@@ -386,7 +386,7 @@ TEST_F(MjpegStreamTest, IgnoresUnsupportedCameraConfiguration) {
     send(packet);
 }
 
-TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
+TEST_F(UseeplusVideoStreamTest, AbortsOnMidFrameCameraShift) {
     std::vector<uint8_t> packet1(20, 0x00);
     auto* packetHeader1 = getPacketHeader(packet1);
 
@@ -419,11 +419,11 @@ TEST_F(MjpegStreamTest, AbortsOnMidFrameCameraShift) {
     send(packet2);
 }
 
-TEST_F(MjpegStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
+TEST_F(UseeplusVideoStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
     VideoFrameBuffer ringBuffer;
     ringBuffer.preAllocate(Units::ONE_HUNDRED_TWENTY_EIGHT_KILOBYTES);
 
-    MjpegStream silentDecoder(ringBuffer);
+    UseeplusVideoStream silentDecoder(ringBuffer);
 
     std::vector<uint8_t> packet(100, 0x00);
     std::span<const uint8_t> data{packet};
@@ -431,7 +431,7 @@ TEST_F(MjpegStreamTest, SafelyHandlesGarbageDataWithoutCrashing) {
     ASSERT_NO_THROW(silentDecoder.send(data));
 }
 
-TEST_F(MjpegStreamTest, PreventsIntegerUnderflowOnUndersizedHardwareLength) {
+TEST_F(UseeplusVideoStreamTest, PreventsIntegerUnderflowOnUndersizedHardwareLength) {
     std::vector<uint8_t> malformedPacket(TOTAL_USB_HEADER_SIZE, 0x00);
 
     auto* packetHeader = getPacketHeader(malformedPacket);
