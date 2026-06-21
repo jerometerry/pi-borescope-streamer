@@ -99,6 +99,10 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 
 size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 {
+	void (*o_vfs)(void *context, u8 frame_id, u8 dev_num);
+	void (*o_vff)(void *context, u8 *data, size_t len);
+	void (*o_vfic)(void *context);
+	void (*o_vfc)(void *context);
 	struct up_video_frm_frag_hdr *v_hdr;
 	struct up_decode_state	      state;
 	size_t			      video_data_start;
@@ -112,10 +116,6 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	size_t			      v_off;
 	u8			      frame_id;
 	u8			      dev_num;
-	void (*o_vff)(void *context, u8 *data, size_t len);
-	void (*o_vfc)(void *context);
-	void (*o_vfic)(void *context);
-	void (*o_vfs)(void *context, u8 frame_id, u8 dev_num);
 	void *ctx;
 
 	cur_pos = 0;
