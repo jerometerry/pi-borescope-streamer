@@ -129,6 +129,15 @@ enum up_jpeg_marker {
 	JPEG_EOI = 0xD9,
 };
 
+enum up_decode_status {
+	UP_DECODE_OK,
+	UP_INVALID_USB_FRM_HDR,
+	UP_INVALID_VIDEO_FRM_FRAG_HDR,
+	UP_IS_GHOST_HDR,
+	UP_DECODE_SKIP,
+	UP_DECODE_NEED_DATA,
+};
+
 struct up_usb_frm_hdr {
 	__le16 le_delimiter;
 	u8 device_id;
