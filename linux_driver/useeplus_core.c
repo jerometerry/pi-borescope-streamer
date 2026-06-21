@@ -134,6 +134,7 @@ static int up_try_fmt_vid_cap(struct file *file, void *priv,
 			      struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
+
 	up_enforce_format(drv_data, f);
 
 	return 0;
@@ -143,6 +144,7 @@ static int up_s_fmt_vid_cap(struct file *file, void *priv,
 			    struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
+
 	up_enforce_format(drv_data, f);
 
 	return 0;
@@ -152,6 +154,7 @@ static int up_g_fmt_vid_cap(struct file *file, void *priv,
 			    struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
+
 	up_enforce_format(drv_data, f);
 
 	return 0;
@@ -197,10 +200,12 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 
 static void up_stop_streaming(struct vb2_queue *vq)
 {
-	struct up_drv_data *drv_data;
-	struct up_buffer   *buf;
-	unsigned long	    flags;
-	int		    i;
+	struct vb2_v4l2_buffer *v4l2_buf;
+	struct up_drv_data     *drv_data;
+	struct vb2_buffer      *vb2_buf;
+	struct up_buffer       *active_buf;
+	unsigned long	        flags;
+	int		        i;
 
 	drv_data = vb2_get_drv_priv(vq);
 	/*
@@ -226,10 +231,13 @@ static void up_stop_streaming(struct vb2_queue *vq)
 
 	cancel_work_sync(&drv_data->decoder.work);
 
-	if (drv_data->decoder.active_buf) {
-		vb2_buffer_done(
-			&drv_data->decoder.active_buf->vb2_buffer.vb2_buf,
-			VB2_BUF_STATE_ERROR);
+	active_buf = drv_data->decoder.active_buf;
+
+	if (active_buf) {
+		v4l2_buf = &active_buf->vb2_buffer;
+		vb2_buf = &v4l2_buf->vb2_buf;
+
+		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 		drv_data->decoder.active_buf = NULL;
 		drv_data->decoder.active_pl_len = 0;
 	}
