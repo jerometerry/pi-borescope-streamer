@@ -616,9 +616,9 @@ static void up_on_frame_incomplete(void *context)
 static void up_on_frame_complete(void *context)
 {
 	struct up_drv_data     *drv_data = (struct up_drv_data *)context;
-	struct up_buffer       *active_buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
 	struct vb2_buffer      *vb2_buf;
+	struct up_buffer       *active_buf;
 	size_t			vff_len;
 
 	if (!drv_data->decoder.active_buf)
@@ -649,15 +649,18 @@ static void up_on_frame_complete(void *context)
 
 static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 {
-	struct up_drv_data *drv_data = (struct up_drv_data *)context;
-	struct up_buffer   *active_buf;
-	struct list_head   *rdy_q;
-	unsigned long	    flags;
+	struct up_drv_data     *drv_data = (struct up_drv_data *)context;
+	struct vb2_v4l2_buffer *v4l2_buf;
+	struct vb2_buffer      *vb2_buf;
+	struct up_buffer       *active_buf;
+	struct list_head       *rdy_q;
+	unsigned long	        flags;
 
-	if (drv_data->decoder.active_buf) {
-		active_buf = drv_data->decoder.active_buf;
-		vb2_buffer_done(&active_buf->vb2_buffer.vb2_buf,
-				VB2_BUF_STATE_ERROR);
+	active_buf = drv_data->decoder.active_buf;
+	if (active_buf) {
+		v4l2_buf = &active_buf->vb2_buffer;
+		vb2_buf = &v4l2_buf->vb2_buf;
+		vb2_buffer_done(vb2_buf, VB2_BUF_STATE_ERROR);
 		drv_data->decoder.active_buf = NULL;
 	}
 
@@ -851,35 +854,40 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 {
 	struct usb_device    *usb_dev = drv_data->usb.udev;
 	struct usb_interface *itf = drv_data->usb.itf;
+	int		      vid_in_pipe;
+	dma_addr_t	     *dma;
+	struct urb * urb;
 	u8		     *urb_ptr;
+	u8		     *urb_buf
 	int		      i;
+	usb_complete_t 	      u_comp;
+
+	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->usb.video_in_ep);
+	u_comp = usb_complete_t;
 
 	for (i = 0; i < NUM_URBS; i++) {
-		drv_data->usb.urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!drv_data->usb.urbs[i]) {
+		urb = usb_alloc_urb(0, GFP_KERNEL);
+		if (!urb) {
 			dev_err(&itf->dev, "usb_alloc_urb failed\n");
 			return -ENOMEM;
 		}
 
-		urb_ptr = usb_alloc_coherent(usb_dev, URB_SIZE, GFP_KERNEL,
-					     &drv_data->usb.urb_dma_addrs[i]);
-		drv_data->usb.urb_buffers[i] = urb_ptr;
+		drv_data->usb.urbs[i] = urb;
 
-		if (!drv_data->usb.urb_buffers[i]) {
+		dma = &drv_data->usb.urb_dma_addrs[i];
+		urb_ptr = usb_alloc_coherent(usb_dev, URB_SIZE, GFP_KERNEL, dma);
+		if (!urb_ptr) {
 			dev_err(&itf->dev, "usb_alloc_coherent failed\n");
 			return -ENOMEM;
 		}
 
-		usb_fill_bulk_urb(drv_data->usb.urbs[i], usb_dev,
-				  usb_rcvbulkpipe(usb_dev,
-						  drv_data->usb.video_in_ep),
-				  drv_data->usb.urb_buffers[i], URB_SIZE,
-				  up_read_bulk_callback, drv_data);
+		drv_data->usb.urb_buffers[i] = urb_ptr;
 
-		drv_data->usb.urbs[i]->transfer_dma =
-			drv_data->usb.urb_dma_addrs[i];
-		drv_data->usb.urbs[i]->transfer_flags |=
-			URB_NO_TRANSFER_DMA_MAP;
+		urb_buf = drv_data->usb.urb_buffers[i];
+		usb_fill_bulk_urb(urb, usb_dev, vid_in_pipe, urb_buf, URB_SIZE, u_comp, drv_data);
+
+		urb->transfer_dma = *dma;
+		urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
 	}
 
 	return 0;
