@@ -121,7 +121,6 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	cur_pos = 0;
 	found = false;
 
-
 	o_vfs = dec->cb.on_video_frame_start;
 	o_vff = dec->cb.on_video_frame_fragment;
 	o_vfc = dec->cb.on_video_frame_complete;
@@ -152,7 +151,7 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		ctx = dec->context;
 		frame_id = state.frame_id;
 		dev_num = state.dev_num;
-\
+
 		if (dec->building_frame && dec->frame_id != frame_id) {
 			if (!dec->eof_reached && o_vfic)
 				o_vfic(dec->context);
