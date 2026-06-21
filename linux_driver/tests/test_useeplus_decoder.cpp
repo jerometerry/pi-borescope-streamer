@@ -249,16 +249,15 @@ std::vector<u8> create_junk_frame(u8 frame_id) {
 
 TEST_F(DecoderTest, DecoderRecoversAfterInvalidFrame)
 {
-    struct up_decoder *dec = getDecoder();
     std::vector<u8> buffer_a = create_junk_frame(1);
 
     size_t video_data_size = 0;
     std::vector<u8> buffer_b = create_valid_frame(2, &video_data_size);
 
-    size_t consumed_a = up_decode_bulk(getDecoder(), buffer_a.data(), buffer_a.size());
+    up_decode_bulk(getDecoder(), buffer_a.data(), buffer_a.size());
     EXPECT_EQ(getPayloadSize(), 0);
 
-    size_t consumed_b = up_decode_bulk(getDecoder(), buffer_b.data(), buffer_b.size());
+    up_decode_bulk(getDecoder(), buffer_b.data(), buffer_b.size());
 
     EXPECT_EQ(getPayloadSize(), video_data_size);
     EXPECT_TRUE(was_on_video_payload_called());
