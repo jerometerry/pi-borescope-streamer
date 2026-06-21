@@ -201,6 +201,7 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 static void up_stop_streaming(struct vb2_queue *vq)
 {
 	struct up_buffer       *active_buf;
+	struct up_buffer       *buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
 	struct up_drv_data     *drv_data;
 	struct vb2_buffer      *vb2_buf;
@@ -863,7 +864,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 	usb_complete_t	      u_comp;
 
 	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->usb.video_in_ep);
-	u_comp = usb_complete_t;
+	u_comp = up_read_bulk_callback;
 
 	for (i = 0; i < NUM_URBS; i++) {
 		urb = usb_alloc_urb(0, GFP_KERNEL);
