@@ -616,9 +616,9 @@ static void up_on_frame_incomplete(void *context)
 static void up_on_frame_complete(void *context)
 {
 	struct up_drv_data     *drv_data = (struct up_drv_data *)context;
+	struct up_buffer       *active_buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
 	struct vb2_buffer      *vb2_buf;
-	struct up_buffer       *active_buf;
 	size_t			vff_len;
 
 	if (!drv_data->decoder.active_buf)
@@ -650,11 +650,11 @@ static void up_on_frame_complete(void *context)
 static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 {
 	struct up_drv_data     *drv_data = (struct up_drv_data *)context;
+	struct up_buffer       *active_buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
 	struct vb2_buffer      *vb2_buf;
-	struct up_buffer       *active_buf;
 	struct list_head       *rdy_q;
-	unsigned long	        flags;
+	unsigned long		flags;
 
 	active_buf = drv_data->decoder.active_buf;
 	if (active_buf) {
@@ -856,11 +856,10 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 	struct usb_interface *itf = drv_data->usb.itf;
 	int		      vid_in_pipe;
 	dma_addr_t	     *dma;
-	struct urb * urb;
 	u8		     *urb_ptr;
-	u8		     *urb_buf
-	int		      i;
-	usb_complete_t 	      u_comp;
+	struct urb	     *urb;
+	u8 *urb_buf int	      i;
+	usb_complete_t	      u_comp;
 
 	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->usb.video_in_ep);
 	u_comp = usb_complete_t;
@@ -875,7 +874,8 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 		drv_data->usb.urbs[i] = urb;
 
 		dma = &drv_data->usb.urb_dma_addrs[i];
-		urb_ptr = usb_alloc_coherent(usb_dev, URB_SIZE, GFP_KERNEL, dma);
+		urb_ptr =
+			usb_alloc_coherent(usb_dev, URB_SIZE, GFP_KERNEL, dma);
 		if (!urb_ptr) {
 			dev_err(&itf->dev, "usb_alloc_coherent failed\n");
 			return -ENOMEM;
@@ -884,7 +884,8 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 		drv_data->usb.urb_buffers[i] = urb_ptr;
 
 		urb_buf = drv_data->usb.urb_buffers[i];
-		usb_fill_bulk_urb(urb, usb_dev, vid_in_pipe, urb_buf, URB_SIZE, u_comp, drv_data);
+		usb_fill_bulk_urb(urb, usb_dev, vid_in_pipe, urb_buf, URB_SIZE,
+				  u_comp, drv_data);
 
 		urb->transfer_dma = *dma;
 		urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
