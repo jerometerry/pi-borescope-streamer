@@ -126,7 +126,7 @@ def sort_tree(m):
     lines.sort(key=len, reverse=True)
     return "\n" + "\n".join(lines) + "\n"
 
-files = ["$(LINUX_DRIVER_DIR)/useeplus_core.c", "$(LINUX_DRIVER_DIR)/useeplus_protocol.c"]
+files = ["useeplus_core.c", "useeplus_protocol.c"]
 for f in files:
     try:
         c = open(f).read()
@@ -143,4 +143,4 @@ christmas-tree:
 	@echo "Sorting local variable trees..."
 	@python3 -c "$$SORT_TREE_SCRIPT"
 	@echo "Applying standard formatting..."
-	@clang-format -i $(LINUX_DRIVER_DIR)/useeplus_core.c $(LINUX_DRIVER_DIR)/useeplus_protocol.c
+	@clang-format -i useeplus_core.c useeplus_protocol.c
