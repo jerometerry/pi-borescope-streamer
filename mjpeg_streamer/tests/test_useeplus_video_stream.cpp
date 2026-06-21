@@ -36,7 +36,7 @@ class UseeplusVideoStreamTest : public ::testing::Test {
 
     void send(std::vector<uint8_t> packet) {
         std::span<const uint8_t> data{packet};
-	stream_.send(data);
+        stream_.send(data);
     }
 
     bool verifyNextPublishedFramed(std::vector<uint8_t>& out_frame_data) {

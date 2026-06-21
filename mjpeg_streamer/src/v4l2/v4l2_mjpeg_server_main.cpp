@@ -35,19 +35,18 @@
 
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
-#include "video_frame_buffer.hpp"
 #include "v4l2_camera.hpp"
+#include "video_frame_buffer.hpp"
 
 namespace {
-    constexpr int DEFAULT_PORT = 8080;
-    constexpr std::string DEFAULT_DEVICE_PATH = "/dev/video0";
+constexpr int DEFAULT_PORT = 8080;
+constexpr std::string DEFAULT_DEVICE_PATH = "/dev/video0";
 
-    std::atomic<bool> running{true};
-    using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
+std::atomic<bool> running{true};
+using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
 
-    int64_t currentClaimSequence_{-1};
-}  // namespace
-
+int64_t currentClaimSequence_{-1};
+}
 void signalHandler(int) {
     running.store(false, std::memory_order_release);
 }

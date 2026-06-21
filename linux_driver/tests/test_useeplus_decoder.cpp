@@ -16,16 +16,18 @@ struct MockContext {
 };
 
 class DecoderTest : public ::testing::Test {
-private:
+    private:
 	MockContext mock_context_;
 	struct up_decoder decoder_;
 	struct up_decoder_callbacks cb_;
 
-public:
-    	DecoderTest() {
-    	}
+    public:
+	DecoderTest()
+	{
+	}
 
-	static void mock_on_video_frame_start(void *context, u8 frame_id, u8 dev_num)
+	static void mock_on_video_frame_start(void *context, u8 frame_id,
+					      u8 dev_num)
 	{
 		MockContext *mockContext = static_cast<MockContext *>(context);
 		mockContext->video_frames_started++;
@@ -33,10 +35,12 @@ public:
 		mockContext->unique_dev_nums.insert(dev_num);
 	}
 
-	static void mock_on_video_frame_fragment(void *context, u8 *data, size_t len)
+	static void mock_on_video_frame_fragment(void *context, u8 *data,
+						 size_t len)
 	{
 		auto *mock = static_cast<MockContext *>(context);
-		mock->payload_data.insert(mock->payload_data.end(), data, data + len);
+		mock->payload_data.insert(mock->payload_data.end(), data,
+					  data + len);
 		static_cast<MockContext *>(context)->video_frame_fragments++;
 	}
 
@@ -50,9 +54,9 @@ public:
 		static_cast<MockContext *>(context)->video_frames_incomplete++;
 	}
 
-protected:
-
-	void SetUp() override {
+    protected:
+	void SetUp() override
+	{
 		cb_.on_video_frame_start = mock_on_video_frame_start;
 		cb_.on_video_frame_fragment = mock_on_video_frame_fragment;
 		cb_.on_video_frame_complete = mock_on_video_frame_complete;
@@ -60,41 +64,48 @@ protected:
 
 		decoder_.cb = cb_;
 		decoder_.context = &mock_context_;
-		decoder_.frame_id = 0,
-		decoder_.building_frame = false;
+		decoder_.frame_id = 0, decoder_.building_frame = false;
 		decoder_.found_soi = false;
 		decoder_.eof_reached = false;
 	}
 
-	MockContext& getContext() {
+	MockContext &getContext()
+	{
 		return mock_context_;
 	}
 
-	struct up_decoder* getDecoder() {
+	struct up_decoder *getDecoder()
+	{
 		return &decoder_;
 	}
 
-	int getVideoFramesStarted() {
+	int getVideoFramesStarted()
+	{
 		return mock_context_.video_frames_started;
 	}
 
-	int getVideoFrameFragments() {
+	int getVideoFrameFragments()
+	{
 		return mock_context_.video_frame_fragments;
 	}
 
-	int getVideoFramesCompleted() {
+	int getVideoFramesCompleted()
+	{
 		return mock_context_.video_frames_completed;
 	}
 
-	int getVideoFramesIncomplete() {
+	int getVideoFramesIncomplete()
+	{
 		return mock_context_.video_frames_incomplete;
 	}
 
-	int getPayloadSize() {
+	int getPayloadSize()
+	{
 		return mock_context_.payload_data.size();
 	}
 
-	uint8_t getPayloadByte(size_t index) {
+	uint8_t getPayloadByte(size_t index)
+	{
 		return mock_context_.payload_data[index];
 	}
 };
@@ -195,8 +206,8 @@ TEST_F(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 	payload_data[2] = JPEG_DEL;
 	payload_data[3] = JPEG_EOI;
 
-	size_t consumed =
-		up_decode_bulk(getDecoder(), buffer.data(), VIDEO_DATA_OFFSET + 4);
+	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(),
+					 VIDEO_DATA_OFFSET + 4);
 
 	EXPECT_EQ(consumed, static_cast<unsigned int>(16));
 	EXPECT_EQ(consumed, static_cast<unsigned int>(VIDEO_DATA_OFFSET + 4));
@@ -221,8 +232,8 @@ TEST_F(DecoderTest, DropsChunkIfSoiNotFound)
 	payload_data[2] = 0xCC;
 	payload_data[3] = 0xDD;
 
-	size_t consumed =
-		up_decode_bulk(getDecoder(), buffer.data(), VIDEO_DATA_OFFSET + 4);
+	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(),
+					 VIDEO_DATA_OFFSET + 4);
 
 	EXPECT_EQ(consumed, static_cast<unsigned int>(16));
 	EXPECT_EQ(consumed, static_cast<unsigned int>(VIDEO_DATA_OFFSET + 4));

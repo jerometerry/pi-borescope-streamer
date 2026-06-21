@@ -25,10 +25,10 @@
 
 #include "constants.hpp"
 #include "mjpeg_server.hpp"
-#include "useeplus_video_stream.hpp"
 #include "usb_camera.hpp"
 #include "usb_device_info.hpp"
 #include "usb_driver.hpp"
+#include "useeplus_video_stream.hpp"
 #include "video_frame_buffer.hpp"
 
 namespace {

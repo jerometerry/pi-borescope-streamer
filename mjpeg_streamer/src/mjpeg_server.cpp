@@ -17,10 +17,10 @@
 #include <vector>
 
 #include "constants.hpp"
+#include "http_response_builder.hpp"
 #include "index_html.hpp"
 #include "video_frame_buffer.hpp"
 #include "video_frame_fragment.hpp"
-#include "http_response_builder.hpp"
 
 MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running,
                          VideoFrameBuffer& disruptor)
@@ -96,8 +96,7 @@ void MjpegServer::onTimer(us_timer_t* t) {
                             viewer.isLagging = false;
                         }
 
-                        CorkState state{res, HttpResponseBuilder::build(currentFrame),
-                                        false};
+                        CorkState state{res, HttpResponseBuilder::build(currentFrame), false};
 
                         state.res->cork([&state]() { state.ok = state.res->write(state.payload); });
 
