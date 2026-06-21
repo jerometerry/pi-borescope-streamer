@@ -104,14 +104,28 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	size_t			      video_data_start;
 	size_t			      video_data_len;
 	u8			     *video_data_ptr;
+	u8 frame_id;
+	u8 dev_num;
 	size_t			      img_size;
 	size_t			      soi_lim;
 	size_t			      cur_pos;
+	size_t v_off;
 	bool			      found;
 	size_t			      i;
+	void (*o_vff)(void *context, u8 *data, size_t len);
+	void (*o_vfc)(void *context);
+	void (*o_vfic)(void *context);
+	void (*o_vfs)(void *context, u8 frame_id, u8 dev_num);
+	void *ctx;
 
 	cur_pos = 0;
 	found = false;
+
+
+	o_vfs = dec->cb.on_video_frame_start;
+	o_vff = dec->cb.on_video_frame_fragment;
+	o_vfc = dec->cb.on_video_frame_complete;
+	o_vfic = dec->cb.on_video_frame_incomplete;
 
 	if (len == 0 || !buf)
 		return 0;
@@ -135,17 +149,19 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		if (state.dev_num > MAX_DEV_NUM)
 			goto advance;
 
-		if (dec->building_frame && dec->frame_id != state.frame_id) {
-			if (!dec->eof_reached &&
-			    dec->cb.on_video_frame_incomplete)
-				dec->cb.on_video_frame_incomplete(dec->context);
+		ctx = dec->context;
+		frame_id = state.frame_id;
+		dev_num = state.dev_num;
+\
+		if (dec->building_frame && dec->frame_id != frame_id) {
+			if (!dec->eof_reached && o_vfic)
+				o_vfic(dec->context);
 		}
 
+
 		if (!dec->building_frame || dec->frame_id != state.frame_id) {
-			if (dec->cb.on_video_frame_start)
-				dec->cb.on_video_frame_start(dec->context,
-							     state.frame_id,
-							     state.dev_num);
+			if (o_vfs)
+				o_vfs(ctx, frame_id, dev_num);
 
 			dec->frame_id = state.frame_id;
 			dec->building_frame = true;
@@ -156,8 +172,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		if (dec->eof_reached)
 			goto advance;
 
-		v_hdr = up_get_video_frm_frag_hdr(buf,
-						  UP_USB_FRM_HDR_LEN + cur_pos);
+		v_off = UP_USB_FRM_HDR_LEN + cur_pos;
+		v_hdr = up_get_video_frm_frag_hdr(buf, v_off);
 
 		if (!up_is_valid_video_frm_frag_hdr(v_hdr))
 			goto advance;
@@ -199,12 +215,11 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 			}
 		}
 
-		if (dec->cb.on_video_frame_fragment)
-			dec->cb.on_video_frame_fragment(
-				dec->context, video_data_ptr, img_size);
+		if (o_vff)
+			o_vff(dec->context, video_data_ptr, img_size);
 
-		if (dec->eof_reached && dec->cb.on_video_frame_complete)
-			dec->cb.on_video_frame_complete(dec->context);
+;		if (dec->eof_reached && o_vfc)
+			o_vfc(dec->context);
 
 advance:
 		cur_pos += state.usb_frm_len;
