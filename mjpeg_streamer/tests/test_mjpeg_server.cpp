@@ -11,6 +11,7 @@
 #include <chrono>
 #include <compare>
 #include <cstdint>
+#include <ratio>
 #include <span>
 #include <string>
 #include <thread>

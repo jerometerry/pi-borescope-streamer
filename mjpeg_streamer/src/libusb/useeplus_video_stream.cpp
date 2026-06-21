@@ -3,15 +3,11 @@ extern "C" {
 #include "useeplus_protocol.h"
 }
 
-#include <algorithm>
 #include <cstdint>
-#include <cstring>
 #include <span>
-#include <string>
 #include <vector>
 
 #include "constants.hpp"
-#include "endian_conversion.hpp"
 #include "video_frame_buffer.hpp"
 #include "video_frame_fragment.hpp"
 
@@ -47,8 +43,9 @@ void UseeplusVideoStream::send(std::span<const uint8_t> data) {
 }
 
 void UseeplusVideoStream::onFrameStartCallback(
-    void* context, uint8_t frameId,
-    uint8_t devNum) {  // NOLINT(bugprone-easily-swappable-parameters)
+    void* context,
+    uint8_t frameId,
+    uint8_t /*devNum*/) {
     auto* self = static_cast<UseeplusVideoStream*>(context);
 
     if (self->frameActive_) {

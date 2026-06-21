@@ -14,6 +14,10 @@
 #include "video_frame_buffer.hpp"
 #include "video_frame_fragment.hpp"
 
+extern "C" {
+#include "useeplus_protocol.h"
+}
+
 class UseeplusVideoStreamTest : public ::testing::Test {
    private:
     VideoFrameBuffer disruptor_;

@@ -11,7 +11,6 @@
 
 #include "constants.hpp"
 #include "usb_camera.hpp"
-#include "usb_device_info.hpp"
 
 int MjpegStreamCapture::capture(const std::atomic<bool>& running, const UsbDeviceInfo& cameraInfo) {
     std::ofstream outFile("camera_stream.mjpeg", std::ios::out | std::ios::binary);

@@ -2,11 +2,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <format>
 #include <span>
 #include <string>
-// IWYU pragma: begin_exports
-#include <format>
-// IWYU pragma: end_exports
+#include <utility>
 #include <vector>
 
 #include "constants.hpp"

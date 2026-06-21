@@ -10,8 +10,9 @@
 #include <vector>
 
 #include "constants.hpp"
-#include "usb_camera.hpp"
-#include "usb_device_info.hpp"
+
+class UsbCamera;
+struct UsbDeviceInfo;
 
 /**
  * @brief A zero-cost wrapper that manages the libusb asynchronous event loop.

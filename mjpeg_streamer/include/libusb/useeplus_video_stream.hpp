@@ -1,7 +1,6 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <span>
 #include <vector>
 
@@ -10,7 +9,6 @@ extern "C" {
 }
 
 #include "video_frame_buffer.hpp"
-#include "video_frame_fragment.hpp"
 
 /**
  * @brief The translator that extracts and reassembles clean MJPEG video pictures from the hardware

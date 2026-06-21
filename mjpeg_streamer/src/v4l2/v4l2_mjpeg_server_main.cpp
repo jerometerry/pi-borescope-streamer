@@ -46,7 +46,7 @@ std::atomic<bool> running{true};
 using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
 
 int64_t currentClaimSequence_{-1};
-}
+}  // namespace
 void signalHandler(int) {
     running.store(false, std::memory_order_release);
 }

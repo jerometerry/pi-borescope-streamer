@@ -1,7 +1,7 @@
 #pragma once
 #include <string_view>
 
-#include "video_frame_fragment.hpp"
+struct VideoFrameFragment;
 
 /**
  * @brief Utility for formatting raw JPEG buffers into HTTP chunked responses.
@@ -20,4 +20,4 @@ namespace HttpResponseBuilder {
  * and the image payload.
  */
 std::string_view build(VideoFrameFragment& frame);
-}  // namespace HttpResponseBuilder
+}
