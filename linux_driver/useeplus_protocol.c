@@ -104,14 +104,14 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	size_t			      video_data_start;
 	size_t			      video_data_len;
 	u8			     *video_data_ptr;
-	u8 frame_id;
-	u8 dev_num;
 	size_t			      img_size;
 	size_t			      soi_lim;
 	size_t			      cur_pos;
-	size_t v_off;
 	bool			      found;
 	size_t			      i;
+	size_t			      v_off;
+	u8			      frame_id;
+	u8			      dev_num;
 	void (*o_vff)(void *context, u8 *data, size_t len);
 	void (*o_vfc)(void *context);
 	void (*o_vfic)(void *context);
@@ -216,7 +216,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		if (o_vff)
 			o_vff(dec->context, video_data_ptr, img_size);
 
-;		if (dec->eof_reached && o_vfc)
+		;
+		if (dec->eof_reached && o_vfc)
 			o_vfc(dec->context);
 
 advance:

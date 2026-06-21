@@ -200,12 +200,12 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 
 static void up_stop_streaming(struct vb2_queue *vq)
 {
+	struct up_buffer       *active_buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
 	struct up_drv_data     *drv_data;
 	struct vb2_buffer      *vb2_buf;
-	struct up_buffer       *active_buf;
-	unsigned long	        flags;
-	int		        i;
+	unsigned long		flags;
+	int			i;
 
 	drv_data = vb2_get_drv_priv(vq);
 	/*
