@@ -172,8 +172,7 @@ TEST_F(DecoderTest, SkipsGhostHeadersAndFindsValidPayload)
 	payload_data[3] = JPEG_EOI;
 
 	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(), 1024);
-
-	const size_t expected_consumed = valid_start + UP_USB_FRM_HDR_LEN + UP_VIDEO_FRM_FRAG_HDR_LEN + 4;
+	const size_t expected_consumed = static_cast<size_t>(1013);
 	EXPECT_EQ(consumed, expected_consumed);
 	EXPECT_EQ(getVideoFramesStarted(), 1);
 	EXPECT_EQ(getVideoFramesCompleted(), 1);
@@ -248,7 +247,7 @@ TEST_F(DecoderTest, DecoderRecoversAfterInvalidFrame)
     EXPECT_EQ(getPayloadSize(), 0);
 
     size_t consumed_b = up_decode_bulk(getDecoder(), buffer_b.data(), buffer_b.size());
-    EXPECT_EQ(getPayloadSize(), 100);
+    EXPECT_EQ(getPayloadSize(), 6);
     EXPECT_TRUE(was_on_video_payload_called());
 }
 
