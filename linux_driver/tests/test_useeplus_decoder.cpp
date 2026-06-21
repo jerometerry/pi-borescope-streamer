@@ -194,7 +194,7 @@ TEST_F(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 	EXPECT_EQ(getVideoFramesStarted(), 0);
 }
 
-std::vector<u8> create_valid_frame(size_t *payload_size) {
+std::vector<u8> create_valid_frame(size_t *video_data_size) {
 	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 
@@ -205,16 +205,18 @@ std::vector<u8> create_valid_frame(size_t *payload_size) {
 	struct up_video_frm_frag_hdr *v_hdr =
 		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
 	v_hdr->frame_id = 1;
+	v_hdr->device_number = 1;
+	v_hdr->flags = 0;
+	v_hrd->le_gravity_sensor = le32_to_cpu(0);
 
-	u8 *payload_data = (u8 *)(v_hdr + 1);
-	payload_data[0] = 0x99;
+	u8 *payload_data = (u8 *)(v_hdr + UP_VIDEO_FRM_FRAG_HDR_LEN);
 	payload_data[1] = JPEG_DEL;
 	payload_data[2] = JPEG_SOI;
 	payload_data[3] = 0xAA;
 	payload_data[4] = JPEG_DEL;
 	payload_data[5] = JPEG_EOI;
 
-	*payload_size = 6;
+	*video_data_size = 5;
 
 	return buffer;
 }
@@ -245,8 +247,8 @@ TEST_F(DecoderTest, DecoderRecoversAfterInvalidFrame)
 {
     std::vector<u8> buffer_a = create_junk_frame();
 
-    size_t payload_size = 0;
-    std::vector<u8> buffer_b = create_valid_frame(&payload_size);
+    size_t video_data_size = 0;
+    std::vector<u8> buffer_b = create_valid_frame(&video_data_size);
 
     size_t consumed_a = up_decode_bulk(getDecoder(), buffer_a.data(), buffer_a.size());
     EXPECT_EQ(getPayloadSize(), 0);
