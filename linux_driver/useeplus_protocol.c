@@ -111,12 +111,12 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	size_t			      img_size;
 	size_t			      soi_lim;
 	size_t			      cur_pos;
-	bool			      found;
-	size_t			      i;
 	size_t			      v_off;
 	u8			      frame_id;
+	bool			      found;
 	u8			      dev_num;
-	void *ctx;
+	size_t			      i;
+	void			     *ctx;
 
 	cur_pos = 0;
 	found = false;
