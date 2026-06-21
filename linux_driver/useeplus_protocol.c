@@ -157,7 +157,6 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 				o_vfic(dec->context);
 		}
 
-
 		if (!dec->building_frame || dec->frame_id != state.frame_id) {
 			if (o_vfs)
 				o_vfs(ctx, frame_id, dev_num);
