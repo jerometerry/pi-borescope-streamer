@@ -1,0 +1,146 @@
+.PHONY: default smatch static-check coccicheck clean install install-debug install-without-deps \
+	remove uninstall check-status insert check-deps check-stack check-patch check-includes \
+	check-format fix-format christmas-tree
+
+obj-m += useeplus.o
+useeplus-y := useeplus_core.o useeplus_protocol.o
+
+MODULE_NAME := useeplus
+GIT_VERSION := $(shell git rev-parse --short HEAD 2>/dev/null || echo "no-git")
+BUILD_DATE  := $(shell date +"%Y-%m-%d_%H:%M:%S")
+VERSION_STR := $(BUILD_DATE)-$(GIT_VERSION)
+KDIR ?= /lib/modules/$(shell uname -r)/build
+SMATCH := $(HOME)/github/smatch/smatch
+PWD  := $(shell pwd)
+
+ccflags-y += -DBUILD_VER='"$(VERSION_STR)"'
+
+ifeq ($(DEBUG),1)
+ccflags-y += -DDEBUG
+endif
+
+default:
+	$(MAKE) C=1 -C $(KDIR) M=$(PWD) W=1 modules
+
+smatch:
+	$(MAKE) CHECK="$(SMATCH)" SMATCHARGS="-p=kernel --param-mapper" C=1 -C $(KDIR) M=$(PWD) modules
+
+static-check:
+	$(MAKE) EXTRA_CFLAGS="-fanalyzer -Wanalyzer-infinite-loop -Warray-bounds=2" C=1 -C $(KDIR) M=$(PWD) modules
+
+coccicheck:
+	@$(MAKE) --no-print-directory -C $(KDIR) M=$(PWD) W=1 V=0 coccicheck MODE=report \
+		| grep -v -E "^(/usr/bin/spatch|make)" \
+		| grep -v "should .* be a metavariable"
+
+clean:
+	$(MAKE) -C $(KDIR) M=$(PWD) clean
+
+install: clean default
+	@echo "=== Unloading existing module ==="
+	-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
+	@echo "=== Copying to Kernel Tree ==="
+	sudo mkdir -p /lib/modules/$(shell uname -r)/updates/dkms
+	sudo cp $(MODULE_NAME).ko /lib/modules/$(shell uname -r)/updates/dkms/
+	@echo "=== Building Dependency Tree ==="
+	sudo depmod -a
+	@echo "=== Loading Module & Dependencies ==="
+	sudo modprobe $(MODULE_NAME)
+	@echo "=== Verification ==="
+	@lsmod | grep -q $(MODULE_NAME) && echo "SUCCESS: $(MODULE_NAME) and all deps are loaded." || echo "FAILED to load module."
+
+install-without-deps: clean default
+	@echo "=== Unloading existing module ==="
+	-sudo rmmod $(MODULE_NAME) 2>/dev/null || echo "No module to unload."
+	@echo "=== Loading New Module ==="
+	sudo insmod $(MODULE_NAME).ko
+	@echo "=== Verification ==="
+	@lsmod | grep -q $(MODULE_NAME) && echo "SUCCESS: $(MODULE_NAME) is loaded into memory." || echo "FAILED to load module."
+	@echo "--- Last 5 Kernel Messages ---"
+	@dmesg | tail -n 5
+
+install-debug:
+	$(MAKE) install DEBUG=1
+
+uninstall:
+	@-sudo modprobe -r $(MODULE_NAME) 2>/dev/null || \
+	echo "Module $(MODULE_NAME) not loaded or not found."
+
+remove:
+	@-sudo rmmod $(MODULE_NAME) 2>/dev/null || \
+	echo "Module $(MODULE_NAME) not loaded or not found."
+
+check-status:
+	@lsmod | grep "^$(MODULE_NAME)" || \
+	echo "Module $(MODULE_NAME) is not currently loaded."
+
+insert: default
+	sudo insmod ./$(MODULE_NAME).ko
+
+check-deps: default
+	@echo "=== Required Dependencies ==="
+	@deps=$$(modinfo -F depends $(MODULE_NAME).ko); \
+	if [ -z "$$deps" ]; then \
+		echo "No external dependencies found."; \
+	else \
+		echo "Dependencies found: $$deps"; \
+		echo "--- Status ---"; \
+		echo "$$deps" | tr ',' '\n' | while read dep; do \
+			dep_us=$$(echo "$$dep" | tr '-' '_'); \
+			if lsmod | grep -q "^$$dep_us"; then \
+				echo "  [OK]      $$dep is currently loaded."; \
+			else \
+				echo "  [MISSING] $$dep is NOT loaded!"; \
+			fi; \
+		done; \
+	fi
+
+check-stack: default
+	objdump -d useeplus.ko | $(KDIR)/scripts/checkstack.pl aarch64
+
+check-patch:
+	@$(KDIR)/scripts/checkpatch.pl --strict --no-tree --root=$$(pwd) --file \
+	useeplus_core.c useeplus_protocol.c \
+	useeplus_core.h useeplus_protocol.h
+
+check-format:
+	@clang-format --dry-run --Werror useeplus_core.c useeplus_protocol.c \
+	useeplus_core.h useeplus_protocol.h
+
+fix-format:
+	@clang-format -i useeplus_core.c useeplus_protocol.c \
+	useeplus_core.h useeplus_protocol.h
+
+check-includes:
+	$(KDIR)/scripts/checkincludes.pl *.c *.h
+
+define SORT_TREE_SCRIPT
+import sys, re
+
+def sort_tree(m):
+    # Split lines and drop any empty ones
+    lines = [l for l in m.group(1).splitlines() if l.strip()]
+    # Triple check that we aren't accidentally grabbing logic or parameters
+    if any("(" in l or ")" in l or "->" in l or "=" in l for l in lines):
+        return m.group(0) # Abort and return completely unmodified
+    lines.sort(key=len, reverse=True)
+    return "\n" + "\n".join(lines) + "\n"
+
+files = ["$(LINUX_DRIVER_DIR)/useeplus_core.c", "$(LINUX_DRIVER_DIR)/useeplus_protocol.c"]
+for f in files:
+    try:
+        c = open(f).read()
+        # Strictly match blocks where EVERY line starts with a tab/spaces, a type, and strictly ends with a semicolon
+        pattern = r"\n((?:^[ \t]+(?:struct|int|char|u8|u16|u32|size_t|bool|const)\s+[^;()\n]+;\n)+)"
+        c = re.sub(pattern, sort_tree, c, flags=re.M)
+        open(f, "w").write(c)
+    except FileNotFoundError:
+        pass
+endef
+export SORT_TREE_SCRIPT
+
+christmas-tree:
+	@echo "Sorting local variable trees..."
+	@python3 -c "$$SORT_TREE_SCRIPT"
+	@echo "Applying standard formatting..."
+	clang-format -i $(LINUX_DRIVER_DIR)/useeplus_core.c $(LINUX_DRIVER_DIR)/useeplus_protocol.c
