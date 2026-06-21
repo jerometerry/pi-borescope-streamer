@@ -42,20 +42,6 @@ struct alignas(disruptor::CACHE_LINE_SIZE) VideoFrameFragment {
         activeSize += content.size();
     }
 
-    void trim(size_t startOffset, size_t endOffset) {
-        if (endOffset > activeSize || startOffset > endOffset) {
-            throw std::out_of_range("Invalid trim boundaries");
-        }
-
-        size_t new_length = endOffset - startOffset;
-
-        if (startOffset > 0) {
-            std::memmove(storage.data() + paddingSize(),
-                         storage.data() + paddingSize() + startOffset, new_length);
-        }
-        activeSize = new_length;
-    }
-
     static size_t paddingSize() noexcept {
         return PADDING_SIZE;
     }

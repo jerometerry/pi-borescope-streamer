@@ -239,13 +239,16 @@ tidy: $(CORE_DEPS) $(TEST_DEPS) $(GENERATED_HPP)
 cppcheck: $(CORE_DEPS) $(TEST_DEPS) $(GENERATED_HPP)
 	@echo "Running cppcheck..."
 	@mkdir -p $(BUILD_DIR)/cppcheck_build $(BUILD_DIR)/html_report
-	@cppcheck --project=compile_commands.json \
+	@cppcheck $(CORE_SRCS) $(PROJECT_TEST_SRCS) \
 		--cppcheck-build-dir=$(BUILD_DIR)/cppcheck_build \
+		-I$(INC_DIR) -I$(INC_DIR)/libusb -I$(INC_DIR)/v4l2 -I$(LINUX_DRIVER_DIR) -I$(GEN_DIR) \
 		-i$(BUILD_DIR) --suppress=*:*googletest* --suppress=*:*gmock* \
-		--xml --enable=all --inconclusive --inline-suppr --check-level=exhaustive \
+		--suppress=missingIncludeSystem \
+		--suppress=variableScope:$(LINUX_DRIVER_DIR) \
+		--std=c++20 --xml --enable=all --inconclusive --inline-suppr --check-level=exhaustive \
 		2> $(BUILD_DIR)/cppcheck_report.xml
 	@cppcheck-htmlreport --file=$(BUILD_DIR)/cppcheck_report.xml \
-		--report-dir=$(BUILD_DIR)/html_report --source-dir=src --title="pi-borescope-streamer"
+		--report-dir=$(BUILD_DIR)/html_report --source-dir=. --title="pi-borescope-streamer"
 
 IWYU_SRCS    := $(CORE_SRCS) $(PROJECT_TEST_SRCS)
 IWYU_TARGETS := $(addprefix iwyu-,$(IWYU_SRCS))

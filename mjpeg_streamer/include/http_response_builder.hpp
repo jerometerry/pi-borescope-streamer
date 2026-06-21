@@ -20,4 +20,4 @@ namespace HttpResponseBuilder {
  * and the image payload.
  */
 std::string_view build(VideoFrameFragment& frame);
-}
+}  // namespace HttpResponseBuilder

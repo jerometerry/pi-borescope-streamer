@@ -42,10 +42,7 @@ void UseeplusVideoStream::send(std::span<const uint8_t> data) {
     }
 }
 
-void UseeplusVideoStream::onFrameStartCallback(
-    void* context,
-    uint8_t frameId,
-    uint8_t /*devNum*/) {
+void UseeplusVideoStream::onFrameStartCallback(void* context, uint8_t frameId, uint8_t /*devNum*/) {
     auto* self = static_cast<UseeplusVideoStream*>(context);
 
     if (self->frameActive_) {

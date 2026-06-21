@@ -193,7 +193,7 @@ enum up_decode_status {
 	UP_DECODE_NEED_DATA,
 };
 
-size_t up_decode_bulk(struct up_decoder *decoder, u8 *buffer, size_t len);
+size_t up_decode_bulk(struct up_decoder *dec, u8 *buffer, size_t len);
 
 #ifdef __cplusplus
 }
@@ -262,12 +262,12 @@ static inline bool up_is_valid_usb_frm_del(u16 delimiter)
 	return (delimiter == UP_PKT_DEL);
 }
 
-static inline u16 up_get_usb_frm_del(struct up_usb_frm_hdr *hdr)
+static inline u16 up_get_usb_frm_del(const struct up_usb_frm_hdr *hdr)
 {
 	return le16_to_cpu(hdr->le_delimiter);
 }
 
-static inline u16 up_get_usb_frm_pl_len(struct up_usb_frm_hdr *hdr)
+static inline u16 up_get_usb_frm_pl_len(const struct up_usb_frm_hdr *hdr)
 {
 	return le16_to_cpu(hdr->le_length);
 }
@@ -295,12 +295,12 @@ static inline bool up_is_valid_usb_frm_hdr(struct up_usb_frm_hdr *hdr)
 	return up_check_usb_frm_hdr(del, dev_id);
 }
 
-static inline bool up_is_jpg_soi(u8 *ptr, size_t i)
+static inline bool up_is_jpg_soi(const u8 *ptr, size_t i)
 {
 	return (ptr[i] == JPEG_DEL && ptr[i + 1] == JPEG_SOI);
 }
 
-static inline bool up_is_jpg_eoi(u8 *ptr, size_t i)
+static inline bool up_is_jpg_eoi(const u8 *ptr, size_t i)
 {
 	return (ptr[i] == JPEG_DEL && ptr[i + 1] == JPEG_EOI);
 }
@@ -358,7 +358,7 @@ static inline void up_set_other_flags(struct up_video_frm_frag_hdr *hdr, uint8_t
 	hdr->flags = val;
 }
 
-static inline bool up_is_valid_video_frm_frag_hdr(struct up_video_frm_frag_hdr *hdr)
+static inline bool up_is_valid_video_frm_frag_hdr(const struct up_video_frm_frag_hdr *hdr)
 {
 	if (!hdr)
 		return false;

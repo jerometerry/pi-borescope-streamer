@@ -1,3 +1,5 @@
+#include "usb_device_finder.hpp"
+
 #include <libusb.h>
 
 #include <algorithm>
@@ -10,7 +12,6 @@
 
 #include "constants.hpp"
 #include "usb_context.hpp"
-#include "usb_device_finder.hpp"
 #include "usb_device_info.hpp"
 #include "usb_device_list.hpp"
 
