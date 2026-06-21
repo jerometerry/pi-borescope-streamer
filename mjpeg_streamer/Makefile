@@ -300,5 +300,4 @@ christmas-tree:
 	@echo "Sorting local variable trees..."
 	@python3 -c "$$SORT_TREE_SCRIPT"
 	@echo "Applying standard formatting..."
-	clang-format -i $(LINUX_DRIVER_DIR)/useeplus_core.c $(LINUX_DRIVER_DIR)/useeplus_protocol.c
-
+	@clang-format -i $(LINUX_DRIVER_DIR)/useeplus_core.c $(LINUX_DRIVER_DIR)/useeplus_protocol.c
