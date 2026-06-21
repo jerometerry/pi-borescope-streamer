@@ -196,9 +196,9 @@ TEST_F(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 
 std::vector<u8> create_valid_frame(size_t *video_data_size) {
 	std::vector<u8> buffer(1024, 0x00);
-	u8 *buf_ptr = buffer.data();
 
-	*video_data_size = 5;
+	size_t payload_size = 512;
+	*video_data_size = payload_size;
 
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
@@ -216,8 +216,8 @@ std::vector<u8> create_valid_frame(size_t *video_data_size) {
 	video_data[0] = JPEG_DEL;
 	video_data[1] = JPEG_SOI;
 	video_data[2] = 0xAA;
-	video_data[3] = JPEG_DEL;
-	video_data[4] = JPEG_EOI;
+	video_data[payload_size - 2] = JPEG_DEL;
+	video_data[payload_size - 1] = JPEG_EOI;
 
 	return buffer;
 }
