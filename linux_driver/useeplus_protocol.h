@@ -163,11 +163,7 @@ struct up_decoder {
 extern "C" {
 #endif
 
-#ifdef __cplusplus
-enum up_usb_topology : std::uint8_t {
-#else
 enum up_usb_topology {
-#endif
 	UP_IAP_INTERFACE = 0,
 	UP_VIDEO_INTERFACE = 1,
 	UP_ALT_VIDEO_ENABLE = 1,
@@ -175,32 +171,20 @@ enum up_usb_topology {
 	UP_IAP_ENDPOINT = 0x02,
 };
 
-#ifdef __cplusplus
-enum up_hw_signatures : std::uint16_t {
-#else
 enum up_hw_signatures {
-#endif
 	UP_PKT_DEL = 0xBBAA,
 	VIDEO_CAMERA_ID = 0x0B,
 	GRAVITY_SENSOR_ID = 0x07,
 	MAX_DEV_NUM = 1,
 };
 
-#ifdef __cplusplus
-enum up_jpeg_marker : std::uint8_t {
-#else
 enum up_jpeg_marker {
-#endif
 	JPEG_DEL = 0xFF,
 	JPEG_SOI = 0xD8,
 	JPEG_EOI = 0xD9,
 };
 
-#ifdef __cplusplus
-enum up_decode_status : std::uint8_t {
-#else
 enum up_decode_status {
-#endif
 	UP_DECODE_OK,
 	UP_INVALID_USB_FRM_HDR,
 	UP_INVALID_VIDEO_FRM_FRAG_HDR,

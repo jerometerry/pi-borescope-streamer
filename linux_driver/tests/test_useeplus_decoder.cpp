@@ -27,7 +27,7 @@ class DecoderTest : public ::testing::Test {
 	}
 
 	static void mock_on_video_frame_start(void *context, u8 frame_id,
-					      u8 /*dev_num*/)
+					      u8 dev_num)
 	{
 		MockContext *mockContext = static_cast<MockContext *>(context);
 		mockContext->video_frames_started++;

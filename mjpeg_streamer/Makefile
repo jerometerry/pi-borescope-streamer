@@ -1,4 +1,4 @@
-.PHONY: all clean format check-format test tidy cppcheck iwyu docs sanitize benchmark
+.PHONY: all clean format check-format test tidy cppcheck iwyu docs sanitize benchmark install-deps
 
 CXX := zig c++
 CC  := zig cc
@@ -16,44 +16,7 @@ INC_DIR          := include
 GEN_DIR          := generated
 LINUX_DRIVER_DIR := ../linux_driver
 BUILD_DIR        := build
-
-UNAME_S := $(shell uname -s)
-UNAME_P := $(shell uname -p)
-
-ifeq ($(UNAME_S),Linux)
-    PLATFORM := LINUX
-    CXXFLAGS += -pthread
-    LDFLAGS  += -pthread
-    ifneq (,$(filter aarch64%,$(UNAME_P)))
-        CXXFLAGS += -target aarch64-linux-gnu -mcpu=cortex-a76
-        CFLAGS   += -target aarch64-linux-gnu -mcpu=cortex-a76
-    endif
-else ifeq ($(UNAME_S),Darwin)
-    PLATFORM := MACOS
-endif
-
-INCLUDES := -I$(INC_DIR) \
-            -I$(INC_DIR)/libusb \
-            -I$(INC_DIR)/v4l2 \
-            -I$(LINUX_DRIVER_DIR) \
-            -I$(GEN_DIR) \
-            -isystem $(BUILD_DIR)/sockets/uWebSockets/src \
-            -isystem $(BUILD_DIR)/sockets/uSockets/src
-
-LDFLAGS += -Wl,--start-group \
-	$(BUILD_DIR)/sockets/uSockets/uSockets.a \
-	$(BUILD_DIR)/libmjpeg_streamer_core.a \
-	-Wl,--end-group -lz -lssl -lcrypto -lpthread
-
-INCLUDES += $(shell pkg-config --cflags libusb-1.0)
-LDFLAGS  += $(shell pkg-config --libs libusb-1.0)
-
-ifeq ($(PLATFORM),MACOS)
-    OSSL_CFLAGS := $(shell pkg-config --cflags openssl 2>/dev/null || echo "-I/opt/homebrew/opt/openssl@3/include")
-    INCLUDES += $(patsubst -I%,-isystem %,$(OSSL_CFLAGS))
-
-    LDFLAGS  += $(shell pkg-config --libs-only-L openssl 2>/dev/null || echo "-L/opt/homebrew/opt/openssl@3/lib")
-endif
+TEST_DIR         := tests
 
 HTML_FILE     := $(SRC_DIR)/index.html
 GENERATED_HPP := $(GEN_DIR)/index_html.hpp
@@ -75,35 +38,91 @@ TARGETS := $(BUILD_DIR)/mjpeg_server \
            $(BUILD_DIR)/mjpeg_stream_capture \
            $(BUILD_DIR)/mjpeg_frame_extractor
 
-ifeq ($(PLATFORM),LINUX)
-    TARGETS += $(BUILD_DIR)/v4l2_mjpeg_server
-endif
-
-TEST_DIR := tests
-GTEST_INC := -isystem build/googletest/googletest/include \
-             -isystem build/googletest/googlemock/include
-
-GTEST_LIBS := build/googletest/build/lib/libgtest.a \
-              build/googletest/build/lib/libgtest_main.a \
-              build/googletest/build/lib/libgmock.a
-
 PROJECT_TEST_SRCS := $(TEST_DIR)/test_disruptor.cpp \
                      $(TEST_DIR)/test_mjpeg_server.cpp \
                      $(TEST_DIR)/test_useeplus_video_stream.cpp \
                      $(TEST_DIR)/test_http_response_builder.cpp
 
-DRIVER_TEST_SRCS := $(LINUX_DRIVER_DIR)/tests/test_useeplus_decoder.cpp \
-                    $(LINUX_DRIVER_DIR)/tests/test_useeplus_protocol.cpp \
-                    $(LINUX_DRIVER_DIR)/useeplus_protocol.c
+DRIVER_TEST_SRCS  := $(LINUX_DRIVER_DIR)/tests/test_useeplus_decoder.cpp \
+                     $(LINUX_DRIVER_DIR)/tests/test_useeplus_protocol.cpp
 
 PROJECT_TEST_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(PROJECT_TEST_SRCS)))
 DRIVER_TEST_OBJS  := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(DRIVER_TEST_SRCS)))
+TEST_TARGETS      := $(BUILD_DIR)/run_project_tests $(BUILD_DIR)/run_linux_driver_tests
 
-TEST_TARGETS := $(BUILD_DIR)/run_project_tests $(BUILD_DIR)/run_linux_driver_tests
+BENCHMARK_SRCS    := benchmark/disruptor_benchmark.cpp \
+                     benchmark/disruptor_concurrency_benchmark.cpp \
+                     benchmark/mjpeg_pipeline_benchmark.cpp
 
-CORE_DEPS  := $(BUILD_DIR)/.core_deps
-TEST_DEPS  := $(BUILD_DIR)/.test_deps
-BENCH_DEPS := $(BUILD_DIR)/.bench_deps
+BENCHMARK_OBJS    := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(BENCHMARK_SRCS)))
+BENCHMARK_TARGETS := $(patsubst benchmark/%.cpp,$(BUILD_DIR)/%.bench,$(BENCHMARK_SRCS))
+
+UNAME_S := $(shell uname -s)
+UNAME_P := $(shell uname -p)
+
+ifeq ($(UNAME_S),Linux)
+    PLATFORM := LINUX
+    CXXFLAGS += -pthread
+    LDFLAGS  += -pthread
+    TARGETS  += $(BUILD_DIR)/v4l2_mjpeg_server
+    ifneq (,$(filter aarch64%,$(UNAME_P)))
+        CXXFLAGS += -target aarch64-linux-gnu -mcpu=cortex-a76
+        CFLAGS   += -target aarch64-linux-gnu -mcpu=cortex-a76
+    endif
+else ifeq ($(UNAME_S),Darwin)
+    PLATFORM := MACOS
+endif
+
+LIBUSB_CFLAGS := $(shell pkg-config --cflags libusb-1.0)
+
+INCLUDES := -I$(INC_DIR) \
+            -I$(INC_DIR)/libusb \
+            -I$(INC_DIR)/v4l2 \
+            -I$(LINUX_DRIVER_DIR) \
+            -I$(GEN_DIR) \
+            -isystem $(BUILD_DIR)/sockets/uWebSockets/src \
+            -isystem $(BUILD_DIR)/sockets/uSockets/src \
+            $(patsubst -I%,-isystem %,$(LIBUSB_CFLAGS))
+
+LDFLAGS += -Wl,--start-group \
+           $(BUILD_DIR)/sockets/uSockets/uSockets.a \
+           $(BUILD_DIR)/libmjpeg_streamer_core.a \
+           -Wl,--end-group -lz -lssl -lcrypto -lpthread \
+           $(shell pkg-config --libs libusb-1.0)
+
+ifeq ($(PLATFORM),MACOS)
+    OSSL_CFLAGS := $(shell pkg-config --cflags openssl 2>/dev/null || echo "-I/opt/homebrew/opt/openssl@3/include")
+    INCLUDES += $(patsubst -I%,-isystem %,$(OSSL_CFLAGS))
+    LDFLAGS  += $(shell pkg-config --libs-only-L openssl 2>/dev/null || echo "-L/opt/homebrew/opt/openssl@3/lib")
+endif
+
+GTEST_INC  := -isystem build/googletest/googletest/include \
+              -isystem build/googletest/googlemock/include
+GTEST_LIBS := build/googletest/build/lib/libgtest.a \
+              build/googletest/build/lib/libgtest_main.a \
+              build/googletest/build/lib/libgmock.a
+
+BENCH_INC  := -isystem build/benchmark/include
+BENCH_LIBS := build/benchmark/build/src/libbenchmark.a \
+              build/benchmark/build/src/libbenchmark_main.a
+
+$(PROJECT_TEST_OBJS) $(DRIVER_TEST_OBJS): INCLUDES += $(GTEST_INC)
+$(DRIVER_TEST_OBJS): INCLUDES += -I$(LINUX_DRIVER_DIR)
+$(BENCHMARK_OBJS): INCLUDES += $(BENCH_INC)
+
+all: $(CORE_DEPS) $(TARGETS)
+
+clean:
+	rm -rf $(BUILD_DIR) $(GEN_DIR)
+
+CORE_DEPS     := $(BUILD_DIR)/.core_deps
+TEST_DEPS     := $(BUILD_DIR)/.test_deps
+BENCH_DEPS    := $(BUILD_DIR)/.bench_deps
+DEPS_SENTINEL := $(BUILD_DIR)/.deps_installed
+
+$(CORE_OBJS): | $(CORE_DEPS)
+$(PROJECT_TEST_OBJS) $(DRIVER_TEST_OBJS): | $(CORE_DEPS) $(TEST_DEPS)
+$(BENCHMARK_OBJS): | $(CORE_DEPS) $(BENCH_DEPS)
 
 $(CORE_DEPS): install-core-deps.sh
 	@echo "Checking core dependency trees..."
@@ -123,31 +142,13 @@ $(BENCH_DEPS): install-bench-deps.sh
 	@./install-bench-deps.sh
 	@touch $@
 
-$(CORE_OBJS): | $(CORE_DEPS)
-$(PROJECT_TEST_OBJS) $(DRIVER_TEST_OBJS): | $(CORE_DEPS) $(TEST_DEPS)
-$(DRIVER_TEST_OBJS): INCLUDES += -I$(LINUX_DRIVER_DIR)
-
-TIDY_CHECKS := -*,performance-*,concurrency-*,bugprone-*,modernize-*,cppcoreguidelines-*,-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast,-cppcoreguidelines-avoid-c-arrays,-modernize-avoid-c-arrays,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-cstyle-cast,-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-non-const-global-variables,-bugprone-throwing-static-initialization,-modernize-use-designated-initializers,-modernize-use-integer-sign-comparison,-modernize-use-auto,-modernize-use-ranges,-bugprone-narrowing-conversions,-cppcoreguidelines-narrowing-conversions,-modernize-avoid-c-style-cast,-cppcoreguidelines-pro-type-const-cast,-modernize-use-nodiscard,-modernize-use-equals-default,-cppcoreguidelines-special-member-functions,-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access
-
-BENCHMARK_SRCS := benchmark/disruptor_benchmark.cpp \
-                  benchmark/disruptor_concurrency_benchmark.cpp \
-                  benchmark/mjpeg_pipeline_benchmark.cpp
-
-BENCHMARK_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(BENCHMARK_SRCS)))
-BENCHMARK_TARGETS := $(patsubst benchmark/%.cpp,$(BUILD_DIR)/%.bench,$(BENCHMARK_SRCS))
-
-BENCH_LIBS := build/benchmark/build/src/libbenchmark.a \
-              build/benchmark/build/src/libbenchmark_main.a
-
-$(BENCHMARK_OBJS): | $(CORE_DEPS) $(BENCH_DEPS)
-
-DEPS_SENTINEL := $(BUILD_DIR)/.deps_installed
-
 $(DEPS_SENTINEL): install-deps.sh
 	@echo "Checking project dependency trees..."
 	@./install-deps.sh
 	@mkdir -p $(BUILD_DIR)
-	@touch $(DEPS_SENTINEL)
+	@touch $@
+
+install-deps: $(DEPS_SENTINEL)
 
 $(GENERATED_HPP): $(HTML_FILE)
 	@mkdir -p $(GEN_DIR)
@@ -190,20 +191,21 @@ $(BUILD_DIR)/mjpeg_frame_extractor: $(BUILD_DIR)/src/libusb/mjpeg_frame_extracto
 $(BUILD_DIR)/run_project_tests: $(PROJECT_TEST_OBJS) $(CORE_LIB)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(GTEST_LIBS) $(LDFLAGS)
 
-$(BUILD_DIR)/run_linux_driver_tests: $(DRIVER_TEST_OBJS)
+$(BUILD_DIR)/run_linux_driver_tests: $(DRIVER_TEST_OBJS) $(CORE_LIB)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(GTEST_LIBS) $(LDFLAGS)
-
-$(BUILD_DIR)/benchmark/%.o: benchmark/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -isystem build/benchmark/include -c $< -o $@
 
 $(BUILD_DIR)/%.bench: $(BUILD_DIR)/benchmark/%.o $(CORE_LIB)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(BENCH_LIBS) $(LDFLAGS)
 
-all: $(CORE_DEPS) $(TARGETS)
+test: $(CORE_DEPS) $(TEST_DEPS) $(TEST_TARGETS)
+	@$(BUILD_DIR)/run_project_tests
+	@$(BUILD_DIR)/run_linux_driver_tests
 
-clean:
-	rm -rf $(BUILD_DIR) $(GEN_DIR)
+benchmark: $(CORE_DEPS) $(BENCH_DEPS) $(BENCHMARK_TARGETS)
+	@for bench in $(BENCHMARK_TARGETS); do \
+		echo "--- Running $$bench ---"; \
+		./$$bench; \
+	done
 
 sanitize: CXXFLAGS += -fsanitize=address,undefined
 sanitize: LDFLAGS += -fsanitize=address,undefined
@@ -215,15 +217,24 @@ format:
 check-format:
 	@./run-format.sh check
 
-install-deps: $(DEPS_SENTINEL)
+TIDY_CHECKS := -*,performance-*,concurrency-*,bugprone-*,modernize-*,cppcoreguidelines-*, \
+-modernize-use-trailing-return-type,-cppcoreguidelines-avoid-magic-numbers, \
+-cppcoreguidelines-pro-bounds-pointer-arithmetic,-cppcoreguidelines-pro-type-reinterpret-cast, \
+-cppcoreguidelines-avoid-c-arrays,-modernize-avoid-c-arrays, \
+-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-cppcoreguidelines-pro-type-cstyle-cast, \
+-cppcoreguidelines-pro-type-vararg,-cppcoreguidelines-avoid-non-const-global-variables, \
+-bugprone-throwing-static-initialization,-modernize-use-designated-initializers, \
+-modernize-use-integer-sign-comparison,-modernize-use-auto,-modernize-use-ranges, \
+-bugprone-narrowing-conversions,-cppcoreguidelines-narrowing-conversions, \
+-modernize-avoid-c-style-cast,-cppcoreguidelines-pro-type-const-cast,-modernize-use-nodiscard, \
+-modernize-use-equals-default,-cppcoreguidelines-special-member-functions, \
+-cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,-performance-enum-size
 
-test: $(CORE_DEPS) $(TEST_DEPS) $(TEST_TARGETS)
-	@$(BUILD_DIR)/run_project_tests
-	@$(BUILD_DIR)/run_linux_driver_tests
+TIDY_SRCS := $(filter-out %.c, $(CORE_SRCS) $(PROJECT_TEST_SRCS))
 
 tidy: $(CORE_DEPS) $(TEST_DEPS) $(GENERATED_HPP)
 	@echo "Running clang-tidy..."
-	@clang-tidy -checks="$(TIDY_CHECKS)" -warnings-as-errors=* $(CORE_SRCS) $(PROJECT_TEST_SRCS) -- $(CXXFLAGS) $(INCLUDES)
+	@clang-tidy -checks="$(TIDY_CHECKS)" -warnings-as-errors=* $(TIDY_SRCS) -- $(CXXFLAGS) $(INCLUDES) $(GTEST_INC)
 
 cppcheck: $(CORE_DEPS) $(TEST_DEPS) $(GENERATED_HPP)
 	@echo "Running cppcheck..."
@@ -236,29 +247,22 @@ cppcheck: $(CORE_DEPS) $(TEST_DEPS) $(GENERATED_HPP)
 	@cppcheck-htmlreport --file=$(BUILD_DIR)/cppcheck_report.xml \
 		--report-dir=$(BUILD_DIR)/html_report --source-dir=src --title="pi-borescope-streamer"
 
-iwyu: $(CORE_DEPS) $(TEST_DEPS) $(GENERATED_HPP)
-	@echo "Running include-what-you-use..."
-	@for src in $(CORE_SRCS) $(PROJECT_TEST_SRCS); do \
-		echo "--- Analyzing $$src ---"; \
-		case "$$src" in \
-			*.c) FLAGS="$(CFLAGS)" ;; \
-			*)   FLAGS="$(CXXFLAGS) $(GTEST_INC)" ;; \
-		esac; \
-		include-what-you-use -Xiwyu --mapping_file=project.imp \
-			$$FLAGS $(INCLUDES) \
-			$(if $(filter $(PLATFORM),MACOS),-isysroot $(shell xcrun --show-sdk-path) -isystem $(shell xcrun --show-sdk-path)/usr/include/c++/v1,) \
-			$$src || true; \
-	done
+IWYU_SRCS    := $(CORE_SRCS) $(PROJECT_TEST_SRCS)
+IWYU_TARGETS := $(addprefix iwyu-,$(IWYU_SRCS))
+
+iwyu: $(IWYU_TARGETS)
+$(IWYU_TARGETS): iwyu-%: $(CORE_DEPS) $(TEST_DEPS) $(GENERATED_HPP)
+	@echo "--- Analyzing $* ---"
+	@case "$*" in \
+		*.c) FLAGS="$(CFLAGS)" ;; \
+		*)   FLAGS="$(CXXFLAGS) $(GTEST_INC)" ;; \
+	esac; \
+	include-what-you-use -Xiwyu --mapping_file=project.imp \
+		$$FLAGS $(INCLUDES) \
+		$(if $(filter $(PLATFORM),MACOS),-isysroot $(shell xcrun --show-sdk-path) -isystem $(shell xcrun --show-sdk-path)/usr/include/c++/v1,) \
+		$* || true
 
 docs:
 	@echo "Generating API Documentation with Doxygen..."
 	@mkdir -p docs/api
-	@echo "PROJECT_NAME = pi-borescope-streamer\nINPUT = src include\nRECURSIVE = YES\nGENERATE_HTML = YES\nGENERATE_LATEX = NO\nMACRO_EXPANSION = YES\nPREDEFINED = \"[[gnu::packed]]=\"\nHAVE_DOT = YES\nOUTPUT_DIRECTORY = docs/api" | doxygen -
-
-benchmark: $(CORE_DEPS) $(BENCH_DEPS) $(BENCHMARK_TARGETS)
-	@for bench in $(BENCHMARK_TARGETS); do \
-		echo "--- Running $$bench ---"; \
-		./$$bench; \
-	done
-
-
+	@echo "PROJECT_NAME = pi-borescope-streamer\nINPUT = src include\nRECURSIVE = YES\nGENERATE_HTML = YES\nGENERATE_LATEX = NO\nMACRO_EXPANSION = YES\nPREDEFINED =
