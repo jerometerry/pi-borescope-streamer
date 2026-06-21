@@ -858,7 +858,8 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 	dma_addr_t	     *dma;
 	u8		     *urb_ptr;
 	struct urb	     *urb;
-	u8 *urb_buf int	      i;
+	u8 *urb_buf;
+	int	      i;
 	usb_complete_t	      u_comp;
 
 	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->usb.video_in_ep);
