@@ -254,7 +254,7 @@ TEST_F(DecoderTest, DecoderRecoversAfterInvalidFrame)
     EXPECT_EQ(getPayloadSize(), 0);
 
     size_t consumed_b = up_decode_bulk(getDecoder(), buffer_b.data(), buffer_b.size());
-    EXPECT_EQ(getPayloadSize(), payload_size);
+    EXPECT_EQ(getPayloadSize(), video_data_size);
     EXPECT_TRUE(was_on_video_payload_called());
 }
 
