@@ -110,7 +110,7 @@ class DecoderTest : public ::testing::Test {
 	}
 
 	bool was_on_video_payload_called() {
-		return video_frame_fragments > 0;
+		return mock_context_.video_frame_fragments > 0;
 	}
 };
 
