@@ -207,7 +207,7 @@ std::vector<u8> create_valid_frame(size_t *video_data_size) {
 	v_hdr->frame_id = 1;
 	v_hdr->device_number = 1;
 	v_hdr->flags = 0;
-	v_hrd->le_gravity_sensor = le32_to_cpu(0);
+	v_hdr->le_gravity_sensor = 0;
 
 	u8 *payload_data = (u8 *)(v_hdr + UP_VIDEO_FRM_FRAG_HDR_LEN);
 	payload_data[1] = JPEG_DEL;

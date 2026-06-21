@@ -214,10 +214,10 @@ struct up_usb_frm_hdr {
 } __packed;
 
 struct up_video_frm_frag_hdr {
-	u32 le_gravity_sensor;
-	u8  device_number;
 	u8  frame_id;
+	u8  device_number;
 	u8  flags;
+	u32 le_gravity_sensor;
 } __packed;
 
 #ifdef __cplusplus
