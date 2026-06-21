@@ -81,8 +81,8 @@ TEST(ProtocolTest, ChecksPacketHeaderCombination)
 TEST(ProtocolTest, GetsPacketDelimeterAndLength)
 {
 	struct up_usb_frm_hdr pkt = {};
-	pkt.le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
-	pkt.le_length = UP_LE16_TO_CPU(500);
+	pkt.le_delimiter = le16_to_cpu(UP_PKT_DEL);
+	pkt.le_length = le16_to_cpu(500);
 
 	EXPECT_EQ(up_get_usb_frm_del(&pkt), UP_PKT_DEL);
 	EXPECT_EQ(up_get_usb_frm_pl_len(&pkt), 500);
@@ -91,7 +91,7 @@ TEST(ProtocolTest, GetsPacketDelimeterAndLength)
 TEST(ProtocolTest, ValidatesFullPacketHeaderStruct)
 {
 	struct up_usb_frm_hdr pkt = {};
-	pkt.le_delimiter = UP_LE16_TO_CPU(UP_PKT_DEL);
+	pkt.le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	pkt.device_id = VIDEO_CAMERA_ID;
 
 	EXPECT_TRUE(up_is_valid_usb_frm_hdr(&pkt));

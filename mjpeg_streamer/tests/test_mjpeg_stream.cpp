@@ -128,7 +128,7 @@ TEST_F(MjpegStreamTest, TestUsbPayloadHeaderGettersAndSetters) {
     // to prevent GoogleTest from binding a reference to the unaligned packed member.
     EXPECT_EQ(+payloadHeader->frame_id, 9);
     EXPECT_EQ(+payloadHeader->device_number, 8);
-    EXPECT_EQ(+payloadHeader->le_gravity_sensor, 7);
+    EXPECT_EQ(+payloadHeader->le_gravity_sensor, static_cast<unsigned int>(7));
 
     // Function calls returning by-value are naturally safe, as the temporary is aligned
     EXPECT_EQ(up_has_gravity_sensor(payloadHeader->flags), true);

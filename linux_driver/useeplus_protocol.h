@@ -4,15 +4,10 @@
 // NOLINTBEGIN(bugprone-reserved-identifier,cppcoreguidelines-use-enum-class,modernize-use-using,cppcoreguidelines-macro-usage)
 
 #ifdef __KERNEL__
-/* --- 1. LINUX KERNEL TREE BUILD --- */
 #include <linux/types.h>
 #include <asm/byteorder.h>
 
-#define UP_LE16_TO_CPU(x) le16_to_cpu(x)
-#define UP_LE32_TO_CPU(x) le32_to_cpu(x)
-
 #else
-/* --- USER-SPACE BUILDS (Linux Off-Tree & macOS) --- */
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -32,28 +27,22 @@ typedef uint32_t u32;
 #endif
 
 #if defined(__APPLE__)
-/* --- 2. MACOS BUILD (Clang) --- */
 #include <libkern/OSByteOrder.h>
 #ifdef __cplusplus
-inline uint16_t UP_LE16_TO_CPU(uint16_t x) { return OSSwapLittleToHostInt16(x); }
-inline uint32_t UP_LE32_TO_CPU(uint32_t x) { return OSSwapLittleToHostInt32(x); }
+inline uint16_t le16_to_cpu(uint16_t x) { return OSSwapLittleToHostInt16(x); }
 #else
-#define UP_LE16_TO_CPU(x) OSSwapLittleToHostInt16(x)
-#define UP_LE32_TO_CPU(x) OSSwapLittleToHostInt32(x)
+#define le16_to_cpu(x) OSSwapLittleToHostInt16(x)
 #endif
 
 #else
-/* --- 3. LINUX USER-SPACE BUILD (GCC / Clang) --- */
 #ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
 #endif
 #include <endian.h>
 #ifdef __cplusplus
-inline uint16_t UP_LE16_TO_CPU(uint16_t x) { return le16toh(x); }
-inline uint32_t UP_LE32_TO_CPU(uint32_t x) { return le32toh(x); }
+inline uint16_t le16_to_cpu(uint16_t x) { return le16toh(x); }
 #else
-#define UP_LE16_TO_CPU(x) le16toh(x)
-#define UP_LE32_TO_CPU(x) le32toh(x)
+#define le16_to_cpu(x) le16toh(x)
 #endif
 #endif
 
@@ -170,7 +159,6 @@ struct up_decoder {
 	bool eof_reached;
 };
 
-/* Safe C++ binding wrapper */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -292,12 +280,12 @@ static inline bool up_is_valid_usb_frm_del(u16 delimiter)
 
 static inline u16 up_get_usb_frm_del(struct up_usb_frm_hdr *hdr)
 {
-	return UP_LE16_TO_CPU(hdr->le_delimiter);
+	return le16_to_cpu(hdr->le_delimiter);
 }
 
 static inline u16 up_get_usb_frm_pl_len(struct up_usb_frm_hdr *hdr)
 {
-	return UP_LE16_TO_CPU(hdr->le_length);
+	return le16_to_cpu(hdr->le_length);
 }
 
 static inline bool up_check_usb_frm_hdr(u16 del, u8 dev_id)
