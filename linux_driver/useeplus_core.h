@@ -68,8 +68,8 @@ struct up_drv_data {
 		struct video_device video_dev;
 		struct v4l2_device  v4l2_dev;
 
-		// Mutex protecting the video_queue
 		struct vb2_queue queue;
+		// Mutex protecting the video_queue
 		struct mutex	 lock;
 		u32		 height;
 		u32		 width;

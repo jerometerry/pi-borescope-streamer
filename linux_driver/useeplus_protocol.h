@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT OR GPL-2.0-only */
+
 #ifndef USEEPLUS_PROTOCOL_H
 #define USEEPLUS_PROTOCOL_H
 
@@ -62,18 +64,18 @@ inline uint16_t le16_to_cpu(uint16_t x)
  * Because Video Frames are large, they are chunked into smaller "Video Frame Fragments".
  * Each fragment is then encapsulated in a Link-Layer (Layer 2) "USB Frame" for transport.
  *
- * | Byte Offset | Field Name               | Size | OSI Layer | Description                         |
- * |-------------|--------------------------|------|-----------|-------------------------------------|
- * | 0x00        | Start Frame Delimiter    | 2    | L2 (USB)  | 0xBBAA (Little-Endian signature)    |
- * | 0x02        | Device ID                | 1    | L2 (USB)  | 0x0B = Video, 0x07 = Gravity Sensor |
- * | 0x03        | Payload Length           | 2    | L2 (USB)  | Total bytes following the USB Header|
- * |-------------|--------------------------|------|-----------|-------------------------------------|
- * | 0x05        | Frame ID                 | 1    | L6 (Video)| Rolls over when a new Video Frame starts |
- * | 0x06        | Device Number            | 1    | L6 (Video)| Secondary internal lens index       |
- * | 0x07        | Flags                    | 1    | L6 (Video)| Bit 0: Gravity, Bit 1: Button       |
- * | 0x08        | IMU Matrix               | 4    | L6 (Video)| 32-bit accelerometer telemetry      |
- * |-------------|--------------------------|------|-----------|-------------------------------------|
- * | 0x0C (12)   | Video Frame Fragment     | Var  | L6 (Video)| Fragmented chunk of the MJPEG stream|
+ * | Byte Offset | Field Name            | Size | OSI Layer | Description                         |
+ * |-------------|-----------------------|------|-----------|-------------------------------------|
+ * | 0x00        | Start Frame Delimiter | 2    | L2 (USB)  | 0xBBAA (Little-Endian signature)    |
+ * | 0x02        | Device ID             | 1    | L2 (USB)  | 0x0B = Video, 0x07 = Gravity Sensor |
+ * | 0x03        | Payload Length        | 2    | L2 (USB)  | Total bytes following the USB Header|
+ * |-------------|-----------------------|------|-----------|-------------------------------------|
+ * | 0x05        | Frame ID              | 1    | L6 (Video)| Rolls on new Video Frame start      |
+ * | 0x06        | Device Number         | 1    | L6 (Video)| Secondary internal lens index       |
+ * | 0x07        | Flags                 | 1    | L6 (Video)| Bit 0: Gravity, Bit 1: Button       |
+ * | 0x08        | IMU Matrix            | 4    | L6 (Video)| 32-bit accelerometer telemetry      |
+ * |-------------|-----------------------|------|-----------|-------------------------------------|
+ * | 0x0C (12)   | Video Frame Fragment  | Var  | L6 (Video)| MJPEG fragment                      |
  *
  * Video Frame Assembly Rules
  *
