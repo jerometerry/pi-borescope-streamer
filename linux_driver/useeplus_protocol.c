@@ -115,8 +115,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 	u8			      frame_id;
 	bool			      found;
 	u8			      dev_num;
-	size_t			      i;
 	void			     *ctx;
+	size_t			      i;
 
 	cur_pos = 0;
 	found = false;
