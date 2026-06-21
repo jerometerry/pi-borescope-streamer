@@ -14,7 +14,7 @@ extern "C" {
 #define U16_MAX UINT16_MAX
 
 /* --- Core Types --- */
-typedef uint8_t u8;
+typedef uint8_t	 u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
@@ -146,18 +146,18 @@ struct vb2_buffer {
 
 struct vb2_v4l2_buffer {
 	struct vb2_buffer vb2_buf;
-	uint32_t sequence;
+	uint32_t	  sequence;
 };
 
 static inline void *vb2_plane_vaddr(struct vb2_buffer *vb,
-				    unsigned int plane_no)
+				    unsigned int       plane_no)
 {
 	(void)plane_no;
 	return vb->mock_vaddr;
 }
 static inline void vb2_set_plane_payload(struct vb2_buffer *vb,
-					 unsigned int plane_no,
-					 unsigned long size)
+					 unsigned int	    plane_no,
+					 unsigned long	    size)
 {
 	(void)vb;
 	(void)plane_no;

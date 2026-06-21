@@ -6,19 +6,19 @@ extern "C" {
 }
 
 struct MockContext {
-	int video_frames_started = 0;
-	int video_frame_fragments = 0;
-	int video_frames_completed = 0;
-	int video_frames_incomplete = 0;
+	int		     video_frames_started = 0;
+	int		     video_frame_fragments = 0;
+	int		     video_frames_completed = 0;
+	int		     video_frames_incomplete = 0;
 	std::vector<uint8_t> payload_data;
-	std::set<u8> unique_frame_ids;
-	std::set<u8> unique_dev_nums;
+	std::set<u8>	     unique_frame_ids;
+	std::set<u8>	     unique_dev_nums;
 };
 
 class DecoderTest : public ::testing::Test {
     private:
-	MockContext mock_context_;
-	struct up_decoder decoder_;
+	MockContext		    mock_context_;
+	struct up_decoder	    decoder_;
 	struct up_decoder_callbacks cb_;
 
     public:
@@ -112,7 +112,7 @@ class DecoderTest : public ::testing::Test {
 
 TEST_F(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame)
 {
-	std::vector<u8> buffer(1024, 0x00);
+	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
@@ -175,7 +175,7 @@ TEST_F(DecoderTest, SkipsGhostHeadersAndFindsValidPayload)
 
 TEST_F(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 {
-	std::vector<u8> buffer(1024, 0x00);
+	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
@@ -189,7 +189,7 @@ TEST_F(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 
 TEST_F(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 {
-	std::vector<u8> buffer(1024, 0x00);
+	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
@@ -216,7 +216,7 @@ TEST_F(DecoderTest, IgnoresInvalidCameraOrTelemetryFrames)
 
 TEST_F(DecoderTest, DropsChunkIfSoiNotFound)
 {
-	std::vector<u8> buffer(1024, 0x00);
+	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
@@ -249,7 +249,7 @@ TEST_F(DecoderTest, HuntsForSignatureOnInvalidPacket)
 	buffer[1] = 0xBB;
 	buffer[2] = 0xCC;
 
-	size_t valid_start = 3;
+	size_t		       valid_start = 3;
 	struct up_usb_frm_hdr *u_hdr =
 		up_get_usb_frm_hdr(buffer.data(), valid_start);
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
@@ -283,7 +283,7 @@ TEST_F(DecoderTest, RejectsMassiveLengthAndHunts)
 	bad_pkt->device_id = VIDEO_CAMERA_ID;
 	bad_pkt->le_length = le16_to_cpu(UP_MAX_VIDEO_FRM_FRAG_LEN + 100);
 
-	size_t valid_start = 200;
+	size_t		       valid_start = 200;
 	struct up_usb_frm_hdr *good_pkt =
 		up_get_usb_frm_hdr(buffer.data(), valid_start);
 	good_pkt->le_delimiter = le16_to_cpu(UP_PKT_DEL);

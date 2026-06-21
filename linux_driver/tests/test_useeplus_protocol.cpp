@@ -7,7 +7,7 @@ extern "C" {
 TEST(ProtocolTest, ValidMjpegPayloadWithDefaultInitializer)
 {
 	struct up_video_frm_frag_hdr payload_header = {};
-	bool valid;
+	bool			     valid;
 
 	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
 
@@ -17,7 +17,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithDefaultInitializer)
 TEST(ProtocolTest, ValidMjpegPayloadWithInvalidCameraNumber)
 {
 	struct up_video_frm_frag_hdr payload_header = {};
-	bool valid;
+	bool			     valid;
 
 	payload_header.device_number = 99;
 	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
@@ -28,7 +28,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithInvalidCameraNumber)
 TEST(ProtocolTest, ValidMjpegPayloadWithHasGravitySensorSet)
 {
 	struct up_video_frm_frag_hdr payload_header = {};
-	bool valid;
+	bool			     valid;
 
 	up_set_has_gravity_sensor(&payload_header, true);
 	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
@@ -39,7 +39,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithHasGravitySensorSet)
 TEST(ProtocolTest, ValidMjpegPayloadWithButtonPressedSet)
 {
 	struct up_video_frm_frag_hdr payload_header = {};
-	bool valid;
+	bool			     valid;
 
 	up_set_button_pressed(&payload_header, true);
 	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
@@ -50,7 +50,7 @@ TEST(ProtocolTest, ValidMjpegPayloadWithButtonPressedSet)
 TEST(ProtocolTest, ValidMjpegPayloadWithOtherFlagsSet)
 {
 	struct up_video_frm_frag_hdr payload_header = {};
-	bool valid;
+	bool			     valid;
 
 	up_set_other_flags(&payload_header, 3);
 	valid = up_is_valid_video_frm_frag_hdr(&payload_header);
@@ -102,8 +102,8 @@ TEST(ProtocolTest, ValidatesFullPacketHeaderStruct)
 
 TEST(ProtocolTest, GetsHeaderPointersFromBuffer)
 {
-	u8 buffer[100] = { 0 };
-	struct up_usb_frm_hdr *pkt = up_get_usb_frm_hdr(buffer, 10);
+	u8			      buffer[100] = { 0 };
+	struct up_usb_frm_hdr	     *pkt = up_get_usb_frm_hdr(buffer, 10);
 	struct up_video_frm_frag_hdr *pl =
 		up_get_video_frm_frag_hdr(buffer, 20);
 

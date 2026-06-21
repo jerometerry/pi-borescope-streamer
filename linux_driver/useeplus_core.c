@@ -18,11 +18,9 @@
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
 
-static int up_s_parm(struct file *file, void *priv,
-			    struct v4l2_streamparm *sp)
+static int up_s_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
-	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		return -EINVAL;
+	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) return -EINVAL;
 
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
 	sp->parm.capture.timeperframe.numerator = 1;
@@ -31,11 +29,9 @@ static int up_s_parm(struct file *file, void *priv,
 	return 0;
 }
 
-static int up_g_parm(struct file *file, void *priv,
-			    struct v4l2_streamparm *sp)
+static int up_g_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
-	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		return -EINVAL;
+	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE) return -EINVAL;
 
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
 	sp->parm.capture.timeperframe.numerator = 1;
@@ -55,11 +51,9 @@ static int up_g_input(struct file *file, void *priv, unsigned int *i)
 	return 0;
 }
 
-static int up_enum_input(struct file *file, void *priv,
-				struct v4l2_input *inp)
+static int up_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 {
-	if (inp->index > 0)
-		return -EINVAL;
+	if (inp->index > 0) return -EINVAL;
 
 	inp->type = V4L2_INPUT_TYPE_CAMERA;
 	strscpy(inp->name, V4L2_INPUT_NAME, sizeof(inp->name));
@@ -68,15 +62,13 @@ static int up_enum_input(struct file *file, void *priv,
 }
 
 static int up_enum_frameintervals(struct file *file, void *priv,
-					 struct v4l2_frmivalenum *fival)
+				  struct v4l2_frmivalenum *fival)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
 
-	if (fival->index > 0)
-		return -EINVAL;
+	if (fival->index > 0) return -EINVAL;
 
-	if (fival->pixel_format != V4L2_PIX_FMT_MJPEG)
-		return -EINVAL;
+	if (fival->pixel_format != V4L2_PIX_FMT_MJPEG) return -EINVAL;
 
 	if (fival->width != drv_data->v4l2.width ||
 	    fival->height != drv_data->v4l2.height)
@@ -90,15 +82,13 @@ static int up_enum_frameintervals(struct file *file, void *priv,
 }
 
 static int up_enum_framesizes(struct file *file, void *priv,
-				     struct v4l2_frmsizeenum *fsize)
+			      struct v4l2_frmsizeenum *fsize)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
 
-	if (fsize->index > 0)
-		return -EINVAL;
+	if (fsize->index > 0) return -EINVAL;
 
-	if (fsize->pixel_format != V4L2_PIX_FMT_MJPEG)
-		return -EINVAL;
+	if (fsize->pixel_format != V4L2_PIX_FMT_MJPEG) return -EINVAL;
 
 	fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
 	fsize->discrete.width = drv_data->v4l2.width;
@@ -108,10 +98,9 @@ static int up_enum_framesizes(struct file *file, void *priv,
 }
 
 static int up_enum_fmt_vid_cap(struct file *file, void *priv,
-				      struct v4l2_fmtdesc *f)
+			       struct v4l2_fmtdesc *f)
 {
-	if (f->index > 0)
-		return -EINVAL;
+	if (f->index > 0) return -EINVAL;
 
 	f->pixelformat = V4L2_PIX_FMT_MJPEG;
 
@@ -121,7 +110,8 @@ static int up_enum_fmt_vid_cap(struct file *file, void *priv,
 /*
  * The camera only supports 640x480 MJPEG.
  */
-static void up_enforce_format(struct up_drv_data *drv_data, struct v4l2_format *f)
+static void up_enforce_format(struct up_drv_data *drv_data,
+			      struct v4l2_format *f)
 {
 	f->fmt.pix.width = drv_data->v4l2.width;
 	f->fmt.pix.height = drv_data->v4l2.height;
@@ -133,7 +123,7 @@ static void up_enforce_format(struct up_drv_data *drv_data, struct v4l2_format *
 }
 
 static int up_try_fmt_vid_cap(struct file *file, void *priv,
-				 struct v4l2_format *f)
+			      struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
 	up_enforce_format(drv_data, f);
@@ -142,7 +132,7 @@ static int up_try_fmt_vid_cap(struct file *file, void *priv,
 }
 
 static int up_s_fmt_vid_cap(struct file *file, void *priv,
-				 struct v4l2_format *f)
+			    struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
 	up_enforce_format(drv_data, f);
@@ -151,7 +141,7 @@ static int up_s_fmt_vid_cap(struct file *file, void *priv,
 }
 
 static int up_g_fmt_vid_cap(struct file *file, void *priv,
-				 struct v4l2_format *f)
+			    struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
 	up_enforce_format(drv_data, f);
@@ -200,9 +190,9 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 static void up_stop_streaming(struct vb2_queue *vq)
 {
 	struct up_drv_data *drv_data;
-	struct up_buffer *buf;
-	unsigned long flags;
-	int i;
+	struct up_buffer   *buf;
+	unsigned long	    flags;
+	int		    i;
 
 	drv_data = vb2_get_drv_priv(vq);
 	/*
@@ -222,15 +212,15 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	 * resubmitting.
 	 */
 	for (i = 0; i < NUM_URBS; i++) {
-		if (drv_data->usb.urbs[i])
-			usb_kill_urb(drv_data->usb.urbs[i]);
+		if (drv_data->usb.urbs[i]) usb_kill_urb(drv_data->usb.urbs[i]);
 	}
 
 	cancel_work_sync(&drv_data->decoder.work);
 
 	if (drv_data->decoder.active_buf) {
-		vb2_buffer_done(&drv_data->decoder.active_buf->vb2_buffer.vb2_buf,
-				VB2_BUF_STATE_ERROR);
+		vb2_buffer_done(
+			&drv_data->decoder.active_buf->vb2_buffer.vb2_buf,
+			VB2_BUF_STATE_ERROR);
 		drv_data->decoder.active_buf = NULL;
 		drv_data->decoder.active_pl_len = 0;
 	}
@@ -242,8 +232,8 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	 */
 	spin_lock_irqsave(&drv_data->pipeline.ready_lock, flags);
 	while (!list_empty(&drv_data->pipeline.ready_queue)) {
-		buf = list_first_entry(&drv_data->pipeline.ready_queue, struct up_buffer,
-				       list);
+		buf = list_first_entry(&drv_data->pipeline.ready_queue,
+				       struct up_buffer, list);
 		list_del(&buf->list);
 		/*
 		 * Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR
@@ -261,14 +251,15 @@ static void up_stop_streaming(struct vb2_queue *vq)
 static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
 			size_t len)
 {
-	int retval, sent_bytes, out_pipe;
 	struct usb_device *u_dev;
-	u8 *buf;
+	int		   sent_bytes;
+	int		   out_pipe;
+	int		   retval;
+	u8		  *buf;
 
 	u_dev = data->usb.udev;
 	buf = kmemdup(tokens, len, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
+	if (!buf) return -ENOMEM;
 
 	out_pipe = usb_sndbulkpipe(u_dev, ep_addr);
 	retval = usb_bulk_msg(u_dev, out_pipe, buf, len, &sent_bytes, USB_TO);
@@ -277,37 +268,35 @@ static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
 	return retval;
 }
 
-static const u8 iap_auth_handshake[] = {
-	0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10
-};
+static const u8 iap_auth_handshake[] = { 0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10 };
 
 static int up_iap_auth(struct up_drv_data *drv_data)
 {
 	size_t size = sizeof(iap_auth_handshake);
-	int ep = drv_data->usb.iap_out_ep;
+	int    ep = drv_data->usb.iap_out_ep;
 
 	return up_write_msg(drv_data, ep, iap_auth_handshake, size);
 }
 
-static const u8 start_video_command[] = {
-	0xBB, 0xAA, 0x05, 0x00, 0x00
-};
+static const u8 start_video_command[] = { 0xBB, 0xAA, 0x05, 0x00, 0x00 };
 
 static int up_start_video(struct up_drv_data *drv_data)
 {
 	size_t size = sizeof(start_video_command);
-	int ep = drv_data->usb.video_out_ep;
+	int    ep = drv_data->usb.video_out_ep;
 
 	return up_write_msg(drv_data, ep, start_video_command, size);
 }
 
 static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
-	int i, retval, urb_sub;
-	struct up_drv_data *drv_data;
+	struct up_drv_data   *drv_data;
 	struct usb_interface *itf;
-	struct up_buffer *buf;
-	unsigned long flags;
+	struct up_buffer     *buf;
+	int		      urb_sub;
+	int		      retval;
+	int		      i;
+	unsigned long	      flags;
 
 	drv_data = vb2_get_drv_priv(vq);
 	itf = drv_data->usb.itf;
@@ -352,8 +341,8 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	 * Submit the URBs
 	 */
 	for (urb_sub = 0; urb_sub < NUM_URBS; urb_sub++) {
-		retval = usb_submit_urb(drv_data->usb.urbs[urb_sub],
-					GFP_KERNEL);
+		retval =
+			usb_submit_urb(drv_data->usb.urbs[urb_sub], GFP_KERNEL);
 		if (retval) {
 			dev_err(&drv_data->usb.itf->dev,
 				"Failed to submit URBs: %d\n", retval);
@@ -380,8 +369,8 @@ error_start:
 	 */
 	spin_lock_irqsave(&drv_data->pipeline.ready_lock, flags);
 	while (!list_empty(&drv_data->pipeline.ready_queue)) {
-		buf = list_first_entry(&drv_data->pipeline.ready_queue, struct up_buffer,
-				       list);
+		buf = list_first_entry(&drv_data->pipeline.ready_queue,
+				       struct up_buffer, list);
 		list_del(&buf->list);
 		/*
 		 * Buffers correctly marked as queued for V4L2 cleanup on start error
@@ -400,10 +389,10 @@ error_start:
 
 static void up_buf_queue(struct vb2_buffer *vb)
 {
-	struct up_drv_data *drv_data = vb2_get_drv_priv(vb->vb2_queue);
+	struct up_drv_data     *drv_data = vb2_get_drv_priv(vb->vb2_queue);
 	struct vb2_v4l2_buffer *v4l2_buf = to_vb2_v4l2_buffer(vb);
-	struct up_buffer *buf;
-	unsigned long flags;
+	struct up_buffer       *buf;
+	unsigned long		flags;
 
 	buf = container_of(v4l2_buf, struct up_buffer, vb2_buffer);
 
@@ -414,8 +403,7 @@ static void up_buf_queue(struct vb2_buffer *vb)
 
 static int up_buf_prepare(struct vb2_buffer *vb)
 {
-	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
-		return -EINVAL;
+	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE) return -EINVAL;
 
 	vb2_set_plane_payload(vb, 0, MAX_FRAME_SIZE);
 	return 0;
@@ -425,8 +413,7 @@ static int up_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 			  unsigned int *nplanes, unsigned int sizes[],
 			  struct device *alloc_devs[])
 {
-	if (*nplanes)
-		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
+	if (*nplanes) return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
 
 	*nplanes = 1;
 	sizes[0] = MAX_FRAME_SIZE;
@@ -466,11 +453,10 @@ static const struct v4l2_file_operations up_v4l2_fops = {
 static void up_free_urb(struct up_drv_data *drv_data, int urb_index)
 {
 	struct usb_device *u_dev = drv_data->usb.udev;
-	dma_addr_t dma_addr;
-	u8 *urb_buf;
+	dma_addr_t	   dma_addr;
+	u8		  *urb_buf;
 
-	if (!drv_data->usb.urbs[urb_index])
-		return;
+	if (!drv_data->usb.urbs[urb_index]) return;
 
 	urb_buf = drv_data->usb.urb_buffers[urb_index];
 	dma_addr = drv_data->usb.urb_dma_addrs[urb_index];
@@ -506,9 +492,9 @@ static void up_free_urbs(struct up_drv_data *drv_data)
 static void up_disconnect(struct usb_interface *itf)
 {
 	struct usb_interface *iap_intf;
-	struct up_drv_data *drv_data;
-	struct usb_driver *driver;
-	int itf_num;
+	struct up_drv_data   *drv_data;
+	struct usb_driver    *driver;
+	int		      itf_num;
 
 	driver = to_usb_driver(itf->dev.driver);
 	drv_data = usb_get_intfdata(itf);
@@ -519,11 +505,9 @@ static void up_disconnect(struct usb_interface *itf)
 	 * Ignore the iAP interface disconnect.
 	 * The Video Interface disconnect handles the full device teardown.
 	 */
-	if (itf_num == UP_IAP_INTERFACE)
-		return;
+	if (itf_num == UP_IAP_INTERFACE) return;
 
-	if (!drv_data)
-		return;
+	if (!drv_data) return;
 
 	/*
 	 * Explicitly release the iAP interface claimed in probe
@@ -579,13 +563,12 @@ static void up_device_release(struct v4l2_device *v4l2_dev)
 
 static void up_on_frame_incomplete(void *context)
 {
-	struct up_drv_data *drv_data = (struct up_drv_data *)context;
+	struct up_drv_data     *drv_data = (struct up_drv_data *)context;
+	struct up_buffer       *active_buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
-	struct up_buffer *active_buf;
-	struct vb2_buffer *vb2_buf;
+	struct vb2_buffer      *vb2_buf;
 
-	if (!drv_data->decoder.active_buf)
-		return;
+	if (!drv_data->decoder.active_buf) return;
 
 	active_buf = drv_data->decoder.active_buf;
 	v4l2_buf = &active_buf->vb2_buffer;
@@ -608,14 +591,13 @@ static void up_on_frame_incomplete(void *context)
 
 static void up_on_frame_complete(void *context)
 {
-	struct up_drv_data *drv_data = (struct up_drv_data *)context;
+	struct up_drv_data     *drv_data = (struct up_drv_data *)context;
+	struct up_buffer       *active_buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
-	struct up_buffer *active_buf;
-	struct vb2_buffer *vb2_buf;
-	size_t vff_len;
+	struct vb2_buffer      *vb2_buf;
+	size_t			vff_len;
 
-	if (!drv_data->decoder.active_buf)
-		return;
+	if (!drv_data->decoder.active_buf) return;
 
 	active_buf = drv_data->decoder.active_buf;
 	v4l2_buf = &active_buf->vb2_buffer;
@@ -643,9 +625,9 @@ static void up_on_frame_complete(void *context)
 static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 {
 	struct up_drv_data *drv_data = (struct up_drv_data *)context;
-	struct up_buffer *active_buf;
-	struct list_head *rdy_q;
-	unsigned long flags;
+	struct up_buffer   *active_buf;
+	struct list_head   *rdy_q;
+	unsigned long	    flags;
 
 	if (drv_data->decoder.active_buf) {
 		active_buf = drv_data->decoder.active_buf;
@@ -672,16 +654,15 @@ static void up_on_frame_start(void *context, u8 frame_id, u8 dev_num)
 
 static void up_on_video_payload(void *context, u8 *data, size_t len)
 {
-	struct up_drv_data *drv_data = (struct up_drv_data *)context;
+	struct up_drv_data     *drv_data = (struct up_drv_data *)context;
+	struct up_buffer       *active_buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
-	struct up_buffer *active_buf;
-	struct vb2_buffer *vb2_buf;
-	struct device *dev;
-	size_t vff_len;
-	u8 *vaddr;
+	struct vb2_buffer      *vb2_buf;
+	struct device	       *dev;
+	u8		       *vaddr;
+	size_t			vff_len;
 
-	if (!drv_data->decoder.active_buf)
-		return;
+	if (!drv_data->decoder.active_buf) return;
 
 	active_buf = drv_data->decoder.active_buf;
 	v4l2_buf = &active_buf->vb2_buffer;
@@ -711,11 +692,14 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 
 static void up_work_handler(struct work_struct *work)
 {
-	size_t consumed, remaining, buf_len;
-	struct up_decoder decoder = { 0 };
+	size_t		    consumed;
+	size_t		    remaining;
+	size_t		    buf_len;
+	struct up_decoder   decoder = { 0 };
 	struct up_drv_data *drv_data;
-	unsigned int len;
-	u8 *buf, *dec_buf;
+	unsigned int	    len;
+	u8		   *buf;
+	u8		   *dec_buf;
 
 	drv_data = container_of(work, struct up_drv_data, decoder.work);
 
@@ -760,7 +744,7 @@ static void up_work_handler(struct work_struct *work)
 static void up_read_bulk_callback(struct urb *urb)
 {
 	struct up_drv_data *drv_data = urb->context;
-	int retval;
+	int		    retval;
 
 	/*
 	 * Concurrency safety guard
@@ -839,10 +823,10 @@ resubmit:
 
 static int up_alloc_urbs(struct up_drv_data *drv_data)
 {
-	struct usb_device *usb_dev = drv_data->usb.udev;
+	struct usb_device    *usb_dev = drv_data->usb.udev;
 	struct usb_interface *itf = drv_data->usb.itf;
-	u8 *urb_ptr;
-	int i;
+	u8		     *urb_ptr;
+	int		      i;
 
 	for (i = 0; i < NUM_URBS; i++) {
 		drv_data->usb.urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
@@ -866,8 +850,10 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 				  drv_data->usb.urb_buffers[i], URB_SIZE,
 				  up_read_bulk_callback, drv_data);
 
-		drv_data->usb.urbs[i]->transfer_dma = drv_data->usb.urb_dma_addrs[i];
-		drv_data->usb.urbs[i]->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+		drv_data->usb.urbs[i]->transfer_dma =
+			drv_data->usb.urb_dma_addrs[i];
+		drv_data->usb.urbs[i]->transfer_flags |=
+			URB_NO_TRANSFER_DMA_MAP;
 	}
 
 	return 0;
@@ -875,15 +861,21 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 
 static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 {
-	int i, retval, hb_bytes, vid_in_pipe, iap_in_pipe, itf_num;
+	struct usb_host_interface      *video_alt;
 	struct usb_endpoint_descriptor *ep_desc;
-	struct usb_host_interface *video_alt;
-	struct usb_interface *iap_intf;
-	struct up_drv_data *drv_data;
-	struct usb_device *usb_dev;
-	struct usb_driver *driver;
-	struct vb2_queue *q;
-	u8 *hb_sink, ep;
+	struct usb_interface	       *iap_intf;
+	struct up_drv_data	       *drv_data;
+	struct usb_device	       *usb_dev;
+	struct usb_driver	       *driver;
+	struct vb2_queue	       *q;
+	u8			       *hb_sink;
+	int				vid_in_pipe;
+	int				iap_in_pipe;
+	int				hb_bytes;
+	int				itf_num;
+	int				retval;
+	int				i;
+	u8				ep;
 
 	driver = to_usb_driver(itf->dev.driver);
 	usb_dev = interface_to_usbdev(itf);
@@ -893,14 +885,12 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	/*
 	 * Only bind the driver when the Video Interface is probed
 	 */
-	if (itf_num != UP_VIDEO_INTERFACE)
-		return -ENODEV;
+	if (itf_num != UP_VIDEO_INTERFACE) return -ENODEV;
 
 	dev_info(&itf->dev, "Useeplus borescope identified\n");
 
 	drv_data = kzalloc(sizeof(*drv_data), GFP_KERNEL);
-	if (!drv_data)
-		return -ENOMEM;
+	if (!drv_data) return -ENOMEM;
 
 	drv_data->usb.udev = usb_dev;
 	drv_data->usb.itf = itf;
@@ -1026,7 +1016,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	drv_data->v4l2.video_dev.lock = &drv_data->v4l2.lock;
 	drv_data->v4l2.video_dev.queue = q;
 	drv_data->v4l2.video_dev.device_caps = V4L2_CAP_VIDEO_CAPTURE |
-					  V4L2_CAP_STREAMING;
+					       V4L2_CAP_STREAMING;
 	video_set_drvdata(&drv_data->v4l2.video_dev, drv_data);
 
 	hb_sink = kmalloc(HB_BUF_SIZE, GFP_KERNEL);
@@ -1048,24 +1038,23 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	retval = usb_set_interface(usb_dev, UP_VIDEO_INTERFACE,
 				   UP_ALT_VIDEO_ENABLE);
 	if (retval) {
-		dev_err(&itf->dev,
-			"usb_set_interface failed with error %d\n", retval);
+		dev_err(&itf->dev, "usb_set_interface failed with error %d\n",
+			retval);
 		goto error_unreg_v4l2;
 	}
 
 	retval = usb_clear_halt(usb_dev, vid_in_pipe);
 	if (retval)
-		dev_info(&itf->dev,
-			 "usb_clear_halt failed with error %d\n", retval);
+		dev_info(&itf->dev, "usb_clear_halt failed with error %d\n",
+			 retval);
 
 	retval = up_alloc_urbs(drv_data);
-	if (retval)
-		goto error_urbs;
+	if (retval) goto error_urbs;
 
 	usb_set_intfdata(itf, drv_data);
 
-	retval =
-		video_register_device(&drv_data->v4l2.video_dev, VFL_TYPE_VIDEO, -1);
+	retval = video_register_device(&drv_data->v4l2.video_dev,
+				       VFL_TYPE_VIDEO, -1);
 	if (retval) {
 		dev_err(&itf->dev,
 			"video_register_device failed with error %d\n", retval);
@@ -1086,8 +1075,7 @@ error_unreg_v4l2:
 error_release_iap:
 	usb_driver_release_interface(driver, iap_intf);
 	kfifo_free(&drv_data->decoder.fifo);
-	if (drv_data->decoder.wq)
-		destroy_workqueue(drv_data->decoder.wq);
+	if (drv_data->decoder.wq) destroy_workqueue(drv_data->decoder.wq);
 	kfree(drv_data->decoder.workspace_buf);
 
 error_free_dev:
@@ -1095,11 +1083,9 @@ error_free_dev:
 	return retval;
 }
 
-static const struct usb_device_id up_table[] = {
-	{ USB_DEVICE(0x0329, 0x2022) },
-	{ USB_DEVICE(0x2ce3, 0x3828) },
-	{}
-};
+static const struct usb_device_id up_table[] = { { USB_DEVICE(0x0329, 0x2022) },
+						 { USB_DEVICE(0x2ce3, 0x3828) },
+						 {} };
 
 static struct usb_driver up_driver = {
 	.disconnect = up_disconnect,
