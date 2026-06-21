@@ -238,7 +238,7 @@ std::vector<u8> create_junk_frame() {
 TEST_F(DecoderTest, DecoderRecoversAfterInvalidFrame)
 {
     std::vector<u8> buffer_a = create_junk_frame();
-    std::vector<u8> buffer_b = create_valid_frame()
+    std::vector<u8> buffer_b = create_valid_frame().
 
     size_t consumed_a = up_decode_bulk(getDecoder(), buffer_a.data(), buffer_a.size());
     EXPECT_EQ(getPayloadSize(), 0);
