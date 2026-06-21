@@ -195,12 +195,15 @@ TEST_F(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 }
 
 std::vector<u8> create_valid_frame(size_t *video_data_size) {
-	std::vector<u8>	       buffer(1024, 0x00);
-	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+	std::vector<u8> buffer(1024, 0x00);
+	u8 *buf_ptr = buffer.data();
 
+	*video_data_size = 5;
+
+	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 6);
+	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + *video_data_size);
 
 	struct up_video_frm_frag_hdr *v_hdr =
 		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
@@ -209,14 +212,12 @@ std::vector<u8> create_valid_frame(size_t *video_data_size) {
 	v_hdr->flags = 0;
 	v_hdr->le_gravity_sensor = 0;
 
-	u8 *payload_data = (u8 *)(v_hdr + UP_VIDEO_FRM_FRAG_HDR_LEN);
-	payload_data[1] = JPEG_DEL;
-	payload_data[2] = JPEG_SOI;
-	payload_data[3] = 0xAA;
-	payload_data[4] = JPEG_DEL;
-	payload_data[5] = JPEG_EOI;
-
-	*video_data_size = 5;
+	u8 *video_data = (u8 *)(v_hdr + UP_VIDEO_FRM_FRAG_HDR_LEN);
+	video_data[0] = JPEG_DEL;
+	video_data[1] = JPEG_SOI;
+	video_data[2] = 0xAA;
+	video_data[3] = JPEG_DEL;
+	video_data[4] = JPEG_EOI;
 
 	return buffer;
 }
