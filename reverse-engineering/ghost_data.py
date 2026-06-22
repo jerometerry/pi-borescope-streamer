@@ -31,7 +31,7 @@ def visualize_stream(file_path):
         # Get the next two bytes to check for a 2-byte marker match
         current_chunk = data[offset : offset + 2]
         dev_id = data[offset+2]
-        le_len_val = struct.unpack_from('<H', data, offset + 3)
+        le_len_val = struct.unpack_from('<H', data[offset : offset + 3])[0]
         valid_data_end = offset + 5 + le_len_val
         frm_id = data[offset + 5]
         dev_num = data[offset + 6]
