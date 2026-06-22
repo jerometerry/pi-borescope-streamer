@@ -78,22 +78,53 @@ You do not need to recompile the entire kernel to test changes to your driver. U
 If you have made widespread changes, rebuild all modules from the root tree:
 
 ```bash
+# Compile the modules as part of the kernel tree, to avoid kernel flagging the driver as tainted
 make modules -j$(nproc)
+
+# Install the modules from the last modules build
 sudo make modules_install
+
+# Regenerate module dependencies for all installed modules
+sudo depmod -a
+
+# Clear the dmesg ring buffer
+sudo dmesg -C
+
+# Load the useeplus driver module
+sudo modprobe useeplus
+
+# Examine logs to see if the useeplus driver was loaded, and if it was flagged as off-tree
+dmesg | tail -n 10
+
+# View module info for the useeplus driver module.
+# - intree should show Y
+# - vermagic should start with the same version that `uname -r` returns
+modinfo drivers/media/usb/useeplus/useeplus.ko
+
+# View kernel version
+uname -r
 
 ```
 
-### Targeted Rebuild (Recommended)
+### Targeted Rebuild
 
 To rebuild only the `useeplus` module and its dependencies, execute the build command specifically against the driver directory:
 
 ```bash
-# Compile just the useeplus module
 make M=drivers/media/usb/useeplus modules
-
-# Deploy just the useeplus module
 sudo make M=drivers/media/usb/useeplus modules_install
+sudo depmod -a
+sudo modprobe -r useeplus
+sudo modprobe useeplus
 
+```
+
+```bash
+# for quick code change / deploy iterations
+make modules -j && \
+make M=drivers/media/usb/useeplus modules && \
+sudo make M=drivers/media/usb/useeplus modules_install && \
+sudo depmod -a && sudo modprobe -r useeplus && sudo modprobe useeplus && dmesg | tail -n 10
 ```
 
 ---

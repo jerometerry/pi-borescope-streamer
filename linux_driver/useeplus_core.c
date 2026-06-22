@@ -18,26 +18,34 @@
 #include <media/videobuf2-v4l2.h>
 #include <media/videobuf2-vmalloc.h>
 
-static int up_s_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
-{
-	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
-		return -EINVAL;
-
-	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
-	sp->parm.capture.timeperframe.numerator = 1;
-	sp->parm.capture.timeperframe.denominator = 30;
-
-	return 0;
-}
-
 static int up_g_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
 	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
+	memset(&sp->parm.capture, 0, sizeof(sp->parm.capture));
+
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
 	sp->parm.capture.timeperframe.numerator = 1;
 	sp->parm.capture.timeperframe.denominator = 30;
+
+	sp->parm.capture.readbuffers = 1;
+
+	return 0;
+}
+
+static int up_s_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
+{
+	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+
+	memset(&sp->parm.capture, 0, sizeof(sp->parm.capture));
+
+	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
+	sp->parm.capture.timeperframe.numerator = 1;
+	sp->parm.capture.timeperframe.denominator = 30;
+
+	sp->parm.capture.readbuffers = 1;
 
 	return 0;
 }
@@ -169,9 +177,14 @@ static int up_vidioc_querycap(struct file *file, void *priv,
 	strscpy(cap->card, CAP_CARD, sizeof(cap->card));
 	usb_make_path(drv_data->usb.udev, cap->bus_info, sizeof(cap->bus_info));
 
-	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
+	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE |
+			    V4L2_CAP_STREAMING |
+			    V4L2_CAP_READWRITE |
 			    V4L2_CAP_DEVICE_CAPS;
-	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
+
+	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE |
+			   V4L2_CAP_STREAMING |
+			   V4L2_CAP_READWRITE;
 
 	return 0;
 }
@@ -209,31 +222,42 @@ static void up_stop_streaming(struct vb2_queue *vq)
 	int			i;
 
 	drv_data = vb2_get_drv_priv(vq);
-	/*
-	 * Signal the callback to STOP processing and STOP resubmitting immediately.
-	 */
-	clear_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming);
 
 	/*
-	 * Ensure all CPU cores see the bit change before we start Freeing URBs.
-	 * clear_bit doesn't imply a memory barrier, so we explicitly add one.
+	 * Signal the callback and hardware state to STOP processing immediately.
+	 */
+	clear_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming);
+	clear_bit(STREAM_HW_ACTIVE, &drv_data->pipeline.streaming);
+
+	/*
+	 * Ensure all CPU cores see the bit changes before we start Freeing URBs.
 	 */
 	smp_mb__after_atomic();
 
 	/*
 	 * usb_kill_urb blocks until any active callback finishes executing.
-	 * Since STREAM_CLIENT_READY is now 0, the callback will exit without
-	 * resubmitting.
 	 */
 	for (i = 0; i < NUM_URBS; i++) {
 		if (drv_data->usb.urbs[i])
 			usb_kill_urb(drv_data->usb.urbs[i]);
 	}
 
+	/* Stop the decoder worker completely */
 	cancel_work_sync(&drv_data->decoder.work);
 
-	active_buf = drv_data->decoder.active_buf;
+	/*
+	 * Flush any stale byte data left in the FIFO
+	 * to prevent corrupting the stream when user space restarts it.
+	 */
+	kfifo_reset(&drv_data->decoder.fifo);
 
+	/* Reset decoder parsing state states */
+	drv_data->decoder.building_frame = false;
+	drv_data->decoder.found_soi = false;
+	drv_data->decoder.eof_reached = false;
+
+	/* Clean up the active working buffer */
+	active_buf = drv_data->decoder.active_buf;
 	if (active_buf) {
 		v4l2_buf = &active_buf->vb2_buffer;
 		vb2_buf = &v4l2_buf->vb2_buf;
@@ -245,25 +269,15 @@ static void up_stop_streaming(struct vb2_queue *vq)
 
 	/*
 	 * Safely drain any buffers that were left over in the queue.
-	 * Because all URBs are definitively dead now, no one else will touch
-	 * this list.
 	 */
 	spin_lock_irqsave(&drv_data->pipeline.ready_lock, flags);
 	while (!list_empty(&drv_data->pipeline.ready_queue)) {
 		buf = list_first_entry(&drv_data->pipeline.ready_queue,
 				       struct up_buffer, list);
 		list_del(&buf->list);
-		/*
-		 * Per V4L2 spec, buffers stopped via stop_streaming must be marked as ERROR
-		 */
 		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_ERROR);
 	}
 	spin_unlock_irqrestore(&drv_data->pipeline.ready_lock, flags);
-
-	/*
-	 * Reset the hardware active guard state.
-	 */
-	clear_bit(STREAM_HW_ACTIVE, &drv_data->pipeline.streaming);
 }
 
 static int up_write_msg(struct up_drv_data *data, u8 ep_addr, const u8 *tokens,
@@ -323,6 +337,7 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 		return 0;
 
 	spin_lock_irqsave(&drv_data->pipeline.ready_lock, flags);
+	drv_data->pipeline.sequence = 0;
 	drv_data->decoder.active_buf = NULL;
 	drv_data->decoder.active_pl_len = 0;
 	drv_data->decoder.frame_id = -1;
@@ -422,6 +437,10 @@ static void up_buf_queue(struct vb2_buffer *vb)
 
 static int up_buf_prepare(struct vb2_buffer *vb)
 {
+	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
+
+	vbuf->field = V4L2_FIELD_NONE;
+
 	if (vb2_plane_size(vb, 0) < MAX_FRAME_SIZE)
 		return -EINVAL;
 
@@ -433,6 +452,11 @@ static int up_queue_setup(struct vb2_queue *vq, unsigned int *nbuffers,
 			  unsigned int *nplanes, unsigned int sizes[],
 			  struct device *alloc_devs[])
 {
+	unsigned int allocated_buffers = vb2_get_num_buffers(vq);
+
+	if (allocated_buffers + *nbuffers < 2)
+		*nbuffers = 2 - allocated_buffers;
+
 	if (*nplanes)
 		return sizes[0] < MAX_FRAME_SIZE ? -EINVAL : 0;
 
@@ -1032,6 +1056,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	q = &drv_data->v4l2.queue;
 	q->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	q->io_modes = VB2_MMAP | VB2_USERPTR | VB2_READ;
+	q->min_reqbufs_allocation = 2;
 	q->drv_priv = drv_data;
 	q->buf_struct_size = sizeof(struct up_buffer);
 	q->ops = &up_vb2_ops;
@@ -1057,7 +1082,9 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	drv_data->v4l2.video_dev.lock = &drv_data->v4l2.lock;
 	drv_data->v4l2.video_dev.queue = q;
 	drv_data->v4l2.video_dev.device_caps = V4L2_CAP_VIDEO_CAPTURE |
-					       V4L2_CAP_STREAMING;
+					       V4L2_CAP_STREAMING |
+					       V4L2_CAP_READWRITE;
+
 	video_set_drvdata(&drv_data->v4l2.video_dev, drv_data);
 
 	hb_sink = kmalloc(HB_BUF_SIZE, GFP_KERNEL);
@@ -1111,7 +1138,8 @@ error_urbs:
 	up_free_urbs(drv_data);
 
 error_unreg_v4l2:
-	dev_dbg(&itf->dev, "Unregistering device\n");
+	dev_dbg(&itf->dev, "Unregistering device and releasing queue\n");
+	vb2_queue_release(&drv_data->v4l2.queue);
 	v4l2_device_unregister(&drv_data->v4l2.v4l2_dev);
 
 error_release_iap:
