@@ -129,3 +129,56 @@ sudo sysctl -w kernel.printk="8 4 1 3"
 # Restore default logging when finished
 sudo sysctl -w kernel.printk="3 4 1 3"
 ```
+
+### Stress Testing Driver
+
+For detecting memory leaks in the useeplus v4l2 driver, you can enable CONFIG_DEBUG_KMEMLEAK in
+the kernel configuration (.config) file. Once enabling this, you need to recompile the kernel,
+install the kernel and modules, and reboot.
+
+To access the memory leak detection data, you need to mount debugfs
+
+```bash
+mount -t debugfs nodev /sys/kernel/debug
+```
+
+Here's a set of scripts to run a stress test on the driver, and look for memory leaks
+
+```bash
+# Clear out benign system alerts cached from the boot sequence
+echo clear | sudo tee /sys/kernel/debug/kmemleak
+
+# Run a high-intensity stream loop for 5 minutes (approx. 9000 frames)
+# This will push your up_buf_queue, workqueue decoder, and USB pipes to their limits
+v4l2-ctl --device=/dev/video0 --stream-mmap --stream-to=/dev/null --stream-count=9000
+
+# Instruct the kernel to scan its active allocation references immediately
+echo scan | sudo tee /sys/kernel/debug/kmemleak
+
+# Inspect the output log
+sudo cat /sys/kernel/debug/kmemleak
+```
+
+### Finding Duplicate Modules
+
+```bash
+# Find copies of useeplus modules
+find /lib/modules/$(uname -r)/ -name "useeplus.ko*"
+```
+
+```shell-content
+$ find /lib/modules/$(uname -r)/ -name "useeplus.ko*"
+/lib/modules/6.18.35-v8-16k-useeplus+/updates/useeplus.ko.xz
+/lib/modules/6.18.35-v8-16k-useeplus+/kernel/drivers/media/usb/useeplus/useeplus.ko.xz
+```
+
+```bash
+# Remove module that's not on-tree
+sudo rm -f /lib/modules/$(uname -r)/updates/useeplus.ko.xz
+
+# Rebuild module deps
+sudo depmod -a
+
+# Check module info. intree should be Y, vermagic should start with kernel version
+modinfo useeplus | grep -E "filename|intree|vermagic"
+```

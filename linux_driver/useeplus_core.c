@@ -20,31 +20,91 @@
 
 static int up_g_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
+	struct up_drv_data *drv_data = video_drvdata(file);
+
 	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
 	memset(&sp->parm.capture, 0, sizeof(sp->parm.capture));
 
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
-	sp->parm.capture.timeperframe.numerator = 1;
-	sp->parm.capture.timeperframe.denominator = 30;
 
+	sp->parm.capture.timeperframe = drv_data->v4l2.timeperframe;
 	sp->parm.capture.readbuffers = 1;
 
 	return 0;
 }
 
+static inline u32 v4l2_to_camera_interval(struct v4l2_fract *tpf)
+{
+	if (!tpf || tpf->numerator == 0 || tpf->denominator == 0)
+		return 333333;
+
+	return (u32)(((u64)tpf->numerator * 10000000) / tpf->denominator);
+}
+
+static void up_drain_iap_heartbeats(struct up_drv_data *drv_data)
+{
+	struct usb_device *u_dev = drv_data->usb.udev;
+	int iap_in_pipe = usb_rcvbulkpipe(u_dev, drv_data->usb.iap_in_ep);
+	int hb_bytes, i;
+	u8 *hb_sink;
+
+	hb_sink = kmalloc(HB_BUF_SIZE, GFP_KERNEL);
+	if (!hb_sink) return;
+
+	dev_info(&u_dev->dev, "Draining iAP heartbeat buffer...\n");
+
+	for (i = 0; i < 30; i++) {
+		usb_bulk_msg(u_dev, iap_in_pipe, hb_sink, HB_BUF_SIZE, &hb_bytes, 100);
+	}
+
+	kfree(hb_sink);
+}
+
+static void up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_index, struct v4l2_fract *tpf)
+{
+	struct usb_device *u_dev = drv_data->usb.udev;
+	int pipe_out = usb_sndctrlpipe(u_dev, 0);
+	int pipe_in = usb_rcvctrlpipe(u_dev, 0);
+	struct uvc_probe_commit_control *ctrl;
+
+	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
+	if (!ctrl) return;
+
+	ctrl->bmHint = cpu_to_le16(0x0000);
+	ctrl->bFormatIndex = 2;
+	ctrl->bFrameIndex = frame_index;
+	ctrl->dwFrameInterval = cpu_to_le32(v4l2_to_camera_interval(tpf));
+
+	dev_info(&u_dev->dev, "Negotiating hardware resolution index %d...\n", frame_index);
+
+	usb_control_msg(u_dev, pipe_in, 0x81, 0xA1, 0x0100, UP_VIDEO_INTERFACE, ctrl, 26, USB_CTRL_TO);
+	usb_control_msg(u_dev, pipe_out, 0x01, 0x21, 0x0100, UP_VIDEO_INTERFACE, ctrl, 26, USB_CTRL_TO);
+	usb_control_msg(u_dev, pipe_in, 0x81, 0xA1, 0x0100, UP_VIDEO_INTERFACE, ctrl, 26, USB_CTRL_TO);
+	usb_control_msg(u_dev, pipe_out, 0x01, 0x21, 0x0200, UP_VIDEO_INTERFACE, ctrl, 26, USB_CTRL_SET_TIMEOUT);
+
+	kfree(ctrl);
+}
+
 static int up_s_parm(struct file *file, void *priv, struct v4l2_streamparm *sp)
 {
+	struct up_drv_data *drv_data = video_drvdata(file);
+	struct v4l2_fract *tpf = &sp->parm.capture.timeperframe;
+
 	if (sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
+	if (vb2_is_busy(&drv_data->v4l2.queue))
+		return -EBUSY;
+
+	tpf->numerator = 1;
+	tpf->denominator = 30;
+	drv_data->v4l2.timeperframe = *tpf;
+
 	memset(&sp->parm.capture, 0, sizeof(sp->parm.capture));
-
 	sp->parm.capture.capability = V4L2_CAP_TIMEPERFRAME;
-	sp->parm.capture.timeperframe.numerator = 1;
-	sp->parm.capture.timeperframe.denominator = 30;
-
+	sp->parm.capture.timeperframe = drv_data->v4l2.timeperframe;
 	sp->parm.capture.readbuffers = 1;
 
 	return 0;
@@ -72,10 +132,17 @@ static int up_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 	return 0;
 }
 
+static const struct v4l2_frmsize_discrete up_sizes[] = {
+	{ 640,  480 },
+	{ 320,  240 },
+	{ 1280, 720 },
+};
+
 static int up_enum_frameintervals(struct file *file, void *priv,
 				  struct v4l2_frmivalenum *fival)
 {
-	struct up_drv_data *drv_data = video_drvdata(file);
+	int i;
+	bool valid_size = false;
 
 	if (fival->index > 0)
 		return -EINVAL;
@@ -83,8 +150,14 @@ static int up_enum_frameintervals(struct file *file, void *priv,
 	if (fival->pixel_format != V4L2_PIX_FMT_MJPEG)
 		return -EINVAL;
 
-	if (fival->width != drv_data->v4l2.width ||
-	    fival->height != drv_data->v4l2.height)
+	for (i = 0; i < ARRAY_SIZE(up_sizes); i++) {
+		if (fival->width == up_sizes[i].width && fival->height == up_sizes[i].height) {
+			valid_size = true;
+			break;
+		}
+	}
+
+	if (!valid_size)
 		return -EINVAL;
 
 	fival->type = V4L2_FRMIVAL_TYPE_DISCRETE;
@@ -93,12 +166,6 @@ static int up_enum_frameintervals(struct file *file, void *priv,
 
 	return 0;
 }
-
-static const struct v4l2_frmsize_discrete up_sizes[] = {
-	{ 640,  480 },  // Index 0 in V4L2 -> Hardware Index 1
-	{ 320,  240 },  // Index 1 in V4L2 -> Hardware Index 2
-	{ 1280, 720 },  // Index 2 in V4L2 -> Hardware Index 3
-};
 
 static int up_enum_framesizes(struct file *file, void *priv,
 			      struct v4l2_frmsizeenum *fsize)
@@ -127,9 +194,7 @@ static int up_enum_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-/*
- * The camera only supports 640x480 MJPEG.
- */
+
 static void up_enforce_format(struct up_drv_data *drv_data,
 			      struct v4l2_format *f)
 {
@@ -152,68 +217,6 @@ static int up_try_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-#define USB_CTRL_SET_TIMEOUT 5000 /* 5 second hardware transfer timeout */
-
-static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_index, u32 target_fps)
-{
-	struct usb_device *u_dev = drv_data->usb.udev;
-	int pipe_out = usb_sndctrlpipe(u_dev, 0);
-	u32 frame_interval;
-	int retval;
-	u8 *buf;
-
-	/* 1. Allocate a 26-byte transfer buffer safely aligned for USB DMA */
-	buf = kzalloc(26, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	/* 2. Calculate UVC frame interval units: 10,000,000 / FPS */
-	if (target_fps == 0)
-		target_fps = 30; /* Fallback baseline protection */
-	frame_interval = 10000000 / target_fps;
-
-	/* 3. Replicate the precise payload array structure from the Python capture */
-	buf[0] = 0x01; /* bmHint Low Byte (flags frame interval selection) */
-	buf[1] = 0x00;
-	buf[2] = 0x02; /* bFormatIndex (Fixed to 2 for MJPEG container) */
-	buf[3] = frame_index; /* Dynamic Target Resolution Index (1, 2, or 3) */
-
-	/* dwFrameInterval (4 bytes, Little Endian layout packing) */
-	buf[4] = (frame_interval & 0xFF);
-	buf[5] = ((frame_interval >> 8) & 0xFF);
-	buf[6] = ((frame_interval >> 16) & 0xFF);
-	buf[7] = ((frame_interval >> 24) & 0xFF);
-
-	dev_info(&u_dev->dev, "Negotiating camera pipeline via Interface %d (Mode %d)...\n",
-             UP_VIDEO_INTERFACE, frame_index);
-
-	/* 4. Execute Phase A: PROBE */
-	retval = usb_control_msg(u_dev, pipe_out,
-				 0x01, 0x21,
-				 0x0100, UP_VIDEO_INTERFACE,
-				 buf, 26, USB_CTRL_SET_TIMEOUT);
-	if (retval < 0) {
-		dev_err(&u_dev->dev, "Hardware stream probe stalled: %d\n", retval);
-		goto out;
-	}
-
-	/* 5. Execute Phase B: COMMIT */
-	retval = usb_control_msg(u_dev, pipe_out,
-				 0x01, 0x21,
-				 0x0200, UP_VIDEO_INTERFACE,
-				 buf, 26, USB_CTRL_SET_TIMEOUT);
-	if (retval < 0) {
-		dev_err(&u_dev->dev, "Hardware stream commit lock stalled: %d\n", retval);
-		goto out;
-	}
-
-	retval = 0; /* Clean execution */
-
-out:
-	kfree(buf); /* Always free the DMA buffer! */
-	return retval;
-}
-
 static int up_s_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
@@ -221,12 +224,9 @@ static int up_s_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f
 
 	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
-
-	/* Prevent changing resolution while the camera is actively streaming */
 	if (vb2_is_busy(&drv_data->v4l2.queue))
 		return -EBUSY;
 
-	/* Precision geometric routing table matching Python results */
 	if (f->fmt.pix.width >= 1280 || f->fmt.pix.height >= 720) {
 		target_hardware_index = 3;
 		drv_data->v4l2.width = 1280;
@@ -242,15 +242,12 @@ static int up_s_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f
 	}
 
 	up_enforce_format(drv_data, f);
-
-	/* Save active selection state to your device driver context */
 	drv_data->v4l2.current_hw_index = target_hardware_index;
 
-	dev_info(&drv_data->usb.udev->dev, "Applying resolution payload index %d (%dx%d) to camera...\n",
-		 target_hardware_index, drv_data->v4l2.width, drv_data->v4l2.height);
+	dev_info(&drv_data->usb.udev->dev, "Format %dx%d saved. Hardware negotiation deferred to STREAMON.\n",
+		 drv_data->v4l2.width, drv_data->v4l2.height);
 
-	/* Issue the 26-byte UVC-style configuration probe/commit using the safe DMA buffer */
-	return up_set_hardware_resolution(drv_data, target_hardware_index, 30);
+	return 0;
 }
 
 static int up_g_fmt_vid_cap(struct file *file, void *priv,
@@ -418,16 +415,12 @@ static int up_start_video(struct up_drv_data *drv_data)
 
 static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
-	struct up_drv_data   *drv_data;
-	struct usb_interface *itf;
+	struct up_drv_data   *drv_data = vb2_get_drv_priv(vq);
+	struct usb_interface *itf = drv_data->usb.itf;
 	struct up_buffer     *buf;
-	int		      urb_sub;
-	int		      retval;
-	int		      i;
-	unsigned long	      flags;
+	int urb_sub, retval, i, vid_in_pipe;
+	unsigned long flags;
 
-	drv_data = vb2_get_drv_priv(vq);
-	itf = drv_data->usb.itf;
 	if (test_and_set_bit(STREAM_HW_ACTIVE, &drv_data->pipeline.streaming))
 		return 0;
 
@@ -441,24 +434,22 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	kfifo_reset(&drv_data->decoder.fifo);
 	spin_unlock_irqrestore(&drv_data->pipeline.ready_lock, flags);
 
+	up_drain_iap_heartbeats(drv_data);
+
+	retval = usb_set_interface(drv_data->usb.udev, UP_VIDEO_INTERFACE, UP_ALT_VIDEO_ENABLE);
+	if (retval) goto error_start;
+
+	vid_in_pipe = usb_rcvbulkpipe(drv_data->usb.udev, drv_data->usb.video_in_ep);
+	usb_clear_halt(drv_data->usb.udev, vid_in_pipe);
+
 	u8 hw_idx = drv_data->v4l2.current_hw_index ? drv_data->v4l2.current_hw_index : 1;
-	retval = up_set_hardware_resolution(drv_data, hw_idx, 30);
-	if (retval) {
-		dev_err(&itf->dev, "up_set_hardware_resolution failed: %d\n", retval);
-		goto error_start;
-	}
+	up_set_hardware_resolution(drv_data, hw_idx, &drv_data->v4l2.timeperframe);
 
 	retval = up_iap_auth(drv_data);
-	if (retval) {
-		dev_err(&itf->dev, "up_iap_auth failed: %d\n", retval);
-		goto error_start;
-	}
+	if (retval) goto error_start;
 
 	retval = up_start_video(drv_data);
-	if (retval) {
-		dev_err(&itf->dev, "up_start_video failed: %d\n", retval);
-		goto error_start;
-	}
+	if (retval) goto error_start;
 
 	/*
 	 * Allow URB callback paths to start passing payloads to buffers
@@ -508,8 +499,11 @@ error_start:
 		buf = list_first_entry(&drv_data->pipeline.ready_queue,
 				       struct up_buffer, list);
 		list_del(&buf->list);
+
 		/*
-		 * Buffers correctly marked as queued for V4L2 cleanup on start error
+		 * If a streaming pipeline setup crashes *before* frames flow,
+		 * we return buffers with VB2_BUF_STATE_QUEUED so VB2 core
+		 * can cleanly unmap them without throwing core warnings.
 		 */
 		vb2_buffer_done(&buf->vb2_buffer.vb2_buf, VB2_BUF_STATE_QUEUED);
 	}
@@ -846,37 +840,53 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 	}
 }
 
-static void up_work_handler(struct work_struct *work)
+static void noinline up_work_handler(struct work_struct *work)
 {
 	size_t		    consumed;
 	size_t		    remaining;
 	size_t		    buf_len;
-	struct up_decoder   decoder = { 0 };
+	struct up_decoder   decoder;
 	struct up_drv_data *drv_data;
 	unsigned int	    len;
 	u8		   *dec_buf;
 	u8		   *buf;
 
 	drv_data = container_of(work, struct up_drv_data, decoder.work);
-
 	dec_buf = drv_data->decoder.workspace_buf;
-	buf = dec_buf + drv_data->decoder.workspace_len;
-	buf_len = MAX_WORKSPACE_SIZE - drv_data->decoder.workspace_len;
-	len = kfifo_out(&drv_data->decoder.fifo, buf, buf_len);
 
-	drv_data->decoder.workspace_len += len;
+	/*
+	 * Setup decoder context once outside the loop to optimize CPU registers
+	 */
+	decoder.context = drv_data;
+	decoder.cb.on_video_frame_start = up_on_frame_start;
+	decoder.cb.on_video_frame_fragment = up_on_video_payload;
+	decoder.cb.on_video_frame_complete = up_on_frame_complete;
+	decoder.cb.on_video_frame_incomplete = up_on_frame_incomplete;
 
-	if (drv_data->decoder.workspace_len > 0) {
-		decoder.context = drv_data;
+	/*
+	 * Loop continuously to drain the incoming FIFO queue completely.
+	 * The loop stays alive if there is data in the FIFO OR unparsed bytes in the workspace.
+	 */
+	while (kfifo_len(&drv_data->decoder.fifo) > 0 || drv_data->decoder.workspace_len > 0) {
+		buf = dec_buf + drv_data->decoder.workspace_len;
+		buf_len = MAX_WORKSPACE_SIZE - drv_data->decoder.workspace_len;
+
+		if (buf_len > 0) {
+			len = kfifo_out(&drv_data->decoder.fifo, buf, buf_len);
+			drv_data->decoder.workspace_len += len;
+		} else {
+			/* Workspace buffer is full, must decode immediately */
+			len = 0;
+		}
+
+		/* If we have absolutely nothing to process right now, exit the loop cleanly */
+		if (drv_data->decoder.workspace_len == 0)
+			break;
+
 		decoder.building_frame = drv_data->decoder.building_frame;
 		decoder.frame_id = drv_data->decoder.frame_id;
 		decoder.found_soi = drv_data->decoder.found_soi;
 		decoder.eof_reached = drv_data->decoder.eof_reached;
-
-		decoder.cb.on_video_frame_start = up_on_frame_start;
-		decoder.cb.on_video_frame_fragment = up_on_video_payload;
-		decoder.cb.on_video_frame_complete = up_on_frame_complete;
-		decoder.cb.on_video_frame_incomplete = up_on_frame_incomplete;
 
 		buf_len = drv_data->decoder.workspace_len;
 		consumed = up_decode_bulk(&decoder, dec_buf, buf_len);
@@ -886,48 +896,50 @@ static void up_work_handler(struct work_struct *work)
 		drv_data->decoder.found_soi = decoder.found_soi;
 		drv_data->decoder.eof_reached = decoder.eof_reached;
 
-		buf_len = drv_data->decoder.workspace_len;
-		if (consumed < buf_len) {
+		/* Handle trailing data slide-window (memmove) logic */
+		if (consumed > 0 && consumed < buf_len) {
 			remaining = buf_len - consumed;
 			memmove(dec_buf, dec_buf + consumed, remaining);
 			drv_data->decoder.workspace_len = remaining;
-		} else {
+		} else if (consumed >= buf_len) {
 			drv_data->decoder.workspace_len = 0;
+		}
+
+		/*
+		 * If we couldn't consume any bytes, we simply need more data.
+		 * Break cleanly. The leftover bytes stay safe in the workspace
+		 * until the next URB interrupt wakes this thread back up.
+		 */
+		if (consumed == 0) {
+			if (drv_data->decoder.workspace_len == MAX_WORKSPACE_SIZE) {
+				dev_err(&drv_data->usb.itf->dev, "Decoder stall! Workspace full.\n");
+				drv_data->decoder.workspace_len = 0;
+			}
+			break;
 		}
 	}
 }
 
-static void up_read_bulk_callback(struct urb *urb)
+static void noinline up_read_bulk_callback(struct urb *urb)
 {
 	struct up_drv_data *drv_data = urb->context;
 	int		    retval;
 
-	/*
-	 * Concurrency safety guard
-	 */
 	if (!test_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming))
 		return;
 
-	/*
-	 * Handle URB completion status codes
-	 */
 	if (urb->status) {
 		switch (urb->status) {
 		case -ENOENT:
 		case -ECONNRESET:
 		case -ESHUTDOWN:
 		case -ENODEV:
-			dev_dbg(&urb->dev->dev, "URB stopped cleanly: %d\n",
-				urb->status);
 			return;
 		case -EPROTO:
 			drv_data->dbg.usb_errors++;
 			goto resubmit;
 		case -EILSEQ:
 		case -ECOMM:
-			dev_dbg(&urb->dev->dev,
-				"Transient CRC/timeout error: %d\n",
-				urb->status);
 			goto resubmit;
 		case -EPIPE:
 			dev_err(&urb->dev->dev, "Endpoint stalled.\n");
@@ -940,17 +952,12 @@ static void up_read_bulk_callback(struct urb *urb)
 	}
 
 	drv_data->dbg.urbs_processed++;
-	/*
-	 * Diagnostic logging throttle
-	 */
-	if (drv_data->dbg.urbs_processed % DIAG_LOG_ITERATIONS == 0) {
+	if (unlikely((drv_data->dbg.urbs_processed & 0x1FF) == 0)) {
 		dev_dbg(&drv_data->usb.itf->dev, DIAG_DATA_FORMAT,
 			drv_data->dbg.urbs_processed, drv_data->dbg.usb_errors,
 			drv_data->dbg.packets_found, drv_data->dbg.frames_found,
-			drv_data->dbg.frames_delivered,
-			drv_data->dbg.frames_dropped_soi,
-			drv_data->dbg.frames_dropped_eoi,
-			drv_data->dbg.frames_dropped_queue,
+			drv_data->dbg.frames_delivered, drv_data->dbg.frames_dropped_soi,
+			drv_data->dbg.frames_dropped_eoi, drv_data->dbg.frames_dropped_queue,
 			drv_data->dbg.ghost_headers);
 	}
 
@@ -958,16 +965,12 @@ static void up_read_bulk_callback(struct urb *urb)
 		kfifo_in(&drv_data->decoder.fifo, urb->transfer_buffer,
 			 urb->actual_length);
 	} else {
-		dev_warn(&urb->dev->dev,
-			 "kfifo overflow, dropping URB payload\n");
+		drv_data->dbg.frames_dropped_queue++;
 	}
 
 	queue_work(drv_data->decoder.wq, &drv_data->decoder.work);
 
 resubmit:
-	/*
-	 * Safe Pipeline Resubmission check
-	 */
 	if (test_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval && retval != -ENODEV && retval != -ESHUTDOWN &&
@@ -1031,10 +1034,8 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 	struct usb_device	       *usb_dev;
 	struct usb_driver	       *driver;
 	struct vb2_queue	       *q;
-	u8			       *hb_sink;
 	int				vid_in_pipe;
 	int				iap_in_pipe;
-	int				hb_bytes;
 	int				itf_num;
 	int				retval;
 	int				i;
@@ -1189,21 +1190,7 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 
 	video_set_drvdata(&drv_data->v4l2.video_dev, drv_data);
 
-	hb_sink = kmalloc(HB_BUF_SIZE, GFP_KERNEL);
-	if (!hb_sink) {
-		retval = -ENOMEM;
-		goto error_unreg_v4l2;
-	}
-
-	/*
-	 * Prune the incoming iAP heartbeats
-	 */
-	for (i = 0; i < HB_SINK_COUNT; i++) {
-		usb_bulk_msg(usb_dev, iap_in_pipe, hb_sink, HB_BUF_SIZE,
-			     &hb_bytes, HB_SINK_TO);
-	}
-
-	kfree(hb_sink);
+	up_drain_iap_heartbeats(drv_data);
 
 	retval = usb_set_interface(usb_dev, UP_VIDEO_INTERFACE,
 				   UP_ALT_VIDEO_ENABLE);
@@ -1212,6 +1199,8 @@ static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 			retval);
 		goto error_unreg_v4l2;
 	}
+
+	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->usb.video_in_ep);
 
 	retval = usb_clear_halt(usb_dev, vid_in_pipe);
 	if (retval)

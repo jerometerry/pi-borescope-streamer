@@ -21,11 +21,12 @@
 #define VIDEO_QUEUE_NAME "useeplus-queue"
 #define VIDEO_DEVICE_NAME "useeplus-video"
 
-#define NUM_URBS 4
-#define URB_SIZE (16 * 1024)
-#define MAX_FRAME_SIZE (256 * 1024)
+#define NUM_VB2_BUFS 4
+#define NUM_URBS 16
+#define URB_SIZE (64 * 1024)
+#define MAX_FRAME_SIZE (512 * 1024)
 #define MAX_WORKSPACE_SIZE (512 * 1024)
-#define FIFO_Q_SIZE (256 * 1024)
+#define FIFO_Q_SIZE (2048 * 1024)
 
 #define UP_DEF_WIDTH 640
 #define UP_DEF_HEIGHT 480
@@ -39,6 +40,7 @@ enum up_config {
 	HB_SINK_TO = 100,
 	DIAG_LOG_ITERATIONS = 300,
 	USB_TO = 1000,
+	USB_CTRL_TO = 5000,
 };
 
 struct up_buffer {
@@ -67,6 +69,7 @@ struct up_drv_data {
 	struct {
 		struct video_device video_dev;
 		struct v4l2_device  v4l2_dev;
+		struct v4l2_fract   timeperframe;
 
 		struct vb2_queue queue;
 		// Mutex protecting the video_queue
@@ -113,5 +116,20 @@ struct up_drv_data {
 		unsigned long ghost_headers;
 	} dbg;
 };
+
+struct uvc_probe_commit_control {
+	__u16 bmHint;
+	__u8  bFormatIndex;
+	__u8  bFrameIndex;
+	__le32 dwFrameInterval;
+	__u16 wKeyFrameRate;
+	__u16 wPFrameRate;
+	__u16 wCompQuality;
+	__u16 wCompWindowSize;
+	__u16 Delay;
+	__u32 dwMaxVideoFrameSize;
+	__u32 dwMaxPayloadTransferSize;
+} __packed;
+
 
 #endif /* _USEEPLUS_CORE_H_ */

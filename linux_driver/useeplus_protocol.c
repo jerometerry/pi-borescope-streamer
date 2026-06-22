@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0+ OR MIT
 
+#include "useeplus_core.h"
 #include "useeplus_protocol.h"
 
 static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t buf_off,
@@ -28,7 +29,7 @@ static bool up_check_ghost_hdr(u8 *buf, size_t len, size_t buf_off,
 	return false;
 }
 
-static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
+static enum up_decode_status noinline up_decode(u8 *buf, size_t len, size_t *cur_pos,
 				       struct up_decode_state *state)
 {
 	struct up_video_frm_frag_hdr *v_hdr;

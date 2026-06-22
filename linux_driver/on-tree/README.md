@@ -108,23 +108,12 @@ uname -r
 
 ### Targeted Rebuild
 
-To rebuild only the `useeplus` module and its dependencies, execute the build command specifically against the driver directory:
-
-```bash
-make M=drivers/media/usb/useeplus modules
-sudo make M=drivers/media/usb/useeplus modules_install
-sudo depmod -a
-sudo modprobe -r useeplus
-sudo modprobe useeplus
-
-```
-
 ```bash
 # for quick code change / deploy iterations
-make modules -j && \
+sudo modprobe -r useeplus && \
 make M=drivers/media/usb/useeplus modules && \
 sudo make M=drivers/media/usb/useeplus modules_install && \
-sudo depmod -a && sudo modprobe -r useeplus && sudo modprobe useeplus && dmesg | tail -n 10
+sudo depmod -a && sudo modprobe useeplus
 ```
 
 ---

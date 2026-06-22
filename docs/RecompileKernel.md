@@ -102,8 +102,9 @@ Once the build completes successfully, install the new modules to your root file
 **1. Install the Kernel Modules:**
 
 ```bash
-sudo make -j$(nproc) modules_install
-
+make -j$(nproc)
+sudo make modules_install
+sudo make install
 ```
 
 **2. Backup the Current Kernel:**
@@ -116,7 +117,7 @@ sudo cp /boot/firmware/$KERNEL.img /boot/firmware/$KERNEL-backup.img
 **3. Deploy the New Kernel & Device Trees:**
 
 ```bash
-sudo cp arch/arm64/boot/Image.gz /boot/firmware/$KERNEL.img
+sudo cp arch/arm64/boot/Image /boot/firmware/kernel_2712.img
 sudo cp arch/arm64/boot/dts/broadcom/*.dtb /boot/firmware/
 sudo cp arch/arm64/boot/dts/overlays/*.dtb* /boot/firmware/overlays/
 sudo cp arch/arm64/boot/dts/overlays/README /boot/firmware/overlays/
