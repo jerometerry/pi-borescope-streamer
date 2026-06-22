@@ -101,7 +101,7 @@ int main(int argc, const char* argv[]) {
             return true;
         };
 
-        V4l2Camera v4l2_camera(devicePath, handler);
+        V4l2Camera v4l2_camera(devicePath, handler, running);
         MjpegServer server(port, running, ringBuffer);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
@@ -111,7 +111,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
 
-        while (running.load(std::memory_order_relaxed)) {
+        while (running_.load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 

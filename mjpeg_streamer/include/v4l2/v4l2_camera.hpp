@@ -39,11 +39,14 @@ private:
     int fd_;
     std::vector<MmapBuffer> buffers_;
     FrameHandler frame_handler_;
+    const std::atomic<bool>& running_;
+
 
    public:
-    V4l2Camera(const std::string& device_path, FrameHandler frame_handler)
+    V4l2Camera(const std::string& device_path, FrameHandler frame_handler, const std::atomic<bool>& running)
         : fd_(open(device_path.c_str(), O_RDWR | O_NONBLOCK, 0)),
-          frame_handler_(std::move(frame_handler)) {
+          frame_handler_(std::move(frame_handler)),
+	  running_(running) {
         if (fd_ < 0) {
             throw std::runtime_error("Cannot open " + device_path);
         }
