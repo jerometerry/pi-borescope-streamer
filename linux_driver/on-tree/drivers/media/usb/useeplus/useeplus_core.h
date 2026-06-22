@@ -73,6 +73,7 @@ struct up_drv_data {
 		struct mutex lock;
 		u32	     height;
 		u32	     width;
+		u8           current_hw_index;
 	} v4l2;
 
 	struct {
