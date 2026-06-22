@@ -26,9 +26,22 @@
 #include "mjpeg_server.hpp"
 #include "video_frame_buffer.hpp"
 
+struct CameraResolution {
+    uint32_t width;
+    uint32_t height;
+
+    bool operator==(const CameraResolution&) const = default;
+};
+
+namespace SupportedResolutions {
+    constexpr CameraResolution HD_720P{1280, 720};
+    constexpr CameraResolution VGA_480P{640, 480};
+    constexpr CameraResolution LOW_240P{320, 240};
+}
+
 class V4l2Camera {
 public:
-using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
+    using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
 
 private:
     struct MmapBuffer {
@@ -40,13 +53,18 @@ private:
     std::vector<MmapBuffer> buffers_;
     FrameHandler frame_handler_;
     const std::atomic<bool>& running_;
+    CameraResolution active_resolution_;
 
-
-   public:
-    V4l2Camera(const std::string& device_path, FrameHandler frame_handler, const std::atomic<bool>& running)
+public:
+    V4l2Camera(const std::string& device_path,
+               CameraResolution target_resolution,
+               FrameHandler frame_handler,
+               const std::atomic<bool>& running)
         : fd_(open(device_path.c_str(), O_RDWR | O_NONBLOCK, 0)),
           frame_handler_(std::move(frame_handler)),
-	  running_(running) {
+          running_(running),
+          active_resolution_(target_resolution) {
+
         if (fd_ < 0) {
             throw std::runtime_error("Cannot open " + device_path);
         }
@@ -55,10 +73,24 @@ private:
         struct v4l2_format fmt = {};
         fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_MJPEG;
-        fmt.fmt.pix.width = 640;
-        fmt.fmt.pix.height = 480;
+        fmt.fmt.pix.width = target_resolution.width;
+        fmt.fmt.pix.height = target_resolution.height;
+
         if (ioctl(fd_, VIDIOC_S_FMT, &fmt) < 0) {
             throw std::runtime_error("Failed to set video format");
+        }
+
+        if (ioctl(fd_, VIDIOC_G_FMT, &fmt) < 0) {
+            throw std::runtime_error("Failed to verify video format");
+        }
+
+        if (fmt.fmt.pix.width != target_resolution.width ||
+            fmt.fmt.pix.height != target_resolution.height) {
+            std::cerr << "Warning: Requested " << target_resolution.width << "x" << target_resolution.height
+                      << ", but driver fell back to " << fmt.fmt.pix.width << "x" << fmt.fmt.pix.height << "\n";
+
+            active_resolution_.width = fmt.fmt.pix.width;
+            active_resolution_.height = fmt.fmt.pix.height;
         }
 
         struct v4l2_requestbuffers req = {};
@@ -101,6 +133,10 @@ private:
             }
             close(fd_);
         }
+    }
+
+    CameraResolution get_resolution() const {
+        return active_resolution_;
     }
 
     void poll_frames() {

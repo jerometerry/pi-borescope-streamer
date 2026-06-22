@@ -45,6 +45,7 @@ constexpr std::string DEFAULT_DEVICE_PATH = "/dev/video0";
 std::atomic<bool> running{true};
 int64_t currentClaimSequence_{-1};
 }  // namespace
+
 void signalHandler(int) {
     running.store(false, std::memory_order_release);
 }
@@ -57,6 +58,7 @@ int main(int argc, const char* argv[]) {
     try {
         int port = DEFAULT_PORT;
         std::string devicePath = DEFAULT_DEVICE_PATH;
+        CameraResolution targetResolution = SupportedResolutions::VGA_480P;
 
         for (int i = 1; i < argc; ++i) {
             std::string arg = argv[i];
@@ -67,7 +69,8 @@ int main(int argc, const char* argv[]) {
                     "Options:\n"
                     "  -h, --help    Show this help message and exit\n"
                     "  --dev <path>  Specify the video device path (default: {})\n"
-                    "  --port <num>  Specify the server port number (default: {})\n",
+                    "  --port <num>  Specify the server port number (default: {})\n"
+                    "  --res <val>   Specify the resolution: 720p, 480p, 240p (default: 480p)\n",
                     argv[0], DEFAULT_DEVICE_PATH, DEFAULT_PORT);
                 return 0;
             } else if (arg == "--dev" && i + 1 < argc) {
@@ -78,6 +81,18 @@ int main(int argc, const char* argv[]) {
                     throw std::out_of_range(std::format("Invalid port: {}", val));
                 }
                 port = static_cast<int>(val);
+            } else if ((arg == "--res" || arg == "--resolution") && i + 1 < argc) {
+                std::string resStr = argv[++i];
+                if (resStr == "720p" || resStr == "1280x720") {
+                    targetResolution = SupportedResolutions::HD_720P;
+                } else if (resStr == "480p" || resStr == "640x480") {
+                    targetResolution = SupportedResolutions::VGA_480P;
+                } else if (resStr == "240p" || resStr == "320x240") {
+                    targetResolution = SupportedResolutions::LOW_240P;
+                } else {
+                    throw std::invalid_argument(
+                        std::format("Invalid resolution: {}. Supported: 720p, 480p, 240p.", resStr));
+                }
             } else {
                 throw std::invalid_argument(
                     std::format("Unknown argument: {}\nUse --help for usage details.", arg));
@@ -101,7 +116,12 @@ int main(int argc, const char* argv[]) {
             return true;
         };
 
-        V4l2Camera v4l2_camera(devicePath, handler, running);
+        V4l2Camera v4l2_camera(devicePath, targetResolution, handler, running);
+
+        CameraResolution activeRes = v4l2_camera.get_resolution();
+        std::cout << std::format("[Server Core] Camera hardware initialized at {}x{}\n",
+                                 activeRes.width, activeRes.height);
+
         MjpegServer server(port, running, ringBuffer);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
