@@ -46,15 +46,16 @@
         }
 
         .feed-container {
-            flex: 1 1 640px;
-            max-width: 1280px;
+            flex: 1 1 auto;
             display: flex;
             flex-direction: column;
             align-items: center;
+            width: 100%;
         }
 
         .video-element, .canvas-element {
-            width: 100%;
+            width: auto;
+            max-width: 100%;
             height: auto;
             background: #000;
             box-sizing: border-box;
