@@ -24,7 +24,7 @@ def parse_jpeg_dimensions(data_bytes):
             return width, height
 
         if payload_data[i] == 0xFF and payload_data[i+1] == 0xD8:
-            print("--> Found JPEG SOI in payload: {i}")
+            print(f"--> Found JPEG SOI in payload: {i}")
 
     return None
 
