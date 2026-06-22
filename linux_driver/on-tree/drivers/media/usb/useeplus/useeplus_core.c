@@ -75,7 +75,8 @@ static int up_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 static int up_enum_frameintervals(struct file *file, void *priv,
 				  struct v4l2_frmivalenum *fival)
 {
-	struct up_drv_data *drv_data = video_drvdata(file);
+	unsigned int i;
+	bool size_supported = false;
 
 	if (fival->index > 0)
 		return -EINVAL;
@@ -83,8 +84,15 @@ static int up_enum_frameintervals(struct file *file, void *priv,
 	if (fival->pixel_format != V4L2_PIX_FMT_MJPEG)
 		return -EINVAL;
 
-	if (fival->width != drv_data->v4l2.width ||
-	    fival->height != drv_data->v4l2.height)
+	for (i = 0; i < ARRAY_SIZE(up_sizes); i++) {
+		if (fival->width == up_sizes[i].width &&
+		    fival->height == up_sizes[i].height) {
+			size_supported = true;
+			break;
+		}
+	}
+
+	if (!size_supported)
 		return -EINVAL;
 
 	fival->type = V4L2_FRMIVAL_TYPE_DISCRETE;
@@ -103,15 +111,14 @@ static const struct v4l2_frmsize_discrete up_sizes[] = {
 static int up_enum_framesizes(struct file *file, void *priv,
 			      struct v4l2_frmsizeenum *fsize)
 {
-	if (fsize->index >= ARRAY_SIZE(up_sizes))
-		return -EINVAL;
-
 	if (fsize->pixel_format != V4L2_PIX_FMT_MJPEG)
 		return -EINVAL;
 
+	if (fsize->index >= ARRAY_SIZE(up_sizes))
+		return -EINVAL;
+
 	fsize->type = V4L2_FRMSIZE_TYPE_DISCRETE;
-	fsize->discrete.width = up_sizes[fsize->index].width;
-	fsize->discrete.height = up_sizes[fsize->index].height;
+	fsize->discrete = up_sizes[fsize->index];
 
 	return 0;
 }
