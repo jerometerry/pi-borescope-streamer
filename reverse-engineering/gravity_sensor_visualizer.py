@@ -31,7 +31,7 @@ def visualize_stream(file_path):
             header_potential_data = data[offset + 5 : offset + 14]
             print(f"--- 0x07 Potential Data [{le_length.hex(' ')}]: [{header_potential_data.hex(' ')}] : [{chunk2.hex(' ')}]")
             # print(f"--- 0x07 Potential Data |{le_length.hex(' ')}|{le_len_val}|: [{header_potential_data.hex(' ')}]")
-            offset += 85
+            offset += 80
             continue
 
         # No match found, shift scanning window by exactly 1 byte
