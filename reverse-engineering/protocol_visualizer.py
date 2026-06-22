@@ -32,13 +32,13 @@ def visualize_stream(file_path):
 
         elif current_chunk == JPEG_SOI:
             # Found standard JPEG Start of Image
-            print(f"{offset:<15} | {f'0x{offset:08X}':<13} | [xBBAA SYNC]")
+            print(f"{offset:<15} | {f'0x{offset:08X}':<15} | [JPEG SOI]")
             offset += 2
             continue
 
         elif current_chunk == JPEG_EOI:
             # Found standard JPEG End of Image
-            print(f"{offset:<15} | {f'0x{offset:08X}':<13} | [xBBAA SYNC]")
+            print(f"{offset:<15} | {f'0x{offset:08X}':<15} | [JPEG EOI]")
             offset += 2
             continue
 
