@@ -23,11 +23,12 @@ def visualize_stream(file_path):
     while offset < file_len - 100:
         current_chunk = data[offset : offset + 2]
         dev_id = data[offset+2]
+        le_length = data[offset + 3 : offset + 5]
         le_len_val = struct.unpack_from('<H', data[offset + 3: offset + 5])[0]
 
         if current_chunk == USB_SYNC_LE and dev_id == 0x07:
             header_potential_data = data[offset + 5 : offset + 86]
-            print(f"--- 0x07 Potential Data {le_len_val}: {header_potential_data.hex(' ')}")
+            print(f"--- 0x07 Potential Data |{le_length.hex(' ')}|{le_len_val}|: [{header_potential_data.hex(' ')}]")
             offset += 85
             continue
 
