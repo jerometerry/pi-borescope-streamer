@@ -27,7 +27,7 @@ def visualize_stream(file_path):
 
         if current_chunk == USB_SYNC_LE:
             # Found 0xBBAA (Stored as AA BB over wire)
-            print(f"{offset:<15} | {f'0x{offset:08X}':<15} | [xBBAA SYNC] | {next}")
+            print(f"{offset:<15} | {f'0x{offset:08X}':<15} | [xBBAA SYNC] | {next_byte}")
             offset += 2 # Move past the full marker
             continue
 
