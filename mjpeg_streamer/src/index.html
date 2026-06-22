@@ -45,20 +45,24 @@
             flex-grow: 1;
         }
 
-       .feed-container {
-            flex: 1 1 600px;
-            max-width: 1280px;
-            width: 100%;
+        .feed-container {
+            /* THE FIX: 'auto' forces the flexbox to use the image's true pixel width */
+            flex: 1 1 auto;
+            width: auto;
+            max-width: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
 
         .video-element, .canvas-element {
-            width: 100%;
+            /* THE FIX: 'auto' prevents CSS from artificially squishing the video */
+            width: auto;
+            max-width: 100%; /* Shrink only if the screen is physically smaller than the video */
             height: auto;
             background: #000;
             box-sizing: border-box;
+            /* Aspect ratio is naturally handled by the browser now */
         }
 
         .video-element {
@@ -148,6 +152,7 @@
 
         <div class="feed-container">
             <h3>Snapshot</h3>
+            <!-- Kept at 640x480. takeSnapshot() will dynamically resize this canvas to 1280x720 when a 720p photo is taken! -->
             <canvas id="snap-view" width="640" height="480" class="canvas-element"></canvas>
 
             <div class="button-group">
