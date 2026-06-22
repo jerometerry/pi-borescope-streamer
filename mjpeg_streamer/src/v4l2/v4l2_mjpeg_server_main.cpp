@@ -111,7 +111,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
 
-        while (running_load(std::memory_order_relaxed)) {
+        while (running.load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
