@@ -29,7 +29,7 @@ def visualize_stream(file_path):
 
         if current_chunk == USB_SYNC_LE and dev_id == 0x07:
             header_potential_data = data[offset + 5 : offset + 14]
-            print(f"--- 0x07 Potential Data [{le_length.hex(' ')}]: [{header_potential_data.hex(' ')}] : [{chunk2.hex(' ')}]")
+            print(f"{offset} --- 0x07 Potential Data [{le_length.hex(' ')}]: [{header_potential_data.hex(' ')}] : [{chunk2.hex(' ')}]")
             # print(f"--- 0x07 Potential Data |{le_length.hex(' ')}|{le_len_val}|: [{header_potential_data.hex(' ')}]")
             offset += 80
             continue
