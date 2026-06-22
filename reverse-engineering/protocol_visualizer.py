@@ -22,7 +22,7 @@ def visualize_stream(file_path):
     # Step through the file byte-by-byte for a pure sequential log
     while offset < file_len - 1:
         # Get the next two bytes to check for a 2-byte marker match
-        current_chunk = data[offset : offset + ]
+        current_chunk = data[offset : offset + 2]
 
         if current_chunk == USB_SYNC_LE:
             # Found 0xBBAA (Stored as AA BB over wire)
