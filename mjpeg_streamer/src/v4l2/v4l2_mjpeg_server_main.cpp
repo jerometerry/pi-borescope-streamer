@@ -92,11 +92,11 @@ int main(int argc, const char* argv[]) {
                 return false;
             }
             if (!payload.empty()) {
-                currentClaimSequence_ = ringBuffer->claim();
-                VideoFrameFragment& slot = ringBuffer->getBySequence(currentClaimSequence_);
+                currentClaimSequence_ = ringBuffer.claim();
+                VideoFrameFragment& slot = ringBuffer.getBySequence(currentClaimSequence_);
                 slot.clear();
-                slot.insertContent(data);
-                ringBuffer->publish(currentClaimSequence_);
+                slot.insertContent(payload);
+                ringBuffer.publish(currentClaimSequence_);
             }
             return true;
         };
@@ -111,7 +111,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
 
-        while (running_.load(std::memory_order_relaxed)) {
+        while (running_load(std::memory_order_relaxed)) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
