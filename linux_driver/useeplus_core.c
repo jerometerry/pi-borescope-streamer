@@ -95,9 +95,9 @@ static int up_enum_frameintervals(struct file *file, void *priv,
 }
 
 static const struct v4l2_frmsize_discrete up_sizes[] = {
-	{ 640,  480 },  // Index 0 in V4L2 -> Hardware Index 1
-	{ 320,  240 },  // Index 1 in V4L2 -> Hardware Index 2
-	{ 1280, 720 },  // Index 2 in V4L2 -> Hardware Index 3
+	{ 640,  480 },
+	{ 320,  240 },
+	{ 1280, 720 },
 };
 
 static int up_enum_framesizes(struct file *file, void *priv,
@@ -127,9 +127,7 @@ static int up_enum_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-/*
- * The camera only supports 640x480 MJPEG.
- */
+
 static void up_enforce_format(struct up_drv_data *drv_data,
 			      struct v4l2_format *f)
 {
@@ -152,8 +150,6 @@ static int up_try_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-#define USB_CTRL_SET_TIMEOUT 5000 /* 5 second hardware transfer timeout */
-
 static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_index, u32 target_fps)
 {
 	struct usb_device *u_dev = drv_data->usb.udev;
@@ -162,23 +158,20 @@ static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_ind
 	int retval;
 	u8 *buf;
 
-	/* 1. Allocate a 26-byte transfer buffer safely aligned for USB DMA */
 	buf = kzalloc(26, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
-	/* 2. Calculate UVC frame interval units: 10,000,000 / FPS */
+	/* Calculate UVC frame interval units: 10,000,000 / FPS */
 	if (target_fps == 0)
 		target_fps = 30; /* Fallback baseline protection */
 	frame_interval = 10000000 / target_fps;
 
-	/* 3. Replicate the precise payload array structure from the Python capture */
 	buf[0] = 0x01; /* bmHint Low Byte (flags frame interval selection) */
 	buf[1] = 0x00;
 	buf[2] = 0x02; /* bFormatIndex (Fixed to 2 for MJPEG container) */
-	buf[3] = frame_index; /* Dynamic Target Resolution Index (1, 2, or 3) */
+	buf[3] = frame_index;
 
-	/* dwFrameInterval (4 bytes, Little Endian layout packing) */
 	buf[4] = (frame_interval & 0xFF);
 	buf[5] = ((frame_interval >> 8) & 0xFF);
 	buf[6] = ((frame_interval >> 16) & 0xFF);
@@ -187,7 +180,6 @@ static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_ind
 	dev_info(&u_dev->dev, "Negotiating camera pipeline via Interface %d (Mode %d)...\n",
              UP_VIDEO_INTERFACE, frame_index);
 
-	/* 4. Execute Phase A: PROBE */
 	retval = usb_control_msg(u_dev, pipe_out,
 				 0x01, 0x21,
 				 0x0100, UP_VIDEO_INTERFACE,
@@ -197,7 +189,6 @@ static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_ind
 		goto out;
 	}
 
-	/* 5. Execute Phase B: COMMIT */
 	retval = usb_control_msg(u_dev, pipe_out,
 				 0x01, 0x21,
 				 0x0200, UP_VIDEO_INTERFACE,
@@ -207,10 +198,10 @@ static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_ind
 		goto out;
 	}
 
-	retval = 0; /* Clean execution */
+	retval = 0;
 
 out:
-	kfree(buf); /* Always free the DMA buffer! */
+	kfree(buf);
 	return retval;
 }
 
@@ -222,11 +213,9 @@ static int up_s_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f
 	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
 
-	/* Prevent changing resolution while the camera is actively streaming */
 	if (vb2_is_busy(&drv_data->v4l2.queue))
 		return -EBUSY;
 
-	/* Precision geometric routing table matching Python results */
 	if (f->fmt.pix.width >= 1280 || f->fmt.pix.height >= 720) {
 		target_hardware_index = 3;
 		drv_data->v4l2.width = 1280;
@@ -243,13 +232,11 @@ static int up_s_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f
 
 	up_enforce_format(drv_data, f);
 
-	/* Save active selection state to your device driver context */
 	drv_data->v4l2.current_hw_index = target_hardware_index;
 
 	dev_info(&drv_data->usb.udev->dev, "Applying resolution payload index %d (%dx%d) to camera...\n",
 		 target_hardware_index, drv_data->v4l2.width, drv_data->v4l2.height);
 
-	/* Issue the 26-byte UVC-style configuration probe/commit using the safe DMA buffer */
 	return up_set_hardware_resolution(drv_data, target_hardware_index, 30);
 }
 

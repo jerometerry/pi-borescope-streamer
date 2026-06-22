@@ -34,16 +34,16 @@ struct CameraResolution {
 };
 
 namespace SupportedResolutions {
-    constexpr CameraResolution HD_720P{1280, 720};
-    constexpr CameraResolution VGA_480P{640, 480};
-    constexpr CameraResolution LOW_240P{320, 240};
-}
+constexpr CameraResolution HD_720P{1280, 720};
+constexpr CameraResolution VGA_480P{640, 480};
+constexpr CameraResolution LOW_240P{320, 240};
+}  // namespace SupportedResolutions
 
 class V4l2Camera {
-public:
+   public:
     using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
 
-private:
+   private:
     struct MmapBuffer {
         void* start;
         size_t length;
@@ -55,16 +55,13 @@ private:
     const std::atomic<bool>& running_;
     CameraResolution active_resolution_;
 
-public:
-    V4l2Camera(const std::string& device_path,
-               CameraResolution target_resolution,
-               FrameHandler frame_handler,
-               const std::atomic<bool>& running)
+   public:
+    V4l2Camera(const std::string& device_path, CameraResolution target_resolution,
+               FrameHandler frame_handler, const std::atomic<bool>& running)
         : fd_(open(device_path.c_str(), O_RDWR | O_NONBLOCK, 0)),
           frame_handler_(std::move(frame_handler)),
           running_(running),
           active_resolution_(target_resolution) {
-
         if (fd_ < 0) {
             throw std::runtime_error("Cannot open " + device_path);
         }
@@ -86,8 +83,9 @@ public:
 
         if (fmt.fmt.pix.width != target_resolution.width ||
             fmt.fmt.pix.height != target_resolution.height) {
-            std::cerr << "Warning: Requested " << target_resolution.width << "x" << target_resolution.height
-                      << ", but driver fell back to " << fmt.fmt.pix.width << "x" << fmt.fmt.pix.height << "\n";
+            std::cerr << "Warning: Requested " << target_resolution.width << "x"
+                      << target_resolution.height << ", but driver fell back to "
+                      << fmt.fmt.pix.width << "x" << fmt.fmt.pix.height << "\n";
 
             active_resolution_.width = fmt.fmt.pix.width;
             active_resolution_.height = fmt.fmt.pix.height;

@@ -109,7 +109,8 @@ class DecoderTest : public ::testing::Test {
 		return mock_context_.payload_data[index];
 	}
 
-	bool was_on_video_payload_called() {
+	bool was_on_video_payload_called()
+	{
 		return mock_context_.video_frame_fragments > 0;
 	}
 };
@@ -194,7 +195,8 @@ TEST_F(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
 	EXPECT_EQ(getVideoFramesStarted(), 0);
 }
 
-std::vector<u8> create_valid_frame(u8 frame_id, size_t *video_data_size) {
+std::vector<u8> create_valid_frame(u8 frame_id, size_t *video_data_size)
+{
 	std::vector<u8> buffer(1024, 0x00);
 
 	size_t payload_size = 512;
@@ -203,7 +205,8 @@ std::vector<u8> create_valid_frame(u8 frame_id, size_t *video_data_size) {
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
 	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + payload_size);
+	u_hdr->le_length =
+		le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + payload_size);
 
 	struct up_video_frm_frag_hdr *v_hdr =
 		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
@@ -225,7 +228,8 @@ std::vector<u8> create_valid_frame(u8 frame_id, size_t *video_data_size) {
 	return buffer;
 }
 
-std::vector<u8> create_junk_frame(u8 frame_id) {
+std::vector<u8> create_junk_frame(u8 frame_id)
+{
 	std::vector<u8>	       buffer(1024, 0x00);
 	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
 
@@ -249,18 +253,18 @@ std::vector<u8> create_junk_frame(u8 frame_id) {
 
 TEST_F(DecoderTest, DecoderRecoversAfterInvalidFrame)
 {
-    std::vector<u8> buffer_a = create_junk_frame(1);
+	std::vector<u8> buffer_a = create_junk_frame(1);
 
-    size_t video_data_size = 0;
-    std::vector<u8> buffer_b = create_valid_frame(2, &video_data_size);
+	size_t		video_data_size = 0;
+	std::vector<u8> buffer_b = create_valid_frame(2, &video_data_size);
 
-    up_decode_bulk(getDecoder(), buffer_a.data(), buffer_a.size());
-    EXPECT_EQ(getPayloadSize(), 0);
+	up_decode_bulk(getDecoder(), buffer_a.data(), buffer_a.size());
+	EXPECT_EQ(getPayloadSize(), 0);
 
-    up_decode_bulk(getDecoder(), buffer_b.data(), buffer_b.size());
+	up_decode_bulk(getDecoder(), buffer_b.data(), buffer_b.size());
 
-    EXPECT_EQ(getPayloadSize(), video_data_size);
-    EXPECT_TRUE(was_on_video_payload_called());
+	EXPECT_EQ(getPayloadSize(), video_data_size);
+	EXPECT_TRUE(was_on_video_payload_called());
 }
 
 TEST_F(DecoderTest, DropsChunkIfSoiNotFound)

@@ -90,8 +90,8 @@ int main(int argc, const char* argv[]) {
                 } else if (resStr == "240p" || resStr == "320x240") {
                     targetResolution = SupportedResolutions::LOW_240P;
                 } else {
-                    throw std::invalid_argument(
-                        std::format("Invalid resolution: {}. Supported: 720p, 480p, 240p.", resStr));
+                    throw std::invalid_argument(std::format(
+                        "Invalid resolution: {}. Supported: 720p, 480p, 240p.", resStr));
                 }
             } else {
                 throw std::invalid_argument(

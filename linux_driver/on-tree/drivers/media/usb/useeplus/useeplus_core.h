@@ -39,6 +39,7 @@ enum up_config {
 	HB_SINK_TO = 100,
 	DIAG_LOG_ITERATIONS = 300,
 	USB_TO = 1000,
+	USB_CTRL_SET_TIMEOUT = 5000,
 };
 
 struct up_buffer {
