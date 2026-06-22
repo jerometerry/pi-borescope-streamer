@@ -90,4 +90,4 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python production_extractor.py <raw_camera_stream.bin>")
         sys.exit(1)
-    extract_clean_stream(sys.argv)
+    extract_clean_stream(sys.argv[1])
