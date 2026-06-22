@@ -25,8 +25,8 @@ def visualize_stream(file_path):
         current_chunk = data[offset : offset + 2]
         dev_id = data[offset+2]
         le_length = data[offset + 3 : offset + 5]
-        frm_id = data[5]
-        dev_num = data[6]
+        frm_id = data[offset + 5]
+        dev_num = data[offset + 6]
 
         if current_chunk == USB_SYNC_LE:
             # Found 0xBBAA (Stored as AA BB over wire)
