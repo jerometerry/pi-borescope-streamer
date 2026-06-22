@@ -92,4 +92,4 @@ if __name__ == "__main__":
         print("Usage: python parse_protocol.py <raw_stream_dump.bin>")
         sys.exit(1)
 
-    parse_log(sys.argv[1])
+    parse_and_log(sys.argv[1])
