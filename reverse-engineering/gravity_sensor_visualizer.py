@@ -19,15 +19,15 @@ def visualize_stream(file_path):
     print(f"{'Offset (Dec)':<15} | {'Offset (Hex)':<15} | {'Marker Tag'}")
     print("-" * 50)
 
-    while offset < file_len - 20:
+    while offset < file_len - 100:
         current_chunk = data[offset : offset + 2]
         dev_id = data[offset+2]
         le_length = data[offset + 3 : offset + 5]
 
         if current_chunk == USB_SYNC_LE and dev_id == 0x07:
-            header_potential_data = data[offset + 5 : offset + 18] # The 12-byte "header" region
+            header_potential_data = data[offset + 5 : offset + 86]
             print(f"--- 0x07 Potential Data Hex: {header_potential_data.hex(' ')}")
-            offset += 2
+            offset += 85
             continue
 
         # No match found, shift scanning window by exactly 1 byte
