@@ -104,7 +104,7 @@ private:
     }
 
     void poll_frames() {
-        while (running.load(std::memory_order_relaxed)) {
+        while (running_.load(std::memory_order_relaxed)) {
             fd_set fds;
             FD_ZERO(&fds);
             FD_SET(fd_, &fds);
