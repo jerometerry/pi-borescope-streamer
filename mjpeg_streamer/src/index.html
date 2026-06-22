@@ -36,29 +36,28 @@
 
         .dashboard-container {
             margin: 20px auto;
-            max-width: 1400px; 
+            max-width: 1400px;
             display: flex;
-            flex-wrap: wrap; 
-            justify-content: center; 
-            gap: 40px; 
-            padding: 0 15px; 
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 40px;
+            padding: 0 15px;
             flex-grow: 1;
         }
 
         .feed-container {
-            flex: 0 1 640px; 
+            flex: 1 1 640px;
+            max-width: 1280px;
             display: flex;
             flex-direction: column;
-            align-items: center; 
+            align-items: center;
         }
 
         .video-element, .canvas-element {
             width: 100%;
-            max-width: 640px;
-            height: auto; 
+            height: auto;
             background: #000;
             box-sizing: border-box;
-            aspect-ratio: 4/3; 
         }
 
         .video-element {
@@ -128,15 +127,15 @@
         <h1 class="brand-title">Pi-Borescope Streamer</h1>
         <p class="brand-subtitle">Live Endoscope Dashboard</p>
     </div>
-    
+
     <div class="dashboard-container">
         <div class="feed-container">
             <h3>Live Stream</h3>
-            <img id="video-feed" 
-                 src="/stream" 
-                 onclick="takeSnapshot()" 
-                 onerror="reconnectStream()" 
-                 alt="Live Borescope Feed" 
+            <img id="video-feed"
+                 src="/stream"
+                 onclick="takeSnapshot()"
+                 onerror="reconnectStream()"
+                 alt="Live Borescope Feed"
                  class="video-element" />
 
             <div class="button-group">
