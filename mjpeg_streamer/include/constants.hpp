@@ -44,7 +44,7 @@ inline constexpr unsigned int HEARTBEAT_SINK_USB_TIMEOUT = 100;
 
 inline constexpr uint8_t IAP_AUTH_HANDSHAKE[] = {0xFF, 0x55, 0xFF, 0x55, 0xEE, 0x10};
 
-inline constexpr uint8_t START_VIDEO_COMMAND[] = {0xBB, 0xAA, 5, 0, 0};
+inline constexpr uint8_t START_VIDEO_COMMAND[] = {0xBB, 0xAA, 5, 0, 2};
 
 /**
  * @brief The universal mathematical signature (Start of Image) that begins every valid JPEG file.
