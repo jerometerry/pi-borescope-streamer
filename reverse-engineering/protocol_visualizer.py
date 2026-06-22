@@ -50,4 +50,4 @@ if __name__ == "__main__":
         print("Usage: python visualize_markers.py <binary_stream.bin>")
         sys.exit(1)
 
-    visualize_stream(sys.argv[0])
+    visualize_stream(sys.argv[1])
