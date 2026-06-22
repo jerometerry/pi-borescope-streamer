@@ -20,16 +20,17 @@ def visualize_stream(file_path):
     print("-" * 50)
 
     # Step through the file byte-by-byte for a pure sequential log
-    while offset < file_len - 11:
+    while offset < file_len - 12:
         # Get the next two bytes to check for a 2-byte marker match
         current_chunk = data[offset : offset + 2]
-        device_id = data[offset+2]
+        dev_id = data[offset+2]
         le_length = data[offset + 3 : offset + 5]
-        frame_id = data[6]
+        frm_id = data[5]
+        dev_num = data[6]
 
         if current_chunk == USB_SYNC_LE:
             # Found 0xBBAA (Stored as AA BB over wire)
-            print(f"{offset:<15} | {f'0x{offset:08X}':<15} | [xBBAA SYNC] | dev: {device_id} frm: {frame_id}")
+            print(f"{offset:<15} | {f'0x{offset:08X}':<15} | [xBBAA SYNC] | dev_id: {dev_id} frm: {frm_id} dev_num: {dev_num}")
             offset += 2 # Move past the full marker
             continue
 
