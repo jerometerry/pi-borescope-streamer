@@ -27,6 +27,10 @@
 #include "video_frame_buffer.hpp"
 
 class V4l2Camera {
+public:
+using FrameHandler = std::function<bool(std::span<const uint8_t>)>;
+
+private:
     struct MmapBuffer {
         void* start;
         size_t length;
