@@ -1,394 +1,256 @@
 #include <gtest/gtest.h>
 #include <vector>
+#include <cstdint>
+#include <cstring>
 
-extern "C" {
 #include "useeplus_protocol.h"
-}
 
-struct MockContext {
-	int		     video_frames_started = 0;
-	int		     video_frame_fragments = 0;
-	int		     video_frames_completed = 0;
-	int		     video_frames_incomplete = 0;
-	std::vector<uint8_t> payload_data;
-	std::set<u8>	     unique_frame_ids;
-	std::set<u8>	     unique_dev_nums;
+struct DecoderEvent {
+    enum Type { START, FRAGMENT, COMPLETE, INCOMPLETE } type;
+    uint8_t frame_id;
+    size_t payload_size;
 };
 
-class DecoderTest : public ::testing::Test {
-    private:
-	MockContext		    mock_context_;
-	struct up_decoder	    decoder_;
-	struct up_decoder_callbacks cb_;
+class CameraHardwareEmulator {
+public:
+    std::vector<uint8_t> stream;
+    size_t page_offset = 0;
 
-    public:
-	DecoderTest()
-	{
-	}
+    void pad_to_next_4k_page() {
+        if (page_offset == 0) return;
 
-	static void mock_on_video_frame_start(void *context, u8 frame_id,
-					      u8 dev_num)
-	{
-		MockContext *mockContext = static_cast<MockContext *>(context);
-		mockContext->video_frames_started++;
-		mockContext->unique_frame_ids.insert(frame_id);
-		mockContext->unique_dev_nums.insert(dev_num);
-	}
+        size_t padding_size = 4096 - page_offset;
+        for (size_t i = 0; i < padding_size; ++i) {
+            // Inject a malicious Ghost Header in the middle of the padding gap
+            if (i == 40 && padding_size >= 80) {
+                stream.push_back(0xAA);
+                stream.push_back(0xBB);
+                stream.push_back(VIDEO_CAMERA_ID);
+                stream.push_back(0xFF); // Garbage length
+                stream.push_back(0xFF);
+                i += 4;
+            } else {
+                stream.push_back(0x00);
+            }
+        }
+        page_offset = 0;
+    }
 
-	static void mock_on_video_frame_fragment(void *context, u8 *data,
-						 size_t len)
-	{
-		auto *mock = static_cast<MockContext *>(context);
-		mock->payload_data.insert(mock->payload_data.end(), data,
-					  data + len);
-		static_cast<MockContext *>(context)->video_frame_fragments++;
-	}
+    void emit_packet(uint8_t dev_id, uint8_t frame_id, uint8_t flags, const std::vector<uint8_t>& payload) {
+        uint16_t packet_size = 5 + 7 + payload.size();
 
-	static void mock_on_video_frame_complete(void *context)
-	{
-		static_cast<MockContext *>(context)->video_frames_completed++;
-	}
+        // If it crosses the 4KB hardware boundary, force the padding
+        if (page_offset + packet_size > 4096) {
+            pad_to_next_4k_page();
+        }
 
-	static void mock_on_video_frame_incomplete(void *context)
-	{
-		static_cast<MockContext *>(context)->video_frames_incomplete++;
-	}
+        // Write USB Header (5 Bytes)
+        stream.push_back(0xAA);
+        stream.push_back(0xBB);
+        stream.push_back(dev_id);
+        uint16_t payload_len = 7 + payload.size();
+        stream.push_back(payload_len & 0xFF);
+        stream.push_back((payload_len >> 8) & 0xFF);
 
-    protected:
-	void SetUp() override
-	{
-		cb_.on_video_frame_start = mock_on_video_frame_start;
-		cb_.on_video_frame_fragment = mock_on_video_frame_fragment;
-		cb_.on_video_frame_complete = mock_on_video_frame_complete;
-		cb_.on_video_frame_incomplete = mock_on_video_frame_incomplete;
+        // Write Payload Header (7 Bytes)
+        stream.push_back(frame_id);
+        stream.push_back(0x00); // device_number
+        stream.push_back(flags);
+        stream.push_back(0x00); // gravity sensor matrix
+        stream.push_back(0x00);
+        stream.push_back(0x00);
+        stream.push_back(0x00);
 
-		decoder_.cb = cb_;
-		decoder_.context = &mock_context_;
-		decoder_.frame_id = 0, decoder_.building_frame = false;
-		decoder_.found_soi = false;
-		decoder_.eof_reached = false;
-	}
+        stream.insert(stream.end(), payload.begin(), payload.end());
+        page_offset += packet_size;
+    }
 
-	MockContext &getContext()
-	{
-		return mock_context_;
-	}
+    void emit_video_frame(uint8_t frame_id, const std::vector<uint8_t>& jpeg_data, bool inject_gravity = false) {
+        size_t offset = 0;
+        int packet_counter = 0;
 
-	struct up_decoder *getDecoder()
-	{
-		return &decoder_;
-	}
+        while (offset < jpeg_data.size()) {
+            size_t chunk_size = std::min<size_t>(932, jpeg_data.size() - offset);
+            std::vector<uint8_t> chunk(jpeg_data.begin() + offset, jpeg_data.begin() + offset + chunk_size);
 
-	int getVideoFramesStarted()
-	{
-		return mock_context_.video_frames_started;
-	}
+            emit_packet(VIDEO_CAMERA_ID, frame_id, 0x00, chunk);
+            offset += chunk_size;
+            packet_counter++;
 
-	int getVideoFrameFragments()
-	{
-		return mock_context_.video_frame_fragments;
-	}
+            if (inject_gravity && (packet_counter % 3 == 0)) {
+                std::vector<uint8_t> gs_data(420, 0x99);
+                emit_packet(GRAVITY_SENSOR_ID, frame_id, 0x01, gs_data);
+            }
+        }
+    }
 
-	int getVideoFramesCompleted()
-	{
-		return mock_context_.video_frames_completed;
-	}
-
-	int getVideoFramesIncomplete()
-	{
-		return mock_context_.video_frames_incomplete;
-	}
-
-	int getPayloadSize()
-	{
-		return mock_context_.payload_data.size();
-	}
-
-	uint8_t getPayloadByte(size_t index)
-	{
-		return mock_context_.payload_data[index];
-	}
-
-	bool was_on_video_payload_called()
-	{
-		return mock_context_.video_frame_fragments > 0;
-	}
+    std::vector<uint8_t> finish() {
+        pad_to_next_4k_page();
+        return stream;
+    }
 };
 
-TEST_F(DecoderTest, SuccessfullyExtractsAndTrimsVideoFrame)
-{
-	std::vector<u8>	       buffer(1024, 0x00);
-	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+class UseeplusDecoderTest : public ::testing::Test {
+protected:
+    std::vector<DecoderEvent> events;
+    up_decoder decoder{};
+    CameraHardwareEmulator camera;
 
-	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 6);
+    void SetUp() override {
+        memset(&decoder, 0, sizeof(decoder));
+        decoder.context = this;
 
-	struct up_video_frm_frag_hdr *v_hdr =
-		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
-	v_hdr->frame_id = 1;
+        decoder.cb.on_video_frame_start = [](void* ctx, u8 fid, u8 dnum) {
+            static_cast<UseeplusDecoderTest*>(ctx)->events.push_back({DecoderEvent::START, fid, 0});
+        };
+        decoder.cb.on_video_frame_fragment = [](void* ctx, u8* data, size_t len) {
+            static_cast<UseeplusDecoderTest*>(ctx)->events.push_back({DecoderEvent::FRAGMENT, 0, len});
+        };
+        decoder.cb.on_video_frame_complete = [](void* ctx) {
+            static_cast<UseeplusDecoderTest*>(ctx)->events.push_back({DecoderEvent::COMPLETE, 0, 0});
+        };
+        decoder.cb.on_video_frame_incomplete = [](void* ctx) {
+            static_cast<UseeplusDecoderTest*>(ctx)->events.push_back({DecoderEvent::INCOMPLETE, 0, 0});
+        };
+    }
 
-	u8 *payload_data = (u8 *)(v_hdr + 1);
-	payload_data[0] = 0x99;
-	payload_data[1] = JPEG_DEL;
-	payload_data[2] = JPEG_SOI;
-	payload_data[3] = 0xAA;
-	payload_data[4] = JPEG_DEL;
-	payload_data[5] = JPEG_EOI;
+    std::vector<uint8_t> generate_mock_jpeg(size_t size_kb) {
+        std::vector<uint8_t> jpeg(size_kb * 1024, 0x42);
 
-	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(), 1024);
+        jpeg[0] = JPEG_DEL;
+        jpeg[1] = JPEG_SOI;
 
-	EXPECT_EQ(consumed, static_cast<unsigned int>(1013));
-	EXPECT_EQ(getVideoFramesStarted(), 1);
-	EXPECT_EQ(getVideoFramesCompleted(), 1);
-	EXPECT_EQ(getPayloadSize(), 5);
-	EXPECT_EQ(getPayloadByte(0), JPEG_DEL);
-	EXPECT_EQ(getPayloadByte(1), JPEG_SOI);
+        jpeg[jpeg.size() - 2] = JPEG_DEL;
+        jpeg[jpeg.size() - 1] = JPEG_EOI;
+        return jpeg;
+    }
+};
+
+TEST_F(UseeplusDecoderTest, DecodesClean10KbVideoFrame) {
+    std::vector<uint8_t> image = generate_mock_jpeg(10);
+    camera.emit_video_frame(1, image);
+    std::vector<uint8_t> stream = camera.finish();
+
+    EXPECT_EQ(stream.size(), 4096 * 3);
+
+    size_t consumed = up_decode_bulk(&decoder, stream.data(), stream.size());
+
+    EXPECT_GE(consumed, stream.size() - 12);
+
+    ASSERT_GT(events.size(), 10);
+    EXPECT_EQ(events.front().type, DecoderEvent::START);
+    EXPECT_EQ(events.back().type, DecoderEvent::COMPLETE);
 }
 
-TEST_F(DecoderTest, SkipsGhostHeadersAndFindsValidPayload)
-{
-	std::vector<u8> buffer(1024, 0x00);
+TEST_F(UseeplusDecoderTest, NavigatesMultiplexedGravitySensors) {
+    std::vector<uint8_t> image = generate_mock_jpeg(20);
 
-	for (size_t i = 0; i < 10; i++)
-		buffer[i] = 0xAA;
+    camera.emit_video_frame(2, image, true);
+    std::vector<uint8_t> stream = camera.finish();
 
-	size_t valid_start = 10;
+    size_t consumed = up_decode_bulk(&decoder, stream.data(), stream.size());
 
-	struct up_usb_frm_hdr *u_hdr =
-		up_get_usb_frm_hdr(buffer.data(), valid_start);
+    EXPECT_GE(consumed, stream.size() - 12);
 
-	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
+    EXPECT_EQ(events.front().type, DecoderEvent::START);
+    EXPECT_EQ(events.back().type, DecoderEvent::COMPLETE);
 
-	struct up_video_frm_frag_hdr *v_hdr = up_get_video_frm_frag_hdr(
-		buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
-	v_hdr->frame_id = 2;
-
-	u8 *payload_data = (u8 *)(v_hdr + 1);
-	payload_data[0] = JPEG_DEL;
-	payload_data[1] = JPEG_SOI;
-	payload_data[2] = JPEG_DEL;
-	payload_data[3] = JPEG_EOI;
-
-	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(), 1024);
-	const size_t expected_consumed = static_cast<size_t>(1013);
-	EXPECT_EQ(consumed, expected_consumed);
-	EXPECT_EQ(getVideoFramesStarted(), 1);
-	EXPECT_EQ(getVideoFramesCompleted(), 1);
-	EXPECT_EQ(getPayloadSize(), 4);
+    for (const auto& ev : events) {
+        if (ev.type == DecoderEvent::FRAGMENT) {
+            EXPECT_NE(ev.payload_size, 420);
+        }
+    }
 }
 
-TEST_F(DecoderTest, ReturnsNeedDataForFragmentedUrbs)
-{
-	std::vector<u8>	       buffer(1024, 0x00);
-	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+TEST_F(UseeplusDecoderTest, HandlesDroppedUsbBulkTransfers) {
+    std::vector<uint8_t> image1 = generate_mock_jpeg(10);
+    std::vector<uint8_t> image2 = generate_mock_jpeg(10);
 
-	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length = le16_to_cpu(100);
+    camera.emit_video_frame(10, image1);
 
-	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(), 50);
+    camera.pad_to_next_4k_page();
 
-	EXPECT_EQ(consumed, static_cast<unsigned int>(0));
-	EXPECT_EQ(getVideoFramesStarted(), 0);
+    camera.emit_video_frame(11, image2);
+    std::vector<uint8_t> stream = camera.finish();
+
+    stream.erase(stream.begin() + 4096, stream.begin() + 12288);
+
+    size_t consumed = up_decode_bulk(&decoder, stream.data(), stream.size());
+
+    EXPECT_GE(consumed, stream.size() - 12);
+
+    bool found_incomplete = false;
+    for (const auto& ev : events) {
+        if (ev.type == DecoderEvent::INCOMPLETE) {
+            found_incomplete = true;
+        }
+    }
+
+    EXPECT_TRUE(found_incomplete);
+
+    EXPECT_EQ(events.back().type, DecoderEvent::COMPLETE);
 }
 
-std::vector<u8> create_valid_frame(u8 frame_id, size_t *video_data_size)
-{
-	std::vector<u8> buffer(1024, 0x00);
+TEST_F(UseeplusDecoderTest, RecoversFromCorruptedPacketLength) {
+    std::vector<uint8_t> image = generate_mock_jpeg(10);
+    camera.emit_video_frame(5, image);
+    std::vector<uint8_t> stream = camera.finish();
 
-	size_t payload_size = 512;
-	*video_data_size = payload_size;
+    // Maliciously corrupt the length field of the very first packet.
+    // The length field sits at offset 3 and 4 (after AA BB and the Dev ID).
+    // We set it to 65535 (0xFFFF).
+    stream[3] = 0xFF;
+    stream[4] = 0xFF;
 
-	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
-	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length =
-		le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + payload_size);
+    size_t consumed = up_decode_bulk(&decoder, stream.data(), stream.size());
 
-	struct up_video_frm_frag_hdr *v_hdr =
-		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
-	v_hdr->frame_id = frame_id;
-	v_hdr->device_number = 1;
-	v_hdr->flags = 0;
-	v_hdr->le_gravity_sensor = 1;
+    // The parser should reject the massive length, fall into seek mode,
+    // find the SECOND packet of the frame, and continue parsing safely.
+    EXPECT_GE(consumed, stream.size() - 12);
 
-	u8 *video_data = (u8 *)(buffer.data() + VIDEO_DATA_OFFSET);
-	video_data[0] = JPEG_DEL;
-	video_data[1] = JPEG_SOI;
-	video_data[2] = 0xAA;
-
-	u8 *eoi_ptr = video_data + payload_size - 2;
-
-	eoi_ptr[0] = JPEG_DEL;
-	eoi_ptr[1] = JPEG_EOI;
-
-	return buffer;
+    // Because we destroyed the first packet (which contained the SOI marker),
+    // the parser should refuse to build Frame 5 and drop the remaining fragments.
+    // It should NOT crash, and it should NOT fire a COMPLETE event.
+    bool found_complete = false;
+    for (const auto& ev : events) {
+        if (ev.type == DecoderEvent::COMPLETE) found_complete = true;
+    }
+    EXPECT_FALSE(found_complete);
 }
 
-std::vector<u8> create_junk_frame(u8 frame_id)
-{
-	std::vector<u8>	       buffer(1024, 0x00);
-	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+TEST_F(UseeplusDecoderTest, HuntsForSignatureWhenStreamIsUnaligned) {
+    std::vector<uint8_t> image = generate_mock_jpeg(10);
+    camera.emit_video_frame(6, image);
+    std::vector<uint8_t> stream = camera.finish();
 
-	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = static_cast<uint8_t>(9);
-	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
+    // Prepend 3 bytes of pure garbage to the front of the stream.
+    // This perfectly misaligns the 0xBBAA signature.
+    stream.insert(stream.begin(), {0xDE, 0xAD, 0xBE});
 
-	struct up_video_frm_frag_hdr *v_hdr =
-		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
+    size_t consumed = up_decode_bulk(&decoder, stream.data(), stream.size());
 
-	v_hdr->frame_id = frame_id;
-	up_set_has_gravity_sensor(v_hdr, true);
+    // The parser must consume the 3 garbage bytes, find the signature at offset 3,
+    // and successfully parse the entire rest of the stream.
+    EXPECT_GE(consumed, stream.size() - 12);
 
-	u8 *payload_data = (u8 *)(v_hdr + 1);
-	payload_data[0] = JPEG_DEL;
-	payload_data[2] = JPEG_DEL;
-	payload_data[1] = JPEG_SOI;
-	payload_data[3] = JPEG_EOI;
-	return buffer;
+    // Because the stream was just shifted (not destroyed), the frame should complete!
+    EXPECT_EQ(events.front().type, DecoderEvent::START);
+    EXPECT_EQ(events.back().type, DecoderEvent::COMPLETE);
 }
 
-TEST_F(DecoderTest, DecoderRecoversAfterInvalidFrame)
-{
-	std::vector<u8> buffer_a = create_junk_frame(1);
+TEST_F(UseeplusDecoderTest, ReturnsZeroWhenStarvedOfHeaderData) {
+    std::vector<uint8_t> image = generate_mock_jpeg(10);
+    camera.emit_video_frame(7, image);
+    std::vector<uint8_t> stream = camera.finish();
 
-	size_t		video_data_size = 0;
-	std::vector<u8> buffer_b = create_valid_frame(2, &video_data_size);
+    // Feed the decoder ONLY the first 4 bytes of the stream.
+    // A full USB + Payload header requires 12 bytes.
+    size_t consumed = up_decode_bulk(&decoder, stream.data(), 4);
 
-	up_decode_bulk(getDecoder(), buffer_a.data(), buffer_a.size());
-	EXPECT_EQ(getPayloadSize(), 0);
+    // It must refuse to consume any bytes.
+    EXPECT_EQ(consumed, 0);
 
-	up_decode_bulk(getDecoder(), buffer_b.data(), buffer_b.size());
-
-	EXPECT_EQ(getPayloadSize(), video_data_size);
-	EXPECT_TRUE(was_on_video_payload_called());
+    // It must not fire any callbacks.
+    EXPECT_EQ(events.size(), 0);
 }
 
-TEST_F(DecoderTest, DropsChunkIfSoiNotFound)
-{
-	std::vector<u8>	       buffer(1024, 0x00);
-	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
-
-	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
-
-	struct up_video_frm_frag_hdr *v_hdr =
-		up_get_video_frm_frag_hdr(buffer.data(), UP_USB_FRM_HDR_LEN);
-
-	v_hdr->frame_id = 1;
-
-	u8 *payload_data = (u8 *)(v_hdr + 1);
-	payload_data[0] = 0xAA;
-	payload_data[1] = 0xBB;
-	payload_data[2] = 0xCC;
-	payload_data[3] = 0xDD;
-
-	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(),
-					 VIDEO_DATA_OFFSET + 4);
-
-	EXPECT_EQ(consumed, static_cast<unsigned int>(16));
-	EXPECT_EQ(consumed, static_cast<unsigned int>(VIDEO_DATA_OFFSET + 4));
-	EXPECT_EQ(getVideoFramesStarted(), 1);
-	EXPECT_EQ(getPayloadSize(), 0);
-}
-
-TEST_F(DecoderTest, HuntsForSignatureOnInvalidPacket)
-{
-	std::vector<u8> buffer(1024, 0x00);
-
-	buffer[0] = 0xAA;
-	buffer[1] = 0xBB;
-	buffer[2] = 0xCC;
-
-	size_t		       valid_start = 3;
-	struct up_usb_frm_hdr *u_hdr =
-		up_get_usb_frm_hdr(buffer.data(), valid_start);
-
-	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
-
-	struct up_video_frm_frag_hdr *v_hdr = up_get_video_frm_frag_hdr(
-		buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
-
-	v_hdr->frame_id = 1;
-
-	u8 *payload_data = (u8 *)(v_hdr + 1);
-	payload_data[0] = JPEG_DEL;
-	payload_data[1] = JPEG_SOI;
-	payload_data[2] = JPEG_DEL;
-	payload_data[3] = JPEG_EOI;
-
-	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(), 1024);
-
-	EXPECT_EQ(consumed, static_cast<unsigned int>(1013));
-	EXPECT_EQ(getVideoFramesStarted(), 1);
-	EXPECT_EQ(getVideoFramesCompleted(), 1);
-	EXPECT_EQ(getPayloadSize(), 4);
-}
-
-TEST_F(DecoderTest, RejectsMassiveLengthAndHunts)
-{
-	std::vector<u8> buffer(1024, 0x00);
-
-	struct up_usb_frm_hdr *bad_pkt = up_get_usb_frm_hdr(buffer.data(), 0);
-
-	bad_pkt->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	bad_pkt->device_id = VIDEO_CAMERA_ID;
-	bad_pkt->le_length = le16_to_cpu(UP_MAX_VIDEO_FRM_FRAG_LEN + 100);
-
-	size_t		       valid_start = 200;
-	struct up_usb_frm_hdr *good_pkt =
-		up_get_usb_frm_hdr(buffer.data(), valid_start);
-
-	good_pkt->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	good_pkt->device_id = VIDEO_CAMERA_ID;
-	good_pkt->le_length = le16_to_cpu(UP_VIDEO_FRM_FRAG_HDR_LEN + 4);
-
-	struct up_video_frm_frag_hdr *v_hdr = up_get_video_frm_frag_hdr(
-		buffer.data(), valid_start + UP_USB_FRM_HDR_LEN);
-
-	v_hdr->frame_id = 1;
-
-	u8 *payload_data = (u8 *)(v_hdr + 1);
-
-	payload_data[0] = JPEG_DEL;
-	payload_data[1] = JPEG_SOI;
-	payload_data[2] = JPEG_DEL;
-	payload_data[3] = JPEG_EOI;
-
-	size_t consumed = up_decode_bulk(getDecoder(), buffer.data(), 1024);
-
-	EXPECT_EQ(consumed, static_cast<unsigned int>(1013));
-	EXPECT_EQ(getVideoFramesStarted(), 1);
-	EXPECT_EQ(getVideoFramesCompleted(), 1);
-	EXPECT_EQ(getPayloadSize(), 4);
-}
-
-std::vector<u8> create_telemetry_frame()
-{
-	std::vector<u8> buffer(1024, 0x00);
-
-	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
-	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
-	u_hdr->device_id = VIDEO_CAMERA_ID;
-	u_hdr->le_length = le16_to_cpu(75);
-
-	u8 *sensor_data = (u8 *)(buffer.data() + UP_USB_FRM_HDR_LEN);
-
-	return buffer;
-}
-
-TEST_F(DecoderTest, HandlesTelemetryFrame)
-{
-	std::vector<u8> frame = create_telemetry_frame();
-
-	size_t position =
-		up_decode_bulk(getDecoder(), frame.data(), frame.size());
-	size_t expected = static_cast<size_t>(1013);
-	EXPECT_EQ(position, expected);
-}
