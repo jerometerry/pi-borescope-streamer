@@ -72,6 +72,12 @@ static int up_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 	return 0;
 }
 
+static const struct v4l2_frmsize_discrete up_sizes[] = {
+	{ 640,  480 },
+	{ 320,  240 },
+	{ 1280, 720 },
+};
+
 static int up_enum_frameintervals(struct file *file, void *priv,
 				  struct v4l2_frmivalenum *fival)
 {
@@ -101,12 +107,6 @@ static int up_enum_frameintervals(struct file *file, void *priv,
 
 	return 0;
 }
-
-static const struct v4l2_frmsize_discrete up_sizes[] = {
-	{ 640,  480 },
-	{ 320,  240 },
-	{ 1280, 720 },
-};
 
 static int up_enum_framesizes(struct file *file, void *priv,
 			      struct v4l2_frmsizeenum *fsize)
