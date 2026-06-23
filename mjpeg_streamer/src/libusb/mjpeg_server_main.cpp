@@ -42,37 +42,45 @@ void signalHandler(int) {
 
 int main(int argc, const char* argv[]) {
     int port = DEFAULT_PORT;
-    bool isUsingDefaultPort = true;
+    uint8_t targetFormatIndex = 1;
+    std::string resLabel = "480p";
 
-    if (argc > 1) {
-        try {
-            int parsedPort = std::stoi(argv[1]);
-            if (parsedPort > 0 && parsedPort <= 65535) {
-                port = parsedPort;
-                isUsingDefaultPort = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+
+        if (arg == "-h" || arg == "--help") {
+            std::cout << "Usage: " << argv[0] << " [options]\n\n"
+                      << "Options:\n"
+                      << "  -h, --help    Show this help message and exit\n"
+                      << "  --port <num>  Specify the server port number (default: " << DEFAULT_PORT << ")\n"
+                      << "  --res <val>   Specify the resolution: 720p, 480p, 240p (default: 480p)\n";
+            return EXIT_SUCCESS;
+        } else if (arg == "--port" && i + 1 < argc) {
+            unsigned long val = std::stoul(argv[++i]);
+            if (val > 65535) throw std::out_of_range("Invalid port");
+            port = static_cast<int>(val);
+        } else if ((arg == "--res" || arg == "--resolution") && i + 1 < argc) {
+            std::string resStr = argv[++i];
+            if (resStr == "720p" || resStr == "1280x720") {
+                targetFormatIndex = 3;
+                resLabel = "720p";
+            } else if (resStr == "480p" || resStr == "640x480") {
+                targetFormatIndex = 1;
+                resLabel = "480p";
+            } else if (resStr == "240p" || resStr == "320x240") {
+                targetFormatIndex = 2;
+                resLabel = "240p";
             } else {
-                std::cerr << "[Warning] Invalid network port range specified (" << argv[1]
-                          << "). Falling back to default port " << DEFAULT_PORT << ".\n";
+                std::cerr << "Invalid resolution. Supported: 720p, 480p, 240p.\n";
+                return EXIT_FAILURE;
             }
-        } catch (const std::exception& exception) {
-            std::cerr << "[Warning] Malformed network port parameter specified (" << argv[1]
-                      << "). Falling back to default port " << DEFAULT_PORT << ".\n";
         }
     }
 
     std::cout << "==================================================================\n";
-    std::cout << "  Pi-Borescope Streamer Started\n";
-
-    if (isUsingDefaultPort) {
-        std::cout << "  -> Status: Running on DEFAULT port " << port << "\n";
-        std::cout << "  -> Note:   To override this, specify a custom port value on launch.\n";
-        std::cout << "             Example: " << argv[0] << " 9000\n";
-    } else {
-        std::cout << "  -> Status: Running on CUSTOM port override " << port << "\n";
-    }
-
-    std::cout << "  -> Web Dashboard:          http://localhost:" << port << "/\n";
-    std::cout << "  -> Raw Streaming (VLC):    http://localhost:" << port << "/stream\n";
+    std::cout << "  Pi-Borescope Streamer Started (User-Space libusb)\n";
+    std::cout << "  -> Status:     Running on port " << port << "\n";
+    std::cout << "  -> Resolution: " << resLabel << " (Hardware Index " << (int)targetFormatIndex << ")\n";
     std::cout << "==================================================================\n";
 
     std::signal(SIGINT, signalHandler);
@@ -138,7 +146,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 
-        driver.start(camera);
+        driver.start(camera, targetFormatIndex);
         server.start();
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";

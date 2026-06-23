@@ -28,8 +28,8 @@ UsbDriver::~UsbDriver() {
     stop();
 }
 
-void UsbDriver::start(const UsbDeviceInfo& target) {
-    workerThread_ = std::jthread(&UsbDriver::loop, this, target);
+void UsbDriver::start(const UsbDeviceInfo& target, uint8_t formatIndex) {
+    workerThread_ = std::jthread(&UsbDriver::loop, this, target, formatIndex);
 }
 
 void UsbDriver::stop() {
@@ -38,8 +38,8 @@ void UsbDriver::stop() {
     }
 }
 
-void UsbDriver::loop(const UsbDeviceInfo& target) {
-    camera_ = std::make_unique<UsbCamera>(target);
+void UsbDriver::loop(const UsbDeviceInfo& target, uint8_t formatIndex) {
+    camera_ = std::make_unique<UsbCamera>(target, formatIndex);
 
     uint8_t* rawDmaBuffer = reinterpret_cast<uint8_t*>(
         libusb_dev_mem_alloc(camera_->getRawHandle(), UsbConfig::DMA_BUFFER_SIZE));

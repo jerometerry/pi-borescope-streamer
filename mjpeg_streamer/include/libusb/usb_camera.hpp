@@ -29,7 +29,7 @@ class UsbCamera {
      * @throws std::runtime_error If the camera isn't plugged in, or if the OS refuses to let go of
      * it.
      */
-    explicit UsbCamera(const UsbDeviceInfo& target);
+    UsbCamera(const UsbDeviceInfo& target, uint8_t formatIndex = 1);
 
     /**
      * @brief Safely power down the connection and give the camera back to the OS.
