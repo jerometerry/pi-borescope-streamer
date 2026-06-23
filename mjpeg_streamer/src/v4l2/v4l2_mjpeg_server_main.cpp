@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "constants.hpp"
+#include "index_html.hpp"
 #include "mjpeg_server.hpp"
 #include "v4l2_camera.hpp"
 #include "video_frame_buffer.hpp"
@@ -122,7 +123,7 @@ int main(int argc, const char* argv[]) {
         std::cout << std::format("[Server Core] Camera hardware initialized at {}x{}\n",
                                  activeRes.width, activeRes.height);
 
-        MjpegServer server(port, running, ringBuffer);
+        MjpegServer server(port, running, Resources::index_html, ringBuffer);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 

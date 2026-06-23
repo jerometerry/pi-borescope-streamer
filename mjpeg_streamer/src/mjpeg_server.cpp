@@ -18,13 +18,12 @@
 
 #include "constants.hpp"
 #include "http_response_builder.hpp"
-#include "index_html.hpp"
 #include "video_frame_buffer.hpp"
 #include "video_frame_fragment.hpp"
 
-MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running,
+MjpegServer::MjpegServer(const int port, const std::atomic<bool>& running, std::string_view index_html,
                          VideoFrameBuffer& disruptor)
-    : port_(port), running_(running), disruptor_(&disruptor) {}
+    : port_(port), running_(running), index_html_(index_html), disruptor_(&disruptor) {}
 
 MjpegServer::~MjpegServer() {
     if (networkThread_.joinable()) {
@@ -147,10 +146,10 @@ void MjpegServer::start() {
 
     networkThread_ = std::thread([this, &loopPromise]() {
         auto app = uWS::App();
-        app.get("/", [](auto* res, auto*) {
+        app.get("/", [this](auto* res, auto*) {
             res->writeHeader("Connection", "close")
                 ->writeHeader("Content-Type", "text/html")
-                ->end(Resources::index_html);
+                ->end(index_html_);
         });
         app.get("/favicon.ico", [](auto* res, auto*) {
             res->writeStatus("404 Not Found")

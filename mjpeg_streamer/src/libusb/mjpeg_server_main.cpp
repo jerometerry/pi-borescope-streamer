@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "constants.hpp"
+#include "index_html.hpp"
 #include "mjpeg_server.hpp"
 #include "usb_camera.hpp"
 #include "usb_device_info.hpp"
@@ -49,11 +50,13 @@ int main(int argc, const char* argv[]) {
         std::string arg = argv[i];
 
         if (arg == "-h" || arg == "--help") {
-            std::cout << "Usage: " << argv[0] << " [options]\n\n"
-                      << "Options:\n"
-                      << "  -h, --help    Show this help message and exit\n"
-                      << "  --port <num>  Specify the server port number (default: " << DEFAULT_PORT << ")\n"
-                      << "  --res <val>   Specify the resolution: 720p, 480p, 240p (default: 480p)\n";
+            std::cout
+                << "Usage: " << argv[0] << " [options]\n\n"
+                << "Options:\n"
+                << "  -h, --help    Show this help message and exit\n"
+                << "  --port <num>  Specify the server port number (default: " << DEFAULT_PORT
+                << ")\n"
+                << "  --res <val>   Specify the resolution: 720p, 480p, 240p (default: 480p)\n";
             return EXIT_SUCCESS;
         } else if (arg == "--port" && i + 1 < argc) {
             unsigned long val = std::stoul(argv[++i]);
@@ -80,7 +83,8 @@ int main(int argc, const char* argv[]) {
     std::cout << "==================================================================\n";
     std::cout << "  Pi-Borescope Streamer Started (User-Space libusb)\n";
     std::cout << "  -> Status:     Running on port " << port << "\n";
-    std::cout << "  -> Resolution: " << resLabel << " (Hardware Index " << (int)targetFormatIndex << ")\n";
+    std::cout << "  -> Resolution: " << resLabel << " (Hardware Index " << (int)targetFormatIndex
+              << ")\n";
     std::cout << "==================================================================\n";
 
     std::signal(SIGINT, signalHandler);
@@ -142,7 +146,7 @@ int main(int argc, const char* argv[]) {
         };
         UsbDriver driver(transfer, &running);
 
-        MjpegServer server(port, running, ringBuffer);
+        MjpegServer server(port, running, Resources::index_html, ringBuffer);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 

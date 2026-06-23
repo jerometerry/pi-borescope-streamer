@@ -31,7 +31,8 @@ class MjpegServer {
      * @param running A reference to the global shutdown flag to monitor for graceful exit.
      * @param frameSource The provider (usually MjpegFrameQueue) that supplies the video frames.
      */
-    explicit MjpegServer(int port, const std::atomic<bool>& running, VideoFrameBuffer& disruptor);
+    explicit MjpegServer(int port, const std::atomic<bool>& running, std::string_view index_html,
+                         VideoFrameBuffer& disruptor);
     ~MjpegServer();
 
     MjpegServer(const MjpegServer&) = delete;
@@ -60,6 +61,7 @@ class MjpegServer {
 
     const int port_;
     const std::atomic<bool>& running_;
+    const std::string_view index_html_;
     VideoFrameBuffer* disruptor_;
     int64_t nextReadSequence_{0};
 
