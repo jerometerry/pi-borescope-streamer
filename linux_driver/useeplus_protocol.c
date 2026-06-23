@@ -51,6 +51,14 @@ static enum up_decode_status up_decode(u8 *buf, size_t len, size_t *cur_pos,
 		return UP_INVALID_USB_FRM_HDR;
 	}
 
+	if (u_hdr->device_id == GRAVITY_SENSOR_ID) {
+		if (UP_GRAVITY_SENSOR_FRAME_LEN + buf_off > len)
+			return UP_DECODE_NEED_DATA;
+
+		*cur_pos += UP_GRAVITY_SENSOR_FRAME_LEN;
+		return UP_DECODE_TELEMETRY_DATA;
+	}
+
 	if (up_check_ghost_hdr(buf, len, buf_off, &u_hdr_off)) {
 		/*
 		 * Hardware packs 4 944 byte packets into 4K pages, leaving the
@@ -140,6 +148,8 @@ size_t up_decode_bulk(struct up_decoder *dec, u8 *buf, size_t len)
 		case UP_INVALID_VIDEO_FRM_FRAG_HDR:
 			continue;
 		case UP_IS_GHOST_HDR:
+			continue;
+		case UP_DECODE_TELEMETRY_DATA:
 			continue;
 		case UP_DECODE_OK:
 			break;

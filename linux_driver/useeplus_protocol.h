@@ -197,6 +197,7 @@ enum up_decode_status {
 	UP_INVALID_USB_FRM_HDR,
 	UP_INVALID_VIDEO_FRM_FRAG_HDR,
 	UP_IS_GHOST_HDR,
+	UP_DECODE_TELEMETRY_DATA,
 	UP_DECODE_SKIP,
 	UP_DECODE_NEED_DATA,
 };
@@ -222,6 +223,8 @@ struct up_video_frm_frag_hdr {
 
 #ifdef __cplusplus
 constexpr int UP_MAX_VIDEO_FRM_FRAG_LEN = 1024;
+constexpr int UP_GRAVITY_SENSOR_FRAME_LEN = 80;
+constexpr int UP_GRAVITY_SENSOR_DATA_LEN = 75;
 constexpr int JPEG_SOI_MAX_POS = 256;
 constexpr int MAX_GHOST_HDR_OFF = 160;
 
@@ -232,6 +235,8 @@ constexpr size_t VIDEO_DATA_OFFSET =
 	UP_USB_FRM_HDR_LEN + UP_VIDEO_FRM_FRAG_HDR_LEN;
 #else
 #define UP_MAX_VIDEO_FRM_FRAG_LEN 1024
+#define UP_GRAVITY_SENSOR_FRAME_LEN 80
+#define UP_GRAVITY_SENSOR_DATA_LEN 75
 #define JPEG_SOI_MAX_POS 256
 #define MAX_GHOST_HDR_OFF 160
 
