@@ -387,7 +387,8 @@ TEST_F(DecoderTest, HandlesTelemetryFrame)
 {
 	std::vector<u8> frame = create_telemetry_frame();
 
-	size_t position = up_decode_bulk(getDecoder(), frame.data(), frame.size());
+	size_t position =
+		up_decode_bulk(getDecoder(), frame.data(), frame.size());
 	size_t expected = static_cast<size_t>(1013);
 	EXPECT_EQ(position, expected);
 }
