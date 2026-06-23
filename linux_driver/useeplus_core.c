@@ -73,8 +73,8 @@ static int up_enum_input(struct file *file, void *priv, struct v4l2_input *inp)
 }
 
 static const struct v4l2_frmsize_discrete up_sizes[] = {
-	{ 640,  480 },
-	{ 320,  240 },
+	{ 640, 480 },
+	{ 320, 240 },
 	{ 1280, 720 },
 };
 
@@ -82,7 +82,7 @@ static int up_enum_frameintervals(struct file *file, void *priv,
 				  struct v4l2_frmivalenum *fival)
 {
 	unsigned int i;
-	bool size_supported = false;
+	bool	     size_supported = false;
 
 	if (fival->index > 0)
 		return -EINVAL;
@@ -134,7 +134,6 @@ static int up_enum_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-
 static void up_enforce_format(struct up_drv_data *drv_data,
 			      struct v4l2_format *f)
 {
@@ -157,13 +156,14 @@ static int up_try_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
-static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_index, u32 target_fps)
+static int up_set_hardware_resolution(struct up_drv_data *drv_data,
+				      u8 frame_index, u32 target_fps)
 {
 	struct usb_device *u_dev = drv_data->usb.udev;
-	int pipe_out = usb_sndctrlpipe(u_dev, 0);
-	u32 frame_interval;
-	int retval;
-	u8 *buf;
+	int		   pipe_out = usb_sndctrlpipe(u_dev, 0);
+	u32		   frame_interval;
+	int		   retval;
+	u8		  *buf;
 
 	buf = kzalloc(26, GFP_KERNEL);
 	if (!buf)
@@ -184,24 +184,23 @@ static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_ind
 	buf[6] = ((frame_interval >> 16) & 0xFF);
 	buf[7] = ((frame_interval >> 24) & 0xFF);
 
-	dev_info(&u_dev->dev, "Negotiating camera pipeline via Interface %d (Mode %d)...\n",
-             UP_VIDEO_INTERFACE, frame_index);
+	dev_info(&u_dev->dev,
+		 "Negotiating camera pipeline via Interface %d (Mode %d)...\n",
+		 UP_VIDEO_INTERFACE, frame_index);
 
-	retval = usb_control_msg(u_dev, pipe_out,
-				 0x01, 0x21,
-				 0x0100, UP_VIDEO_INTERFACE,
-				 buf, 26, USB_CTRL_SET_TO);
+	retval = usb_control_msg(u_dev, pipe_out, 0x01, 0x21, 0x0100,
+				 UP_VIDEO_INTERFACE, buf, 26, USB_CTRL_SET_TO);
 	if (retval < 0) {
-		dev_err(&u_dev->dev, "Hardware stream probe stalled: %d\n", retval);
+		dev_err(&u_dev->dev, "Hardware stream probe stalled: %d\n",
+			retval);
 		goto out;
 	}
 
-	retval = usb_control_msg(u_dev, pipe_out,
-				 0x01, 0x21,
-				 0x0200, UP_VIDEO_INTERFACE,
-				 buf, 26, USB_CTRL_SET_TO);
+	retval = usb_control_msg(u_dev, pipe_out, 0x01, 0x21, 0x0200,
+				 UP_VIDEO_INTERFACE, buf, 26, USB_CTRL_SET_TO);
 	if (retval < 0) {
-		dev_err(&u_dev->dev, "Hardware stream commit lock stalled: %d\n", retval);
+		dev_err(&u_dev->dev,
+			"Hardware stream commit lock stalled: %d\n", retval);
 		goto out;
 	}
 
@@ -212,10 +211,11 @@ out:
 	return retval;
 }
 
-static int up_s_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f)
+static int up_s_fmt_vid_cap(struct file *file, void *priv,
+			    struct v4l2_format *f)
 {
 	struct up_drv_data *drv_data = video_drvdata(file);
-	u8 target_hardware_index;
+	u8		    target_hardware_index;
 
 	if (f->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
@@ -241,8 +241,10 @@ static int up_s_fmt_vid_cap(struct file *file, void *priv, struct v4l2_format *f
 
 	drv_data->v4l2.current_hw_index = target_hardware_index;
 
-	dev_info(&drv_data->usb.udev->dev, "Applying resolution payload index %d (%dx%d) to camera...\n",
-		 target_hardware_index, drv_data->v4l2.width, drv_data->v4l2.height);
+	dev_info(&drv_data->usb.udev->dev,
+		 "Applying resolution payload index %d (%dx%d) to camera...\n",
+		 target_hardware_index, drv_data->v4l2.width,
+		 drv_data->v4l2.height);
 
 	return up_set_hardware_resolution(drv_data, target_hardware_index, 30);
 }
@@ -266,13 +268,10 @@ static int up_vidioc_querycap(struct file *file, void *priv,
 	strscpy(cap->card, CAP_CARD, sizeof(cap->card));
 	usb_make_path(drv_data->usb.udev, cap->bus_info, sizeof(cap->bus_info));
 
-	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE |
-			    V4L2_CAP_STREAMING |
-			    V4L2_CAP_READWRITE |
-			    V4L2_CAP_DEVICE_CAPS;
+	cap->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
+			    V4L2_CAP_READWRITE | V4L2_CAP_DEVICE_CAPS;
 
-	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE |
-			   V4L2_CAP_STREAMING |
+	cap->device_caps = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING |
 			   V4L2_CAP_READWRITE;
 
 	return 0;
@@ -303,10 +302,10 @@ static const struct v4l2_ioctl_ops up_v4l2_ioctl_ops = {
 static void up_stop_streaming(struct vb2_queue *vq)
 {
 	struct up_buffer       *active_buf;
-	struct up_buffer       *buf;
 	struct vb2_v4l2_buffer *v4l2_buf;
 	struct up_drv_data     *drv_data;
 	struct vb2_buffer      *vb2_buf;
+	struct up_buffer       *buf;
 	unsigned long		flags;
 	int			i;
 
@@ -435,10 +434,13 @@ static int up_start_streaming(struct vb2_queue *vq, unsigned int count)
 	kfifo_reset(&drv_data->decoder.fifo);
 	spin_unlock_irqrestore(&drv_data->pipeline.ready_lock, flags);
 
-	u8 hw_idx = drv_data->v4l2.current_hw_index ? drv_data->v4l2.current_hw_index : 1;
+	u8 hw_idx = drv_data->v4l2.current_hw_index ?
+			    drv_data->v4l2.current_hw_index :
+			    1;
 	retval = up_set_hardware_resolution(drv_data, hw_idx, 30);
 	if (retval) {
-		dev_err(&itf->dev, "up_set_hardware_resolution failed: %d\n", retval);
+		dev_err(&itf->dev, "up_set_hardware_resolution failed: %d\n",
+			retval);
 		goto error_start;
 	}
 
@@ -842,14 +844,14 @@ static void up_on_video_payload(void *context, u8 *data, size_t len)
 
 static void up_work_handler(struct work_struct *work)
 {
-	size_t		    consumed;
-	size_t		    remaining;
-	size_t		    buf_len;
-	struct up_decoder   decoder = { 0 };
+	struct up_decoder decoder = { 0 };
 	struct up_drv_data *drv_data;
-	unsigned int	    len;
-	u8		   *dec_buf;
-	u8		   *buf;
+	unsigned int len;
+	size_t consumed;
+	size_t remaining;
+	size_t buf_len;
+	u8 *dec_buf;
+	u8 *buf;
 
 	drv_data = container_of(work, struct up_drv_data, decoder.work);
 
@@ -893,18 +895,13 @@ static void up_work_handler(struct work_struct *work)
 
 static void up_read_bulk_callback(struct urb *urb)
 {
-	struct up_drv_data *drv_data = urb->context;
+	struct up_drv_data *drv_data;
 	int		    retval;
 
-	/*
-	 * Concurrency safety guard
-	 */
+	drv_data = urb->context;
 	if (!test_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming))
 		return;
 
-	/*
-	 * Handle URB completion status codes
-	 */
 	if (urb->status) {
 		switch (urb->status) {
 		case -ENOENT:
@@ -934,9 +931,6 @@ static void up_read_bulk_callback(struct urb *urb)
 	}
 
 	drv_data->dbg.urbs_processed++;
-	/*
-	 * Diagnostic logging throttle
-	 */
 	if (drv_data->dbg.urbs_processed % DIAG_LOG_ITERATIONS == 0) {
 		dev_dbg(&drv_data->usb.itf->dev, DIAG_DATA_FORMAT,
 			drv_data->dbg.urbs_processed, drv_data->dbg.usb_errors,
@@ -959,9 +953,6 @@ static void up_read_bulk_callback(struct urb *urb)
 	queue_work(drv_data->decoder.wq, &drv_data->decoder.work);
 
 resubmit:
-	/*
-	 * Safe Pipeline Resubmission check
-	 */
 	if (test_bit(STREAM_CLIENT_READY, &drv_data->pipeline.streaming)) {
 		retval = usb_submit_urb(urb, GFP_ATOMIC);
 		if (retval && retval != -ENODEV && retval != -ESHUTDOWN &&
@@ -973,18 +964,20 @@ resubmit:
 
 static int up_alloc_urbs(struct up_drv_data *drv_data)
 {
-	struct usb_device    *usb_dev = drv_data->usb.udev;
-	struct usb_interface *itf = drv_data->usb.itf;
-	int		      vid_in_pipe;
-	dma_addr_t	     *dma;
-	struct urb	     *urb;
-	u8		     *urb_ptr;
-	u8		     *urb_buf;
-	int		      i;
-	usb_complete_t	      u_comp;
+	struct usb_device    *usb_dev;
+	struct usb_interface *itf;
+	usb_complete_t u_comp;
+	dma_addr_t *dma;
+	struct urb *urb;
+	int vid_in_pipe;
+	u8 *urb_ptr;
+	u8 *urb_buf;
+	int i;
 
+	usb_dev =  = drv_data->usb.udev;
 	vid_in_pipe = usb_rcvbulkpipe(usb_dev, drv_data->usb.video_in_ep);
 	u_comp = up_read_bulk_callback;
+	itf =  = drv_data->usb.itf;
 
 	for (i = 0; i < NUM_URBS; i++) {
 		urb = usb_alloc_urb(0, GFP_KERNEL);
@@ -996,8 +989,7 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 		drv_data->usb.urbs[i] = urb;
 
 		dma = &drv_data->usb.urb_dma_addrs[i];
-		urb_ptr =
-			usb_alloc_coherent(usb_dev, URB_SIZE, GFP_KERNEL, dma);
+		urb_ptr = usb_alloc_coherent(usb_dev, URB_SIZE, GFP_KERNEL, dma);
 		if (!urb_ptr) {
 			dev_err(&itf->dev, "usb_alloc_coherent failed\n");
 			return -ENOMEM;
@@ -1018,30 +1010,27 @@ static int up_alloc_urbs(struct up_drv_data *drv_data)
 
 static int up_probe(struct usb_interface *itf, const struct usb_device_id *id)
 {
-	struct usb_host_interface      *video_alt;
 	struct usb_endpoint_descriptor *ep_desc;
+	struct usb_host_interface      *video_alt;
 	struct usb_interface	       *iap_intf;
 	struct up_drv_data	       *drv_data;
 	struct usb_device	       *usb_dev;
 	struct usb_driver	       *driver;
 	struct vb2_queue	       *q;
-	u8			       *hb_sink;
-	int				vid_in_pipe;
-	int				iap_in_pipe;
-	int				hb_bytes;
-	int				itf_num;
-	int				retval;
-	int				i;
-	u8				ep;
+	int vid_in_pipe;
+	int iap_in_pipe;
+	int hb_bytes;
+	u8 *hb_sink;
+	int itf_num;
+	int retval;
+	int i;
+	u8 ep;
 
 	driver = to_usb_driver(itf->dev.driver);
 	usb_dev = interface_to_usbdev(itf);
 	itf_num = itf->cur_altsetting->desc.bInterfaceNumber;
 	drv_data = NULL;
 
-	/*
-	 * Only bind the driver when the Video Interface is probed
-	 */
 	if (itf_num != UP_VIDEO_INTERFACE)
 		return -ENODEV;
 
