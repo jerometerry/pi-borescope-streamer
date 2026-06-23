@@ -1,14 +1,10 @@
 #!/usr/bin/env bash
 set -e
 
-USEEPLUS_DIR="build/useeplus"
+THIRD_PARTY_DIR="third_party"
+mkdir -p "$THIRD_PARTY_DIR"
 
-if [ ! -d "$USEEPLUS_DIR" ]; then
-    echo "Cloning useeplus..."
-    git clone -c advice.detachedHead=false --branch main https://github.com/jerometerry/useeplus.git "$USEEPLUS_DIR"
+if [ ! -d "$THIRD_PARTY_DIR/useeplus" ]; then
+    echo "Cloning useeplus library..."
+    git clone https://github.com/jerometerry/useeplus.git "$THIRD_PARTY_DIR/useeplus"
 fi
-
-echo "Building useeplus..."
-cd "$USEEPLUS_DIR"
-make clean
-make
