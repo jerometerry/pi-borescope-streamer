@@ -18,6 +18,7 @@ GEN_DIR          := generated
 LINUX_DRIVER_DIR := ../linux_driver
 BUILD_DIR        := build
 TEST_DIR         := tests
+BENCH_DIR        := benchmark
 
 HTML_FILE     := $(SRC_DIR)/index.html
 GENERATED_HPP := $(GEN_DIR)/index_html.hpp
@@ -48,12 +49,12 @@ PROJECT_TEST_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(PROJECT_TEST_SRC
 DRIVER_TEST_OBJS  := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(DRIVER_TEST_SRCS)))
 TEST_TARGETS      := $(BUILD_DIR)/run_project_tests $(BUILD_DIR)/run_linux_driver_tests
 
-BENCHMARK_SRCS    := benchmark/disruptor_benchmark.cpp \
-                     benchmark/disruptor_concurrency_benchmark.cpp \
-                     benchmark/mjpeg_pipeline_benchmark.cpp
+BENCHMARK_SRCS    := $(BENCH_DIR)/disruptor_benchmark.cpp \
+                     $(BENCH_DIR)/disruptor_concurrency_benchmark.cpp \
+                     $(BENCH_DIR)/mjpeg_pipeline_benchmark.cpp
 
 BENCHMARK_OBJS    := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(BENCHMARK_SRCS)))
-BENCHMARK_TARGETS := $(patsubst benchmark/%.cpp,$(BUILD_DIR)/%.bench,$(BENCHMARK_SRCS))
+BENCHMARK_TARGETS := $(patsubst $(BENCH_DIR)/%.cpp,$(BUILD_DIR)/%.bench,$(BENCHMARK_SRCS))
 
 UNAME_S := $(shell uname -s)
 UNAME_P := $(shell uname -p)
