@@ -24,7 +24,6 @@ GENERATED_HPP := $(GEN_DIR)/index_html.hpp
 
 CORE_SRCS := $(SRC_DIR)/mjpeg_server.cpp \
              $(SRC_DIR)/http_response_builder.cpp \
-             $(SRC_DIR)/libusb/mjpeg_stream_capture.cpp \
              $(SRC_DIR)/libusb/usb_camera.cpp \
              $(SRC_DIR)/libusb/usb_context.cpp \
              $(SRC_DIR)/libusb/usb_device_finder.cpp \
@@ -35,9 +34,7 @@ CORE_SRCS := $(SRC_DIR)/mjpeg_server.cpp \
 CORE_OBJS := $(patsubst %,$(BUILD_DIR)/%.o,$(basename $(CORE_SRCS)))
 CORE_LIB  := $(BUILD_DIR)/libmjpeg_streamer_core.a
 
-TARGETS := $(BUILD_DIR)/mjpeg_server \
-           $(BUILD_DIR)/mjpeg_stream_capture \
-           $(BUILD_DIR)/mjpeg_frame_extractor
+TARGETS := $(BUILD_DIR)/mjpeg_server
 
 PROJECT_TEST_SRCS := $(TEST_DIR)/test_disruptor.cpp \
                      $(TEST_DIR)/test_mjpeg_server.cpp \
@@ -181,12 +178,6 @@ $(BUILD_DIR)/v4l2_mjpeg_server: $(BUILD_DIR)/src/v4l2/v4l2_mjpeg_server_main.o $
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BUILD_DIR)/mjpeg_server: $(BUILD_DIR)/src/libusb/mjpeg_server_main.o $(CORE_LIB)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
-
-$(BUILD_DIR)/mjpeg_stream_capture: $(BUILD_DIR)/src/libusb/mjpeg_stream_capture_main.o $(CORE_LIB)
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
-
-$(BUILD_DIR)/mjpeg_frame_extractor: $(BUILD_DIR)/src/libusb/mjpeg_frame_extractor_main.o $(CORE_LIB)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(BUILD_DIR)/run_project_tests: $(PROJECT_TEST_OBJS) $(CORE_LIB)

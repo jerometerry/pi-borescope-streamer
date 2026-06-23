@@ -368,3 +368,26 @@ TEST_F(DecoderTest, RejectsMassiveLengthAndHunts)
 	EXPECT_EQ(getVideoFramesCompleted(), 1);
 	EXPECT_EQ(getPayloadSize(), 4);
 }
+
+std::vector<u8> create_telemetry_frame()
+{
+	std::vector<u8> buffer(1024, 0x00);
+
+	struct up_usb_frm_hdr *u_hdr = up_get_usb_frm_hdr(buffer.data(), 0);
+	u_hdr->le_delimiter = le16_to_cpu(UP_PKT_DEL);
+	u_hdr->device_id = VIDEO_CAMERA_ID;
+	u_hdr->le_length = le16_to_cpu(75);
+
+	u8 *sensor_data = (u8 *)(buffer.data() + UP_USB_FRM_HDR_LEN);
+
+	return buffer;
+}
+
+TEST_F(DecoderTest, HandlesTelemetryFrame)
+{
+	std::vector<u8> frame = create_telemetry_frame();
+
+	size_t position = up_decode_bulk(getDecoder(), frame.data(), frame.size());
+	size_t expected = static_cast<size_t>(1013);
+	EXPECT_EQ(position, expected);
+}
