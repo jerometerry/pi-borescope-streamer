@@ -190,7 +190,7 @@ static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_ind
 	retval = usb_control_msg(u_dev, pipe_out,
 				 0x01, 0x21,
 				 0x0100, UP_VIDEO_INTERFACE,
-				 buf, 26, USB_CTRL_SET_TIMEOUT);
+				 buf, 26, USB_CTRL_SET_TO);
 	if (retval < 0) {
 		dev_err(&u_dev->dev, "Hardware stream probe stalled: %d\n", retval);
 		goto out;
@@ -199,7 +199,7 @@ static int up_set_hardware_resolution(struct up_drv_data *drv_data, u8 frame_ind
 	retval = usb_control_msg(u_dev, pipe_out,
 				 0x01, 0x21,
 				 0x0200, UP_VIDEO_INTERFACE,
-				 buf, 26, USB_CTRL_SET_TIMEOUT);
+				 buf, 26, USB_CTRL_SET_TO);
 	if (retval < 0) {
 		dev_err(&u_dev->dev, "Hardware stream commit lock stalled: %d\n", retval);
 		goto out;
