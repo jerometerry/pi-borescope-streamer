@@ -37,7 +37,7 @@
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
 #include "v4l2_device.hpp"
-#include "v4l2_video_soure.hpp"
+#include "v4l2_video_source.hpp"
 #include "video_frame_buffer.hpp"
 
 namespace {
