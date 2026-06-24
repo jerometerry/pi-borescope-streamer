@@ -59,7 +59,8 @@ ifeq ($(PLATFORM),MACOS)
 endif
 
 LIBUSB_APP_SRC := $(SRC_DIR)/libusb/mjpeg_server_main.cpp
-V4L2_APP_SRC   := $(SRC_DIR)/v4l2/v4l2_mjpeg_server_main.cpp
+V4L2_APP_SRC   := $(SRC_DIR)/v4l2/v4l2_mjpeg_server_main.cpp \
+		  $(SRC_DIR)/v4l2/v4l2_device.cpp
 
 LIBUSB_APP := $(BUILD_DIR)/mjpeg_server
 V4L2_APP   := $(BUILD_DIR)/v4l2_mjpeg_server
