@@ -36,7 +36,8 @@
 #include "constants.hpp"
 #include "index_html.hpp"
 #include "mjpeg_server.hpp"
-#include "v4l2_camera.hpp"
+#include "v4l2_device.hpp"
+#include "v4l2_video_soure.hpp"
 #include "video_frame_buffer.hpp"
 
 namespace {
@@ -117,7 +118,9 @@ int main(int argc, const char* argv[]) {
             return true;
         };
 
-        V4l2Camera v4l2_camera(devicePath, targetResolution, handler, running);
+        V4l2Device v4l2_device(devicePath, targetResolution);
+
+        V4l2VideoSource videoSource(handler, &running);
 
         CameraResolution activeRes = v4l2_camera.get_resolution();
         std::cout << std::format("[Server Core] Camera hardware initialized at {}x{}\n",
@@ -127,7 +130,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 
-        std::thread camera_thread(&V4l2Camera::poll_frames, &v4l2_camera);
+        videoSource.start(v4l2_device);
         server.start();
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
@@ -138,9 +141,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
 
-        if (camera_thread.joinable()) {
-            camera_thread.join();
-        }
+        videoSource.stop();
 
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception in application core: " << e.what() << "\n";

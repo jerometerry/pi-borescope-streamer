@@ -25,10 +25,10 @@
 
 #include "constants.hpp"
 #include "index_html.hpp"
+#include "libusb_video_source.hpp"
 #include "mjpeg_server.hpp"
 #include "usb_camera.hpp"
 #include "usb_device_info.hpp"
-#include "usb_driver.hpp"
 #include "useeplus_video_stream.hpp"
 #include "video_frame_buffer.hpp"
 
@@ -43,7 +43,7 @@ void signalHandler(int) {
 
 int main(int argc, const char* argv[]) {
     int port = DEFAULT_PORT;
-    uint8_t targetFormatIndex = 1;
+    CameraResolution resolution = SupportedResolutions::VGA_480P;
     std::string resLabel = "480p";
 
     for (int i = 1; i < argc; ++i) {
@@ -65,13 +65,13 @@ int main(int argc, const char* argv[]) {
         } else if ((arg == "--res" || arg == "--resolution") && i + 1 < argc) {
             std::string resStr = argv[++i];
             if (resStr == "720p" || resStr == "1280x720") {
-                targetFormatIndex = 3;
+                resolution = SupportedResolutions::HD_720P;
                 resLabel = "720p";
             } else if (resStr == "480p" || resStr == "640x480") {
-                targetFormatIndex = 1;
+                resolution = SupportedResolutions::VGA_480P;
                 resLabel = "480p";
             } else if (resStr == "240p" || resStr == "320x240") {
-                targetFormatIndex = 2;
+                resolution = SupportedResolutions::LOW_240P;
                 resLabel = "240p";
             } else {
                 std::cerr << "Invalid resolution. Supported: 720p, 480p, 240p.\n";
@@ -83,8 +83,7 @@ int main(int argc, const char* argv[]) {
     std::cout << "==================================================================\n";
     std::cout << "  Pi-Borescope Streamer Started (User-Space libusb)\n";
     std::cout << "  -> Status:     Running on port " << port << "\n";
-    std::cout << "  -> Resolution: " << resLabel << " (Hardware Index " << (int)targetFormatIndex
-              << ")\n";
+    std::cout << "  -> Resolution: " << resLabel << " \n";
     std::cout << "==================================================================\n";
 
     std::signal(SIGINT, signalHandler);
@@ -144,13 +143,13 @@ int main(int argc, const char* argv[]) {
             }
             return status != UsbTransferStatus::Disconnected;
         };
-        UsbDriver driver(transfer, &running);
+        LibusbVideoSource source(transfer, &running);
 
         MjpegServer server(port, running, Resources::index_html, ringBuffer);
 
         std::cout << "[Server Core] Starting asynchronous capture and network worker engines...\n";
 
-        driver.start(camera, targetFormatIndex);
+        source.start(camera, resolution);
         server.start();
 
         std::cout << "[Server Core] System fully operational. Awaiting network events.\n";
@@ -161,7 +160,7 @@ int main(int argc, const char* argv[]) {
 
         std::cout << "[Server Core] Shutdown signal received. Stopping worker lanes...\n";
 
-        driver.stop();
+        source.stop();
 
     } catch (const std::exception& e) {
         std::cerr << "[Fatal] Unhandled exception in application core: " << e.what() << "\n";
