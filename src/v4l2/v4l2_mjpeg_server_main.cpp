@@ -122,7 +122,7 @@ int main(int argc, const char* argv[]) {
 
         V4l2VideoSource videoSource(handler, &running);
 
-        CameraResolution activeRes = v4l2_camera.get_resolution();
+        CameraResolution activeRes = v4l2_device.get_resolution();
         std::cout << std::format("[Server Core] Camera hardware initialized at {}x{}\n",
                                  activeRes.width, activeRes.height);
 
