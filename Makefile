@@ -18,6 +18,7 @@ GENERATED_HPP := $(GEN_DIR)/index_html.hpp
 
 USEEPLUS_DIR := $(THIRD_PARTY_DIR)/useeplus
 USEEPLUS_INC := $(USEEPLUS_DIR)/include/useeplus
+DRIVER_INC   := $(USEEPLUS_DIR)/driver
 USEEPLUS_LIB := $(USEEPLUS_DIR)/build/libuseeplus.a
 
 USOCKETS_LIB := $(USEEPLUS_DIR)/third_party/uSockets/uSockets.a
@@ -59,6 +60,7 @@ LIBUSB_LIBS   := $(shell pkg-config --libs libusb-1.0)
 LDFLAGS += $(LIBUSB_LIBS)
 
 INCLUDES := -I$(USEEPLUS_INC) \
+            -I$(DRIVER_INC) \
             -I$(GEN_DIR) \
             -isystem $(UWEBSOCKETS_INC) \
             -isystem $(USOCKETS_INC) \
