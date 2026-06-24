@@ -1,7 +1,5 @@
 .PHONY: all clean useeplus
 
-.DEFAULT_GOAL := all
-
 CXX := zig c++
 
 ifneq (,$(shell command -v ccache 2>/dev/null))
@@ -31,12 +29,26 @@ UNAME_P := $(shell uname -p)
 
 LDFLAGS := -Wl,--start-group $(USOCKETS_LIB) $(USEEPLUS_LIB) -Wl,--end-group -lz -lssl -lcrypto -lpthread
 
+LIBUSB_APP_SRC := $(SRC_DIR)/libusb/mjpeg_server_main.cpp
+LIBUSB_APP     := $(BUILD_DIR)/mjpeg_server
+
+V4L2_APP_SRCS  := $(SRC_DIR)/v4l2/v4l2_mjpeg_server_main.cpp \
+                  $(USEEPLUS_DIR)/src/v4l2_device.cpp \
+                  $(USEEPLUS_DIR)/src/v4l2_video_source.cpp
+
+V4L2_APP       := $(BUILD_DIR)/v4l2_mjpeg_server
+
+APP_TARGETS    := $(LIBUSB_APP)
+
 ifeq ($(UNAME_S),Linux)
     PLATFORM := LINUX
     CXXFLAGS += -pthread
     ifneq (,$(filter aarch64%,$(UNAME_P)))
         CXXFLAGS += -target aarch64-linux-gnu -mcpu=cortex-a76
     endif
+
+    APP_TARGETS += $(V4L2_APP)
+
 else ifeq ($(UNAME_S),Darwin)
     PLATFORM := MACOS
 endif
@@ -58,20 +70,19 @@ ifeq ($(PLATFORM),MACOS)
     LDFLAGS  += $(shell pkg-config --libs-only-L openssl 2>/dev/null || echo "-L/opt/homebrew/opt/openssl@3/lib")
 endif
 
-LIBUSB_APP_SRC := $(SRC_DIR)/libusb/mjpeg_server_main.cpp
-V4L2_APP_SRC   := $(SRC_DIR)/v4l2/v4l2_mjpeg_server_main.cpp \
-		  $(SRC_DIR)/v4l2/v4l2_device.cpp
-
-LIBUSB_APP := $(BUILD_DIR)/mjpeg_server
-V4L2_APP   := $(BUILD_DIR)/v4l2_mjpeg_server
-
 CORE_DEPS := $(BUILD_DIR)/.core_deps
+
+all: useeplus $(GENERATED_HPP) $(APP_TARGETS)
 
 $(CORE_DEPS): install-core-deps.sh
 	@echo "Fetching third-party dependencies..."
 	@mkdir -p $(BUILD_DIR)
 	@./install-core-deps.sh
 	@touch $@
+
+useeplus: $(CORE_DEPS)
+	@echo "Ensuring useeplus core library is built..."
+	@$(MAKE) -C $(USEEPLUS_DIR)
 
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
@@ -94,15 +105,9 @@ $(LIBUSB_APP): $(LIBUSB_APP_SRC) $(USEEPLUS_LIB) $(GENERATED_HPP) | $(BUILD_DIR)
 	@echo "Building libusb MJPEG server..."
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -o $@ $(LDFLAGS)
 
-$(V4L2_APP): $(V4L2_APP_SRC) $(USEEPLUS_LIB) $(GENERATED_HPP) | $(BUILD_DIR)
+$(V4L2_APP): $(V4L2_APP_SRCS) $(USEEPLUS_LIB) $(GENERATED_HPP) | $(BUILD_DIR)
 	@echo "Building V4L2 MJPEG server..."
-	$(CXX) $(CXXFLAGS) $(INCLUDES) $< -o $@ $(LDFLAGS)
-
-all: useeplus $(GENERATED_HPP) $(LIBUSB_APP) $(V4L2_APP)
-
-useeplus: $(CORE_DEPS)
-	@echo "Ensuring useeplus core library is built..."
-	@$(MAKE) -C $(USEEPLUS_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) $(V4L2_APP_SRCS) -o $@ $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILD_DIR) $(GEN_DIR)
